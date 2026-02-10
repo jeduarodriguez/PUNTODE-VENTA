@@ -1,0 +1,6 @@
+/* Estilos globales básicos y utilidades */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Añadir cualquier estilo personalizado aquí */
