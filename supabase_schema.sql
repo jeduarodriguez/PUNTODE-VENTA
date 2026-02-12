@@ -1,31 +1,34 @@
 
--- EJECUTA ESTO EN EL SQL EDITOR DE SUPABASE PARA PREPARAR TU BASE DE DATOS
+-- EJECUTA ESTO PARA RESETEAR Y CONFIGURAR CORRECTAMENTE LAS TABLAS
+-- Este script es seguro para ejecutar varias veces.
 
--- 1. Tabla de Productos
-CREATE TABLE public.products (
+-- 1. Tablas con sus columnas actualizadas
+CREATE TABLE IF NOT EXISTS public.products (
     id TEXT PRIMARY KEY,
     name TEXT,
     category TEXT,
     price NUMERIC,
     "costPrice" NUMERIC,
-    stock INTEGER,
+    stock NUMERIC,
     image TEXT,
     description TEXT,
+    "sellingMode" TEXT DEFAULT 'simple',
+    "measurementUnit" TEXT DEFAULT 'kg',
+    "unitsPerPackage" NUMERIC DEFAULT 0,
+    "pricePerUnit" NUMERIC DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Tabla de Clientes
-CREATE TABLE public.customers (
+CREATE TABLE IF NOT EXISTS public.customers (
     id TEXT PRIMARY KEY,
     name TEXT,
+    email TEXT,
     phone TEXT,
     balance NUMERIC DEFAULT 0,
     "createdAt" BIGINT
 );
 
--- 3. Tabla de Ventas
--- Usamos JSONB para los items para mantener flexibilidad sin crear tablas relacionales complejas por ahora
-CREATE TABLE public.sales (
+CREATE TABLE IF NOT EXISTS public.sales (
     id TEXT PRIMARY KEY,
     timestamp BIGINT,
     total NUMERIC,
@@ -35,16 +38,42 @@ CREATE TABLE public.sales (
     items JSONB
 );
 
--- 4. Tabla de Configuración (Settings)
--- Guardará valores sueltos como exchangeRate, rateHistory, etc.
-CREATE TABLE public.settings (
+CREATE TABLE IF NOT EXISTS public.settings (
     id TEXT PRIMARY KEY,
-    value JSONB -- Puede guardar números, strings u objetos complejos (historial)
+    value JSONB
 );
 
--- POLÍTICAS DE SEGURIDAD (RLS)
--- Permitir todo acceso público (ANON) para esta demo. 
--- En producción deberías restringir esto.
+CREATE TABLE IF NOT EXISTS public.treasury (
+    id TEXT PRIMARY KEY,
+    timestamp BIGINT,
+    type TEXT,
+    category TEXT,
+    amount NUMERIC,
+    "amountBs" NUMERIC,
+    "exchangeRate" NUMERIC,
+    description TEXT,
+    method TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.rate_history (
+    id TEXT PRIMARY KEY,
+    rate NUMERIC,
+    timestamp BIGINT
+);
+
+-- 2. Limpiar y recrear políticas (Esto evita el error de "ya existe")
+DO $$ 
+BEGIN
+    -- Borrar políticas si existen
+    DROP POLICY IF EXISTS "Public Access Products" ON public.products;
+    DROP POLICY IF EXISTS "Public Access Customers" ON public.customers;
+    DROP POLICY IF EXISTS "Public Access Sales" ON public.sales;
+    DROP POLICY IF EXISTS "Public Access Settings" ON public.settings;
+    DROP POLICY IF EXISTS "Public Access Treasury" ON public.treasury;
+    DROP POLICY IF EXISTS "Public Access Rate History" ON public.rate_history;
+END $$;
+
+-- Crear políticas nuevas
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access Products" ON public.products FOR ALL USING (true);
 
@@ -57,8 +86,25 @@ CREATE POLICY "Public Access Sales" ON public.sales FOR ALL USING (true);
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access Settings" ON public.settings FOR ALL USING (true);
 
--- Habilitar Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.sales;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+ALTER TABLE public.treasury ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access Treasury" ON public.treasury FOR ALL USING (true);
+
+ALTER TABLE public.rate_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access Rate History" ON public.rate_history FOR ALL USING (true);
+
+-- 3. Habilitar Realtime
+-- Intentamos habilitar realtime para todas las tablas
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        CREATE PUBLICATION supabase_realtime;
+    END IF;
+END $$;
+
+ALTER PUBLICATION supabase_realtime SET TABLE 
+    public.products,
+    public.customers,
+    public.sales,
+    public.settings,
+    public.treasury,
+    public.rate_history;
