@@ -1,11 +1,12 @@
-const CACHE_NAME = 'pointy-v2';
+const CACHE_NAME = 'pointy-v3';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll([
                 '/',
-                '/index.html'
+                '/index.html',
+                '/manifest.json'
             ]);
         })
     );
@@ -29,16 +30,18 @@ self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
     
     event.respondWith(
-        fetch(event.request)
-            .then((response) => {
-                if (response.ok) {
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return response;
-            })
-            .catch(() => caches.match(event.request))
+        caches.match(event.request).then((cached) => {
+            const networked = fetch(event.request)
+                .then((response) => {
+                    if (response.ok) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    }
+                    return response;
+                })
+                .catch(() => cached);
+            
+            return cached || networked;
+        })
     );
 });
