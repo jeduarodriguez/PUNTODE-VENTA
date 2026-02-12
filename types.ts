@@ -3,11 +3,17 @@ export interface Product {
   id: string;
   name: string;
   category: string;
-  price: number;      // Selling price in USD
+  price: number;      // Selling price in USD (Precio Principal / Paquete Completo)
   costPrice: number;  // Purchase price (cost) in USD
   stock: number;
   image?: string;
   description?: string;
+
+  // Nuevos campos para Variantes/Modos de Venta
+  sellingMode?: 'simple' | 'weight' | 'package';
+  measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm'; // Para venta por peso/volumen
+  unitsPerPackage?: number; // Cuantas unidades trae el paquete (si es modo paquete)
+  pricePerUnit?: number;    // Precio de venta de la unidad suelta (si es modo paquete)
 }
 
 export interface CartItem extends Product {
@@ -46,4 +52,16 @@ export interface Shift {
   status: 'open' | 'closed';
 }
 
-export type View = 'pos' | 'inventory' | 'reports' | 'customers' | 'settings';
+export interface TreasuryTransaction {
+  id: string;
+  timestamp: number;
+  type: 'income' | 'expense';
+  category: string;
+  amount: number; // Amount in USD (base reference)
+  amountBs: number; // Amount in Bs at time of transaction
+  exchangeRate: number;
+  description: string;
+  method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Zelle/Intl' | 'Card' | 'PointOfSale' | 'Credit';
+}
+
+export type View = 'pos' | 'inventory' | 'reports' | 'customers' | 'settings' | 'treasury' | 'dashboard';
