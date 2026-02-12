@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Pointy - Sistema de Punto de Venta
 
-# Run and deploy your AI Studio app
+Este proyecto es un sistema de punto de venta (POS) moderno migrado de Firebase a **Supabase**.
 
-This contains everything you need to run your app locally.
+## Requisitos Previos
 
-View your app in AI Studio: https://ai.studio/apps/drive/17jP0om6aticQeK0Y7aOcBwDU7iEO6gW-
+- **Node.js**: Asegúrate de tener instalado Node.js (v18 o superior).
 
-## Run Locally
+## Configuración Local
 
-**Prerequisites:**  Node.js
+1. **Instalar dependencias**:
+   ```bash
+   npm install
+   ```
 
+2. **Configurar variables de entorno**:
+   Define las siguientes variables en tu archivo `.env.local`:
+   ```env
+   VITE_SUPABASE_URL=tu_url_de_supabase
+   VITE_SUPABASE_ANON_KEY=tu_clave_anonima_de_supabase
+   ```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+3. **Base de Datos**:
+   Ejecuta el contenido de `supabase_schema.sql` en el SQL Editor de tu proyecto de Supabase para crear las tablas necesarias.
+
+## Iniciar la Aplicación
+
+Para ejecutar la aplicación en modo desarrollo:
+```bash
+npm run dev
+```
+
+La aplicación estará disponible en [http://localhost:3000](http://localhost:3000).
+
+---
+
+© 2026 Pointy POS

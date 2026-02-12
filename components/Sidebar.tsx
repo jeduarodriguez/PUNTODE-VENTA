@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ShoppingCart, Package, Users, Banknote, Settings } from '../constants';
+import { ShoppingCart, Package, Users, Banknote, Settings, Landmark, PieChart } from '../constants';
 import { View } from '../types';
 
 interface SidebarProps {
@@ -10,9 +10,11 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
   const menuItems = [
-    { id: 'reports', icon: Banknote, label: 'Ventas (Caja)' },
+    { id: 'reports', icon: Banknote, label: 'Balance' },
+    { id: 'dashboard', icon: PieChart, label: 'Estadísticas' },
     { id: 'inventory', icon: Package, label: 'Inventario' },
     { id: 'customers', icon: Users, label: 'Clientes' },
+    { id: 'settings', icon: Settings, label: 'Ajustes' },
   ];
 
   return (
@@ -28,11 +30,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
           <button
             key={item.id}
             onClick={() => onViewChange(item.id as View)}
-            className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-medium transition-colors ${
-              activeView === item.id
-                ? 'bg-indigo-50 text-indigo-700 border-r-4 border-indigo-700'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
+            className={`w-full flex items-center gap-4 px-6 py-4 text-sm font-medium transition-colors ${activeView === item.id
+              ? 'bg-indigo-50 text-indigo-700 border-r-4 border-indigo-700'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
           >
             <item.icon className="w-5 h-5" />
             {item.label}
@@ -40,14 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
         ))}
       </nav>
       <div className="p-6 border-t border-gray-100">
-        <button 
-           onClick={() => onViewChange('settings')}
-           className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeView === 'settings' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'}`}
-        >
-           <Settings className="w-5 h-5" />
-           Ajustes
-        </button>
-        <p className="text-[10px] text-gray-300 mt-4 text-center">v1.3.0 &copy; 2024 Pointy POS</p>
+        <p className="text-[10px] text-gray-300 text-center">v1.5.0 &copy; 2024 Pointy POS</p>
       </div>
     </aside>
   );

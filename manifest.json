@@ -1,9 +1,10 @@
-
 {
   "name": "Pointy POS Cloud",
   "short_name": "Pointy",
   "start_url": ".",
   "display": "standalone",
+  "orientation": "any",
+  "scope": "/",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [

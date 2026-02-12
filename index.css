@@ -4,3 +4,23 @@
 @tailwind utilities;
 
 /* Añadir cualquier estilo personalizado aquí */
+
+/* Safe areas para dispositivos móviles con notch */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-top {
+    padding-top: env(safe-area-inset-top);
+}
+
+/* Asegurar que el contenido no quede detrás de la barra de navegación */
+@supports (padding: max(0px)) {
+    .safe-area-bottom {
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .safe-area-top {
+        padding-top: max(0px, env(safe-area-inset-top));
+    }
+}

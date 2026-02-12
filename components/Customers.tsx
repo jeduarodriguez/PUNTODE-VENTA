@@ -138,8 +138,9 @@ const Customers: React.FC<CustomersProps> = ({ customers, sales, exchangeRate, o
                     <div className="relative z-10">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Deuda Total</p>
                         <div className="flex flex-col">
-                            <span className="text-3xl font-black text-white leading-tight">${activeCustomer.balance.toFixed(2)}</span>
-                            <span className="text-emerald-400 font-bold text-sm">{debtBs.toFixed(2)} Bs</span>
+                            {/* CAMBIO: Bolívares Grande, Dólares Pequeño */}
+                            <span className="text-3xl font-black text-white leading-tight">{debtBs.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs</span>
+                            <span className="text-emerald-400 font-bold text-sm">Ref: ${activeCustomer.balance.toFixed(2)}</span>
                         </div>
                     </div>
                     {activeCustomer.balance > 0 ? (
@@ -211,15 +212,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, sales, exchangeRate, o
                                                 </span>
                                             </div>
                                         )}
-                                        {/* Badge de Crédito (Si fue fiado) */}
-                                        {!isDebtPayment && (
-                                             <div className="flex items-center gap-1 justify-end mt-1.5">
-                                                <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-1.5 bg-orange-50 text-orange-600 border border-orange-100">
-                                                    <Wallet className="w-3 h-3"/>
-                                                    Crédito
-                                                </span>
-                                            </div>
-                                        )}
+                                        {/* CAMBIO: Se eliminó el badge de "Crédito" para una vista más limpia */}
                                     </div>
                                 </div>
                                 
@@ -301,8 +294,9 @@ const Customers: React.FC<CustomersProps> = ({ customers, sales, exchangeRate, o
                 <div className="flex items-center gap-3">
                     {customer.balance > 0 ? (
                         <div className="text-right shrink-0">
-                            <span className="block text-sm font-black text-red-600 leading-none">${customer.balance.toFixed(2)}</span>
-                            <span className="block text-[10px] font-bold text-gray-400 leading-none mt-1">{debtBs.toFixed(2)} Bs</span>
+                            {/* CAMBIO: Bolívares Grande, Dólares Pequeño */}
+                            <span className="block text-sm font-black text-red-600 leading-none">{debtBs.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs</span>
+                            <span className="block text-[10px] font-bold text-gray-400 leading-none mt-1">Ref: ${customer.balance.toFixed(2)}</span>
                         </div>
                     ) : (
                         <div className="text-emerald-500 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-lg">
