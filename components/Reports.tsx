@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product } from '../types';
-import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit } from '../constants';
+import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
 
@@ -29,9 +29,16 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
     const [showPurchasePOS, setShowPurchasePOS] = useState(false);
+    const [showVentasMenu, setShowVentasMenu] = useState(false);
+    const [ventasOption, setVentasOption] = useState<'pos' | 'income' | 'recharge' | null>(null);
+    const [incomeAmount, setIncomeAmount] = useState('');
+    const [incomeRate, setIncomeRate] = useState('');
+    const [incomeCategory, setIncomeCategory] = useState('Otros');
+    const [incomeDescription, setIncomeDescription] = useState('');
+    const [incomeDate, setIncomeDate] = useState(new Date().toISOString().split('T')[0]);
     const [expenseAmount, setExpenseAmount] = useState('');
     const [expenseDescription, setExpenseDescription] = useState('');
-       const [expenseCategory, setExpenseCategory] = useState<string>('Otros');
+    const [expenseCategory, setExpenseCategory] = useState<string>('Otros');
     const [expenseMethod, setExpenseMethod] = useState<'Cash' | 'Transfer' | 'PagoMovil' | 'Card'>('Cash');
     const [expenseMethodLabel, setExpenseMethodLabel] = useState<'Bs' | '$'>('$');
     const [dateFilter, setDateFilter] = useState<DateFilter>('today');
@@ -680,21 +687,6 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 </div>
             </div>
 
-            <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-8 md:w-80 z-30 flex gap-3 pb-6">
-                <button onClick={() => setShowExpenseTypeModal(true)} className="flex-1 bg-white text-red-600 px-4 py-3 rounded-full shadow-xl border border-red-200 hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                    <Wallet className="w-5 h-5" />
-                    <span className="text-sm font-black uppercase">Gastos</span>
-                </button>
-                <button onClick={() => setShowPurchasePOS(true)} className="flex-1 bg-indigo-600 text-white px-4 py-3 rounded-full shadow-2xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                    <ShoppingCart className="w-5 h-5" />
-                    <span className="text-sm font-black uppercase">Inventario</span>
-                </button>
-                <button onClick={onOpenPOS} className="flex-1 bg-emerald-600 text-white px-4 py-3 rounded-full shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                    <ShoppingCart className="w-5 h-5" />
-                    <span className="text-sm font-black uppercase">Ventas</span>
-                </button>
-            </div>
-
             {showPurchasePOS && (
                 <PurchasePOS
                     products={products}
@@ -829,6 +821,128 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <button onClick={() => setShowExpenseModal(false)} className="py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm">Cancelar</button>
                             <button onClick={handleAddExpense} className="py-3 bg-orange-500 text-white rounded-xl font-bold text-sm">Guardar</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Botones Flotantes */}
+            <div className="fixed bottom-20 left-4 right-4 md:bottom-6 md:left-auto md:right-6 z-50 flex justify-center gap-4">
+                <button onClick={() => setShowVentasMenu(true)} className="bg-emerald-600 text-white px-8 py-3 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5" />
+                    <span className="text-sm font-black">Ventas</span>
+                </button>
+                <button onClick={() => setShowExpenseTypeModal(true)} className="bg-gray-900 text-white px-8 py-3 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                    <Wallet className="w-5 h-5" />
+                    <span className="text-sm font-black">Gastos</span>
+                </button>
+            </div>
+
+            {/* --- MENÚ DE VENTAS --- */}
+            {showVentasMenu && (
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl overflow-hidden animate-scale-up p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-gray-900">Seleccionar Opción</h3>
+                            <button onClick={() => { setShowVentasMenu(false); setVentasOption(null); }} className="p-2 text-gray-400 hover:text-gray-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        
+                        {!ventasOption ? (
+                            <div className="space-y-4">
+                                <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full p-6 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <ShoppingCart className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Ventas del Inventario</p>
+                                        <p className="text-xs text-emerald-100">Sistema POS</p>
+                                    </div>
+                                </button>
+                                <button onClick={() => setVentasOption('income')} className="w-full p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <TrendingUp className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Otros Ingresos</p>
+                                        <p className="text-xs text-blue-100">Ingresos varios en Bs</p>
+                                    </div>
+                                </button>
+                                <button onClick={() => setVentasOption('recharge')} className="w-full p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <Smartphone className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Vender Recargas</p>
+                                        <p className="text-xs text-purple-100">Recargas de teléfono</p>
+                                    </div>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <button onClick={() => setVentasOption(null)} className="flex items-center gap-2 text-gray-500 mb-2">
+                                    <ChevronLeft className="w-5 h-5" />
+                                    <span className="text-sm font-bold">Volver</span>
+                                </button>
+                                
+                                {/* Formulario Otros Ingresos */}
+                                {ventasOption === 'income' && (
+                                    <div className="space-y-4">
+                                        <h4 className="text-lg font-black text-gray-900">Otros Ingresos</h4>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto (Bs)</label>
+                                            <input type="number" value={incomeAmount} onChange={e => setIncomeAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xl font-black text-blue-600 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Tasa</label>
+                                            <input type="number" value={incomeRate} onChange={e => setIncomeRate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder={exchangeRate.toString()} />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                            <input type="date" value={incomeDate} onChange={e => setIncomeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                                            <select value={incomeCategory} onChange={e => setIncomeCategory(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none">
+                                                <option value="Otros">Otros</option>
+                                                <option value="Servicios">Servicios</option>
+                                                <option value="Intereses">Intereses</option>
+                                                <option value="Dividendos">Dividendos</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                            <input type="text" value={incomeDescription} onChange={e => setIncomeDescription(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" placeholder="Descripción opcional" />
+                                        </div>
+                                        <button onClick={() => {
+                                            const amount = parseFloat(incomeAmount);
+                                            if (amount > 0) {
+                                                const timestamp = new Date(incomeDate + 'T12:00:00').getTime();
+                                                onAddTreasuryTransaction({
+                                                    id: `inc_${Date.now()}`,
+                                                    type: 'income',
+                                                    category: incomeCategory,
+                                                    description: incomeDescription || incomeCategory,
+                                                    amount: amount / parseFloat(incomeRate || exchangeRate.toString()),
+                                                    amountBs: amount,
+                                                    method: 'Cash',
+                                                    exchangeRate: parseFloat(incomeRate || exchangeRate.toString()),
+                                                    timestamp
+                                                });
+                                                setIncomeAmount('');
+                                                setIncomeDescription('');
+                                                setVentasOption(null);
+                                                setShowVentasMenu(false);
+                                            }
+                                        }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">Guardar</button>
+                                    </div>
+                                )}
+
+                                {/* Formulario Recargas */}
+                                {ventasOption === 'recharge' && (
+                                    <div className="space-y-4">
+                                        <h4 className="text-lg font-black text-gray-900">Vender Recarga</h4>
+                                        <div className="text-center py-8">
+                                            <p className="text-gray-500 text-sm">Próximamente...</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

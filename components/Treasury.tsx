@@ -14,6 +14,8 @@ interface TreasuryProps {
     onAddTransaction: (transaction: TreasuryTransaction) => void;
     onDeleteTransaction?: (id: string) => void;
     onRestock?: (transaction: TreasuryTransaction, items: { productId: string, quantity: number, cost: number, newPrice?: number }[]) => void;
+    onOpenPOS?: () => void;
+    onOpenInventory?: () => void;
 }
 
 interface PurchaseItem {
@@ -25,9 +27,27 @@ interface PurchaseItem {
     newPrice: number; // PVP en USD
 }
 
-const Treasury: React.FC<TreasuryProps> = ({ transactions, exchangeRate, rateHistory = [], customers = [], sales = [], products = [], onAddTransaction, onDeleteTransaction, onRestock }) => {
+const Treasury: React.FC<TreasuryProps> = ({ transactions, exchangeRate, rateHistory = [], customers = [], sales = [], products = [], onAddTransaction, onDeleteTransaction, onRestock, onOpenPOS, onOpenInventory }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    
+    // --- Ventas Menu States ---
+    const [showVentasMenu, setShowVentasMenu] = useState(false);
+    const [ventasOption, setVentasOption] = useState<'pos' | 'income' | 'recharge' | null>(null);
+    
+    // --- Otros Ingresos States ---
+    const [incomeAmount, setIncomeAmount] = useState('');
+    const [incomeDate, setIncomeDate] = useState(new Date().toISOString().split('T')[0]);
+    const [incomeCategory, setIncomeCategory] = useState('Otros');
+    const [incomeDescription, setIncomeDescription] = useState('');
+    const [incomeRate, setIncomeRate] = useState(exchangeRate.toString());
+    
+    // --- Recarga States ---
+    const [rechargeAmount, setRechargeAmount] = useState('');
+    const [rechargeFee, setRechargeFee] = useState('');
+    const [rechargeMethod, setRechargeMethod] = useState<'Cash' | 'PagoMovil'>('Cash');
+    const [rechargeReference, setRechargeReference] = useState('');
+    const [rechargeDate, setRechargeDate] = useState(new Date().toISOString().split('T')[0]);
 
     // --- Purchase Flow States ---
     const [isRestockMode, setIsRestockMode] = useState(false); // Modo Pantalla Completa
@@ -412,17 +432,191 @@ const Treasury: React.FC<TreasuryProps> = ({ transactions, exchangeRate, rateHis
                 </div>
             </div>
 
-            {/* Botones Flotantes */}
-            <div className="fixed bottom-24 right-4 md:bottom-10 md:right-10 z-40 flex flex-col gap-3">
-                <button onClick={() => setIsRestockMode(true)} className="bg-indigo-600 text-white w-14 h-14 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group relative">
-                    <Truck className="w-6 h-6" />
-                    <span className="absolute right-full mr-2 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Comprar</span>
-                </button>
-                <button onClick={() => { setEditingId(null); setIsModalOpen(true); }} className="bg-gray-900 text-white w-14 h-14 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center group relative">
-                    <Plus className="w-7 h-7" />
-                    <span className="absolute right-full mr-2 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Manual</span>
-                </button>
-            </div>
+            {/* --- MENÚ DE VENTAS --- */}
+            {showVentasMenu && (
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl overflow-hidden animate-scale-up p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-gray-900">Seleccionar Opción</h3>
+                            <button onClick={() => { setShowVentasMenu(false); setVentasOption(null); }} className="p-2 text-gray-400 hover:text-gray-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        
+                        {!ventasOption ? (
+                            <div className="space-y-4">
+                                <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full p-6 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <ShoppingCart className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Ventas del Inventario</p>
+                                        <p className="text-xs text-emerald-100">Sistema POS</p>
+                                    </div>
+                                </button>
+                                <button onClick={() => setVentasOption('income')} className="w-full p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <TrendingUp className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Otros Ingresos</p>
+                                        <p className="text-xs text-blue-100">Ingresos varios en Bs</p>
+                                    </div>
+                                </button>
+                                <button onClick={() => setVentasOption('recharge')} className="w-full p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
+                                    <Smartphone className="w-8 h-8" />
+                                    <div className="text-left">
+                                        <p className="font-black text-lg">Vender Recargas</p>
+                                        <p className="text-xs text-purple-100">Recargas de teléfono</p>
+                                    </div>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <button onClick={() => setVentasOption(null)} className="flex items-center gap-2 text-gray-500 mb-2">
+                                    <ChevronLeft className="w-5 h-5" />
+                                    <span className="text-sm font-bold">Volver</span>
+                                </button>
+                                
+                                {/* Formulario Otros Ingresos */}
+                                {ventasOption === 'income' && (
+                                    <div className="space-y-4">
+                                        <h4 className="text-lg font-black text-gray-900">Otros Ingresos</h4>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto (Bs)</label>
+                                            <input type="number" value={incomeAmount} onChange={e => setIncomeAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xl font-black text-blue-600 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Referencia USD</label>
+                                            <p className="text-lg font-black text-gray-700">${(parseFloat(incomeAmount || '0') / parseFloat(incomeRate || '1')).toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                            <input type="date" value={incomeDate} onChange={e => setIncomeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                                            <select value={incomeCategory} onChange={e => setIncomeCategory(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none">
+                                                <option value="Otros">Otros</option>
+                                                <option value="Servicios">Servicios</option>
+                                                <option value="Intereses">Intereses</option>
+                                                <option value="Dividendos">Dividendos</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                            <input type="text" value={incomeDescription} onChange={e => setIncomeDescription(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" placeholder="Descripción opcional" />
+                                        </div>
+                                        <button onClick={() => {
+                                            const amount = parseFloat(incomeAmount);
+                                            if (amount > 0) {
+                                                const timestamp = new Date(incomeDate + 'T12:00:00').getTime();
+                                                onAddTransaction({
+                                                    id: `inc_${Date.now()}`,
+                                                    type: 'income',
+                                                    category: incomeCategory,
+                                                    description: incomeDescription || incomeCategory,
+                                                    amount: amount / parseFloat(incomeRate || 1),
+                                                    amountBs: amount,
+                                                    method: 'Cash',
+                                                    exchangeRate: parseFloat(incomeRate || 1),
+                                                    timestamp
+                                                });
+                                                setIncomeAmount('');
+                                                setIncomeDescription('');
+                                                setShowVentasMenu(false);
+                                                setVentasOption(null);
+                                            }
+                                        }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg">Guardar Ingreso</button>
+                                    </div>
+                                )}
+                                
+                                {/* Formulario Recargas */}
+                                {ventasOption === 'recharge' && (
+                                    <div className="space-y-4">
+                                        <h4 className="text-lg font-black text-gray-900">Vender Recarga</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Monto a Recargar</label>
+                                                <input type="number" value={rechargeAmount} onChange={e => setRechargeAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-lg font-black text-purple-600 outline-none" placeholder="0" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Tu Ganancia</label>
+                                                <input type="number" value={rechargeFee} onChange={e => setRechargeFee(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-lg font-black text-emerald-600 outline-none" placeholder="0" />
+                                            </div>
+                                        </div>
+                                        <div className="bg-purple-50 p-4 rounded-2xl">
+                                            <p className="text-xs font-bold text-purple-600 uppercase mb-2">Resumen</p>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="text-gray-600">Ganancia:</span>
+                                                <span className="font-black text-emerald-600">+{rechargeFee || '0'} Bs</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600">Porcentaje:</span>
+                                                <span className="font-black text-purple-600">
+                                                    {rechargeAmount && parseFloat(rechargeAmount) > 0 && rechargeFee ? 
+                                                        ((parseFloat(rechargeFee) / parseFloat(rechargeAmount)) * 100).toFixed(1) : '0'}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Método de Pago</label>
+                                            <div className="flex gap-2 mt-2">
+                                                <button onClick={() => setRechargeMethod('Cash')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeMethod === 'Cash' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Efectivo</button>
+                                                <button onClick={() => setRechargeMethod('PagoMovil')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeMethod === 'PagoMovil' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Pago Móvil</button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Referencia</label>
+                                            <input type="text" value={rechargeReference} onChange={e => setRechargeReference(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" placeholder="Número de teléfono" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                            <input type="date" value={rechargeDate} onChange={e => setRechargeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" />
+                                        </div>
+                                        <button onClick={() => {
+                                            const amount = parseFloat(rechargeAmount);
+                                            const fee = parseFloat(rechargeFee);
+                                            if (amount > 0 && fee > 0) {
+                                                const timestamp = new Date(rechargeDate + 'T12:00:00').getTime();
+                                                // Registrar gasto (monto de recarga)
+                                                onAddTransaction({
+                                                    id: `rec_gas_${Date.now()}`,
+                                                    type: 'expense',
+                                                    category: 'Recargas',
+                                                    description: `Recarga: ${rechargeReference}`,
+                                                    amount: amount / parseFloat(incomeRate || 1),
+                                                    amountBs: amount,
+                                                    method: rechargeMethod,
+                                                    exchangeRate: parseFloat(incomeRate || 1),
+                                                    timestamp
+                                                });
+                                                // Registrar ingreso (ganancia)
+                                                onAddTransaction({
+                                                    id: `rec_inc_${Date.now()}`,
+                                                    type: 'income',
+                                                    category: 'Recargas',
+                                                    description: `Ganancia recarga: ${rechargeReference}`,
+                                                    amount: fee / parseFloat(incomeRate || 1),
+                                                    amountBs: fee,
+                                                    method: rechargeMethod,
+                                                    exchangeRate: parseFloat(incomeRate || 1),
+                                                    timestamp
+                                                });
+                                                setRechargeAmount('');
+                                                setRechargeFee('');
+                                                setRechargeReference('');
+                                                setShowVentasMenu(false);
+                                                setVentasOption(null);
+                                            }
+                                        }} className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black text-lg shadow-lg">Confirmar Recarga</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <style>{`
+                        @keyframes scale-up { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+                        .animate-scale-up { animation: scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+                    `}</style>
+                </div>
+            )}
 
             {/* --- MÓDULO DE COMPRAS (FULL SCREEN - POS STYLE) --- */}
             {isRestockMode && (
