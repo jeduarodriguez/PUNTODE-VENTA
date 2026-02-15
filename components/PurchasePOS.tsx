@@ -1,22 +1,26 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Product, TreasuryTransaction } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Product, TreasuryTransaction, ExchangeRateRecord } from '../types';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Wallet, CreditCard, X, RefreshCw, TrendingUp, Smartphone, Banknote, Check, ArrowLeft, ShoppingBag, Calculator, DollarSign, Tag, ChevronRight, Edit, ChevronLeft, Calendar } from '../constants';
 
 interface PurchasePOSProps {
     products: Product[];
     exchangeRate: number;
+    rateHistory?: ExchangeRateRecord[];
     onClose: () => void;
-    onPurchase: (items: { product: Product; quantity: number; costPrice: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
+    onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
     onAddProduct?: (product: Product) => void;
 }
 
 interface CartItem {
     product: Product;
     quantity: number;
-    costPrice: number;
+    costPrice?: number;
+    cost_price?: number;
+    costPriceBs?: number;
+    rateAtPurchase?: number;
 }
 
-const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClose, onPurchase, onAddProduct }) => {
+const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], onClose, onPurchase, onAddProduct }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
@@ -29,6 +33,45 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
     const [newProductPrice, setNewProductPrice] = useState(0);
     const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
     const [useCustomDate, setUseCustomDate] = useState(false);
+
+    // Helpers para compatibilidad
+    const getCostPrice = (p: Product | CartItem) => p.cost_price ?? p.costPrice ?? 0;
+    const getSellingMode = (p: Product) => p.selling_mode ?? p.sellingMode ?? 'simple';
+    const getPricePerUnit = (p: Product) => p.price_per_unit ?? p.pricePerUnit ?? 0;
+
+    // Modal de edición de precio
+    const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
+    const [editCostBs, setEditCostBs] = useState(0);
+    const [editCostDate, setEditCostDate] = useState(new Date().toISOString().split('T')[0]);
+    const [editPrice, setEditPrice] = useState(0);
+    const [editPricePerUnit, setEditPricePerUnit] = useState(0);
+    const [editCustomRate, setEditCustomRate] = useState<number | null>(null);
+
+    const getEditRateForDate = (dateStr: string): number => {
+        if (editCustomRate !== null) return editCustomRate;
+        if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+        const targetDate = new Date(dateStr).getTime();
+        const dayStart = new Date(dateStr).setHours(0, 0, 0, 0);
+        const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        const rateOnDate = sortedRates.find(r => r.timestamp <= dayStart);
+        if (rateOnDate) return rateOnDate.rate;
+        return sortedRates[0]?.rate || exchangeRate;
+    };
+
+    const editRate = useMemo(() => getEditRateForDate(editCostDate), [editCostDate, editCustomRate, rateHistory]);
+    const editCalculatedCostUsd = editRate > 0 ? editCostBs / editRate : 0;
+
+    const getRateForDate = (dateStr: string): number => {
+        if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+        const targetDate = new Date(dateStr).getTime();
+        const dayStart = new Date(dateStr).setHours(0, 0, 0, 0);
+        const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        const rateOnDate = sortedRates.find(r => r.timestamp <= dayStart);
+        if (rateOnDate) return rateOnDate.rate;
+        return sortedRates[0]?.rate || exchangeRate;
+    };
+
+    const currentRate = useMemo(() => getRateForDate(purchaseDate), [purchaseDate, rateHistory]);
 
     useEffect(() => {
         window.history.pushState({ purchasePOS: true }, '');
@@ -54,6 +97,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
         }
         if (navigator.vibrate) navigator.vibrate(50);
 
+        const costPriceBs = product.cost_price * currentRate;
+        
         setCart(prev => {
             const existing = prev.find(item => item.product.id === product.id);
             if (existing) {
@@ -62,7 +107,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
                     : item
                 );
             }
-            return [...prev, { product, quantity: 1, costPrice: product.costPrice }];
+            return [...prev, { product, quantity: 1, costPrice: product.cost_price, costPriceBs, rateAtPurchase: currentRate }];
         });
     };
 
@@ -85,7 +130,56 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
         setCart(prev => prev.filter(item => item.product.id !== productId));
     };
 
-    const calculateTotal = () => cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
+    const openEditPriceModal = (item: CartItem) => {
+        setEditingPriceItem(item);
+        const costBsValue = item.costPriceBs || item.costPrice * exchangeRate;
+        setEditCostBs(costBsValue);
+        setEditCostDate(new Date().toISOString().split('T')[0]);
+        setEditPrice(item.product.price || 0);
+        setEditPricePerUnit(item.product.pricePerUnit || 0);
+        setEditCustomRate(null);
+    };
+
+    const closeEditPriceModal = () => {
+        setEditingPriceItem(null);
+    };
+
+    const saveEditPrice = () => {
+        if (!editingPriceItem) return;
+        
+        const newCostUsd = editCalculatedCostUsd;
+        
+        setCart(prev => prev.map(cartItem => {
+            if (cartItem.product.id === editingPriceItem.product.id) {
+                return {
+                    ...cartItem,
+                    costPrice: newCostUsd,
+                    costPriceBs: editCostBs,
+                    rateAtPurchase: editRate,
+                    product: {
+                        ...cartItem.product,
+                        price: editPrice,
+                        pricePerUnit: editPricePerUnit
+                    }
+                };
+            }
+            return cartItem;
+        }));
+        
+        closeEditPriceModal();
+    };
+
+    const calculateTotal = () => cart.reduce((sum, item) => {
+        const priceBs = item.costPriceBs || item.costPrice * exchangeRate;
+        const priceUsd = currentRate > 0 ? priceBs / currentRate : item.costPrice;
+        return sum + (priceUsd * item.quantity);
+    }, 0);
+
+    const totalBs = cart.reduce((sum, item) => {
+        return sum + ((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity);
+    }, 0);
+    const tenderedBs = parseFloat(tenderedAmount) || 0;
+    const changeBs = tenderedBs - totalBs;
 
     const initiatePurchase = (method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => {
         if (cart.length === 0) return;
@@ -94,9 +188,6 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
     };
 
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-    const totalBs = calculateTotal() * exchangeRate;
-    const tenderedBs = parseFloat(tenderedAmount) || 0;
-    const changeBs = tenderedBs - totalBs;
 
     const handleAddProduct = () => {
         const product: Product = {
@@ -191,8 +282,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
                                     </div>
 
                                     <div className="flex flex-col items-end w-22 shrink-0">
-                                        <p className="font-black text-gray-900 text-lg leading-none">Bs {(product.costPrice * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
-                                        <p className="text-xs font-bold text-indigo-400 mt-0.5">${product.costPrice.toFixed(2)}</p>
+                                        <p className="font-black text-gray-900 text-lg leading-none">Bs {(product.cost_price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                        <p className="text-xs font-bold text-indigo-400 mt-0.5">${product.cost_price.toFixed(2)}</p>
                                     </div>
                                 </button>
                             );
@@ -283,21 +374,12 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
                                         </div>
 
                                         <div className="flex flex-col items-end w-22 shrink-0">
-                                            <p className="font-bold text-gray-900 text-sm leading-tight">Bs {(item.costPrice * item.quantity * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                            <p className="font-bold text-gray-900 text-sm leading-tight">Bs {(item.costPriceBs || item.costPrice * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
                                             <p className="text-[9px] font-bold text-indigo-400">${(item.costPrice * item.quantity).toFixed(2)}</p>
                                         </div>
 
                                         <button 
-                                            onClick={() => {
-                                                const newPrice = prompt(`Precio de compra para ${item.product.name}:`, item.costPrice.toFixed(2));
-                                                if (newPrice && !isNaN(parseFloat(newPrice)) && parseFloat(newPrice) > 0) {
-                                                    setCart(prev => prev.map(cartItem => 
-                                                        cartItem.product.id === item.product.id 
-                                                            ? { ...cartItem, costPrice: parseFloat(newPrice), price: parseFloat(newPrice) }
-                                                            : cartItem
-                                                    ));
-                                                }
-                                            }}
+                                            onClick={() => openEditPriceModal(item)}
                                             className="p-1.5 bg-blue-50 text-blue-400 rounded-lg hover:bg-blue-100 transition-colors shrink-0"
                                         >
                                             <Edit className="w-3 h-3" />
@@ -568,6 +650,133 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, onClo
                             </button>
                         </div>
                     </form>
+                </div>
+            )}
+
+            {/* MODAL EDITAR PRECIO */}
+            {editingPriceItem && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white w-full sm:max-w-lg h-[85vh] sm:h-auto sm:max-h-[90vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+                        <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                            <div>
+                                <h3 className="text-base sm:text-lg font-black text-gray-900">Editar Precios</h3>
+                                <p className="text-xs font-bold text-gray-400">{editingPriceItem.product.name}</p>
+                            </div>
+                            <button onClick={closeEditPriceModal} className="text-gray-400 hover:text-black p-1">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={(e) => { e.preventDefault(); saveEditPrice(); }} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                            {/* COSTO */}
+                            <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
+                                <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
+                                <div className="flex gap-2 items-center">
+                                    <div className="relative flex-1">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                                            value={editCostBs || ''}
+                                            placeholder="0.00"
+                                            onChange={e => setEditCostBs(parseFloat(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                    <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                                        <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
+                                        <span className="text-sm font-black text-red-700">${editCalculatedCostUsd.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <input
+                                            type="date"
+                                            className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                                            value={editCostDate}
+                                            onChange={e => setEditCostDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
+                                        <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full bg-transparent text-center text-xs font-black text-orange-700 outline-none"
+                                            value={editCustomRate !== null ? editCustomRate : editRate.toFixed(2)}
+                                            onChange={e => setEditCustomRate(e.target.value ? parseFloat(e.target.value) : null)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* PRECIO DE VENTA */}
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-2">
+                                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2 block">Venta</label>
+                                <div className="flex gap-3">
+                                    <div className="flex-1 space-y-2">
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400"
+                                                value={editPrice || ''}
+                                                placeholder="0.00"
+                                                onChange={e => setEditPrice(parseFloat(e.target.value) || 0)}
+                                            />
+                                        </div>
+                                        <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                                            <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
+                                            <span className="text-sm font-black text-emerald-800">
+                                                {((editPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* PRECIO POR UNIDAD (solo para paquetes) */}
+                            {editingPriceItem.product.sellingMode === 'package' && (
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 space-y-2">
+                                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest px-1 mb-2 block">Precio x Unidad</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400"
+                                            value={editPricePerUnit || ''}
+                                            placeholder="0.00"
+                                            onChange={e => setEditPricePerUnit(parseFloat(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                    <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                                        <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
+                                        <span className="text-sm font-black text-blue-800">
+                                            {((editPricePerUnit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-2 flex gap-3 mt-auto">
+                                <button
+                                    type="button"
+                                    onClick={closeEditPriceModal}
+                                    className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all active:scale-95"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
+                                >
+                                    Guardar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>

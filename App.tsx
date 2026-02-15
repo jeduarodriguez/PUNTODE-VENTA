@@ -583,10 +583,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => {
+  const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => {
     const now = Date.now();
     const totalUsd = items.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
-    const totalBs = totalUsd * exchangeRate;
+    const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity), 0);
 
     const transaction: TreasuryTransaction = {
       id: `purchase_${now}`,
@@ -608,7 +608,8 @@ const App: React.FC = () => {
       if (productIndex >= 0) {
         updatedProducts[productIndex] = {
           ...updatedProducts[productIndex],
-          stock: updatedProducts[productIndex].stock + item.quantity
+          stock: updatedProducts[productIndex].stock + item.quantity,
+          costPrice: item.costPrice
         };
       }
     }
@@ -617,7 +618,8 @@ const App: React.FC = () => {
     for (const item of items) {
       await saveData(`products/${item.product.id}`, {
         ...item.product,
-        stock: item.product.stock + item.quantity
+        stock: item.product.stock + item.quantity,
+        costPrice: item.costPrice
       });
     }
   };
@@ -667,7 +669,7 @@ const App: React.FC = () => {
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
           {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} />}
-          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} />}
+          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>

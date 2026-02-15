@@ -1,12 +1,13 @@
 
-import React, { useState } from 'react';
-import { Product } from '../types';
-import { Plus, Trash2, Edit, Search, CATEGORIES, DollarSign, TrendingDown, Filter, ArrowUpDown, PiggyBank, ShoppingBag, TrendingUp, Package, Scale, Box, Layers, Settings, X, Check, Calculator, Divide, ArrowRight, ChevronDown, Tag, ChevronRight } from '../constants';
+import React, { useState, useMemo } from 'react';
+import { Product, ExchangeRateRecord } from '../types';
+import { Plus, Trash2, Search, CATEGORIES, DollarSign, TrendingDown, Filter, ArrowUpDown, PiggyBank, ShoppingBag, TrendingUp, Package, Scale, Box, Layers, Settings, X, Check, Calculator, Divide, ArrowRight, ChevronDown, Tag, ChevronRight, Calendar } from '../constants';
 
 interface InventoryProps {
   products: Product[];
   exchangeRate: number;
   categories: string[];
+  rateHistory: ExchangeRateRecord[];
   onAdd: (product: Product) => void;
   onUpdate: (product: Product) => void;
   onDelete: (id: string) => void;
@@ -14,9 +15,11 @@ interface InventoryProps {
 }
 
 type FilterStatus = 'all' | 'low-stock' | 'out-of-stock';
-type SortBy = 'name' | 'price-high' | 'price-low' | 'stock-high' | 'stock-low' | 'margin-high';
+type FilterCategory = 'all' | string;
+type FilterMode = 'all' | 'simple' | 'weight' | 'package';
+type SortBy = 'name' | 'price-high' | 'price-low' | 'stock-high' | 'stock-low' | 'margin-high' | 'cost-high' | 'cost-low';
 
-const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, onAdd, onUpdate, onDelete, onAddCategory }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, rateHistory, onAdd, onUpdate, onDelete, onAddCategory }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -29,24 +32,50 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all');
+  const [modeFilter, setModeFilter] = useState<FilterMode>('all');
   const [sortBy, setSortBy] = useState<SortBy>('name');
 
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
     category: 'Bebidas',
     price: 0,
-    costPrice: 0,
+    cost_price: 0,
     stock: 0,
     description: '',
     image: '',
-    sellingMode: 'simple',
-    unitsPerPackage: 0,
-    pricePerUnit: 0,
-    remainingUnits: 0,
-    measurementUnit: 'kg'
+    selling_mode: 'simple',
+    units_per_package: 0,
+    price_per_unit: 0,
+    remaining_units: 0,
+    measurement_unit: 'kg'
   });
 
-  const totalCostValue = products.reduce((sum, p) => sum + (p.costPrice * p.stock), 0);
+  // Helpers para compatibilidad con ambos formatos
+  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price ?? p.cost_price ?? 0;
+  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? p.selling_mode ?? 'simple';
+  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? p.measurement_unit ?? 'kg';
+  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? p.units_per_package ?? 0;
+  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? p.price_per_unit ?? 0;
+  const getRemainingUnits = (p: Product | Partial<Product>) => p.remaining_units ?? p.remaining_units ?? 0;
+
+  const [costBs, setCostBs] = useState<number>(0);
+  const [costDate, setCostDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const getRateForDate = (dateStr: string): number => {
+    if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+    const targetDate = new Date(dateStr).getTime();
+    const dayStart = new Date(dateStr).setHours(0, 0, 0, 0);
+    const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+    const rateOnDate = sortedRates.find(r => r.timestamp <= dayStart);
+    if (rateOnDate) return rateOnDate.rate;
+    return sortedRates[0]?.rate || exchangeRate;
+  };
+
+  const currentRate = useMemo(() => getRateForDate(costDate), [costDate, rateHistory]);
+  const calculatedCostUsd = currentRate > 0 ? costBs / currentRate : 0;
+
+  const totalCostValue = products.reduce((sum, p) => sum + (p.cost_price * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const totalPotentialProfit = totalRetailValue - totalCostValue;
   const profitMarginPercent = totalRetailValue > 0 ? (totalPotentialProfit / totalRetailValue) * 100 : 0;
@@ -58,7 +87,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         statusFilter === 'all' ? true :
           statusFilter === 'low-stock' ? p.stock < 10 && p.stock > 0 :
             statusFilter === 'out-of-stock' ? p.stock === 0 : true;
-      return matchesSearch && matchesStatus;
+      const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
+      const matchesMode = modeFilter === 'all' || (p.selling_mode || 'simple') === modeFilter;
+      return matchesSearch && matchesStatus && matchesCategory && matchesMode;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -68,26 +99,29 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         case 'stock-high': return b.stock - a.stock;
         case 'stock-low': return a.stock - b.stock;
         case 'margin-high': return (b.price - b.costPrice) - (a.price - a.costPrice);
+        case 'cost-high': return b.costPrice - a.costPrice;
+        case 'cost-low': return a.costPrice - b.costPrice;
         default: return 0;
       }
     });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const costPriceUsd = calculatedCostUsd || Number(formData.cost_price) || 0;
     const sanitizedData: Product = {
       id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
       name: formData.name || 'Producto sin nombre',
       category: formData.category || 'Bebidas',
       price: Number(formData.price) || 0,
-      costPrice: Number(formData.costPrice) || 0,
+      cost_price: costPriceUsd,
       stock: Number(formData.stock) || 0,
       description: formData.description || '',
       image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
-      sellingMode: formData.sellingMode || 'simple',
-      measurementUnit: formData.measurementUnit,
-      unitsPerPackage: Number(formData.unitsPerPackage) || 0,
-      pricePerUnit: Number(formData.pricePerUnit) || 0,
-      remainingUnits: editingProduct?.remainingUnits || 0
+      selling_mode: formData.selling_mode || 'simple',
+      measurement_unit: formData.measurement_unit,
+      units_per_package: Number(formData.units_per_package) || 0,
+      price_per_unit: Number(formData.price_per_unit) || 0,
+      remaining_units: getRemainingUnits(editingProduct)
     };
 
     if (editingProduct) {
@@ -103,28 +137,33 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setEditingProduct(product);
       setFormData({
         ...product,
-        sellingMode: product.sellingMode || 'simple',
-        measurementUnit: product.measurementUnit || 'kg',
-        unitsPerPackage: product.unitsPerPackage || 0,
-        pricePerUnit: product.pricePerUnit || 0,
-        remainingUnits: product.remainingUnits || 0
+        cost_price: getCostPrice(product),
+        selling_mode: getSellingMode(product),
+        measurement_unit: getMeasurementUnit(product),
+        units_per_package: getUnitsPerPackage(product),
+        price_per_unit: getPricePerUnit(product),
+        remaining_units: getRemainingUnits(product)
       });
+      setCostBs(Math.round((getCostPrice(product) * exchangeRate) * 100) / 100);
+      setCostDate(new Date().toISOString().split('T')[0]);
     } else {
       setEditingProduct(null);
       setFormData({
         name: '',
         category: 'Bebidas',
         price: 0,
-        costPrice: 0,
+        cost_price: 0,
         stock: 0,
         description: '',
         image: `https://picsum.photos/seed/${Math.random()}/200`,
-        sellingMode: 'simple',
-        unitsPerPackage: 0,
-        pricePerUnit: 0,
-        remainingUnits: 0,
-        measurementUnit: 'kg'
+        selling_mode: 'simple',
+        units_per_package: 0,
+        price_per_unit: 0,
+        remaining_units: 0,
+        measurement_unit: 'kg'
       });
+      setCostBs(0);
+      setCostDate(new Date().toISOString().split('T')[0]);
     }
     setIsVariantConfigOpen(false);
     setIsCategoryModalOpen(false);
@@ -151,9 +190,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   // Helper para cálculos de variantes
   const getPackageCalculations = () => {
-    const packageCost = Number(formData.costPrice) || 0;
-    const units = Number(formData.unitsPerPackage) || 1;
-    const unitSellPrice = Number(formData.pricePerUnit) || 0;
+    const packageCost = Number(formData.cost_price) || 0;
+    const units = Number(formData.units_per_package) || 1;
+    const unitSellPrice = Number(formData.price_per_unit) || 0;
 
     const unitCost = units > 0 ? packageCost / units : 0;
     const unitProfit = unitSellPrice - unitCost;
@@ -162,16 +201,28 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     return { unitCost, unitProfit, unitMargin };
   };
 
-  // Helper para cálculo principal
+  // Helper para cálculo principal - usa el costo USD calculado desde Bs
   const getMainCalculations = () => {
-    const cost = Number(formData.costPrice) || 0;
+    const cost = calculatedCostUsd || Number(formData.cost_price) || 0;
     const price = Number(formData.price) || 0;
     const profit = price - cost;
-    const margin = price > 0 ? (profit / price) * 100 : 0;
+    const margin = cost > 0 ? (profit / cost) * 100 : 0;
     return { profit, margin };
   };
 
   const { profit, margin } = getMainCalculations();
+
+  const getUnitPriceCalculations = () => {
+    const cost = calculatedCostUsd || Number(formData.cost_price) || 0;
+    const unitsPerPackage = Number(formData.units_per_package) || 1;
+    const costPerUnit = unitsPerPackage > 0 ? cost / unitsPerPackage : 0;
+    const pricePerUnit = Number(formData.price_per_unit) || 0;
+    const profitPerUnit = pricePerUnit - costPerUnit;
+    const marginPerUnit = costPerUnit > 0 ? (profitPerUnit / costPerUnit) * 100 : 0;
+    return { profitPerUnit, marginPerUnit, costPerUnit };
+  };
+
+  const { profitPerUnit, marginPerUnit } = getUnitPriceCalculations();
 
   return (
     <div className="space-y-4 pb-24">
@@ -212,8 +263,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-col md:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-2">
+        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
@@ -224,28 +275,52 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
           />
         </div>
 
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
           <select
-            className="pl-4 pr-8 py-3 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
+            className="pl-2 pr-5 py-2 bg-white border border-gray-100 rounded-lg text-[8px] font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
           >
-            <option value="all">TODOS</option>
-            <option value="low-stock">BAJO STOCK</option>
-            <option value="out-of-stock">AGOTADOS</option>
+            <option value="all">CATEGORÍAS</option>
+            {categories.filter(c => c !== 'Todas').map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
 
           <select
-            className="pl-4 pr-8 py-3 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500"
+            className="pl-2 pr-5 py-2 bg-white border border-gray-100 rounded-lg text-[8px] font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
+            value={modeFilter}
+            onChange={(e) => setModeFilter(e.target.value as FilterMode)}
+          >
+            <option value="all">TIPO</option>
+            <option value="simple">UND</option>
+            <option value="weight">PESO</option>
+            <option value="package">PACK</option>
+          </select>
+
+          <select
+            className="pl-2 pr-5 py-2 bg-white border border-gray-100 rounded-lg text-[8px] font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as FilterStatus)}
+          >
+            <option value="all">ESTADO</option>
+            <option value="low-stock">BAJO</option>
+            <option value="out-of-stock">AGOT</option>
+          </select>
+
+          <select
+            className="pl-2 pr-5 py-2 bg-white border border-gray-100 rounded-lg text-[8px] font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortBy)}
           >
             <option value="name">A-Z</option>
-            <option value="price-high">PRECIO MAX</option>
-            <option value="price-low">PRECIO MIN</option>
-            <option value="margin-high">UTILIDAD</option>
-            <option value="stock-high">STOCK MAX</option>
-            <option value="stock-low">STOCK MIN</option>
+            <option value="price-high">$$$↑</option>
+            <option value="price-low">$$$↓</option>
+            <option value="cost-high">COST↑</option>
+            <option value="cost-low">COST↓</option>
+            <option value="margin-high">MARG</option>
+            <option value="stock-high">STK↑</option>
+            <option value="stock-low">STK↓</option>
           </select>
         </div>
       </div>
@@ -276,9 +351,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 )}
 
                 {/* Badge de unidades para paquetes */}
-                {product.sellingMode === 'package' && product.unitsPerPackage && product.unitsPerPackage > 0 && (
-                  <div className={`absolute -top-1.5 -right-1.5 ${product.stock > 0 || (product.remainingUnits || 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'} text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm`}>
-                    {product.stock * product.unitsPerPackage + (product.remainingUnits || 0)}
+                {product.selling_mode === 'package' && product.units_per_package && product.units_per_package > 0 && (
+                  <div className={`absolute -top-1.5 -right-1.5 ${product.stock > 0 || (product.remaining_units || 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'} text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm`}>
+                    {product.stock * product.units_per_package + (product.remaining_units || 0)}
                   </div>
                 )}
               </div>
@@ -414,7 +489,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, sellingMode: 'simple' })}
-                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.sellingMode === 'simple' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'simple' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Package className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">Unidad</span>
@@ -422,7 +497,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, sellingMode: 'weight' })}
-                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.sellingMode === 'weight' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'weight' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Scale className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">Peso</span>
@@ -430,7 +505,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, sellingMode: 'package' })}
-                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.sellingMode === 'package' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                    className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'package' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Box className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">Paquete</span>
@@ -438,14 +513,14 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 </div>
 
                 {/* Configuración Dinámica */}
-                {formData.sellingMode === 'weight' && (
+                {formData.selling_mode === 'weight' && (
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4 animate-fade-in">
                     <h4 className="font-bold text-gray-900 text-sm">Venta por Peso / Volumen</h4>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Unidad de Medida</label>
                       <select
                         className="w-full p-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
-                        value={formData.measurementUnit}
+                        value={formData.measurement_unit}
                         onChange={e => setFormData({ ...formData, measurementUnit: e.target.value as any })}
                       >
                         <option value="kg">Kilogramos (Kg)</option>
@@ -456,18 +531,18 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     </div>
                     <p className="text-xs text-gray-500 bg-white p-3 rounded-xl border border-gray-100">
                       <InfoIcon className="inline w-3 h-3 mr-1" />
-                      El precio principal será el precio por <b>1 {formData.measurementUnit}</b>.
+                      El precio principal será el precio por <b>1 {formData.measurement_unit}</b>.
                     </p>
                   </div>
                 )}
 
-                {formData.sellingMode === 'package' && (
+                {formData.selling_mode === 'package' && (
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4 animate-fade-in">
                     <h4 className="font-bold text-gray-900 text-sm">Venta por Paquete (Multi-precio)</h4>
 
                     <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 uppercase">Costo Total Paquete (Ref)</span>
-                      <span className="text-sm font-black text-blue-900">${Number(formData.costPrice || 0).toFixed(2)}</span>
+                      <span className="text-sm font-black text-blue-900">${Number(formData.cost_price || 0).toFixed(2)}</span>
                     </div>
 
                     {/* Reorganización: Unidades y Costo Unitario en la misma fila */}
@@ -480,7 +555,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             type="number"
                             placeholder="Ej. 12"
                             className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
-                            value={formData.unitsPerPackage || ''}
+                            value={formData.units_per_package || ''}
                             onChange={e => setFormData({ ...formData, unitsPerPackage: parseInt(e.target.value) || 0 })}
                           />
                         </div>
@@ -511,14 +586,14 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             step="0.01"
                             placeholder="0.00"
                             className="w-full pl-8 pr-4 py-3 border-2 border-emerald-100 rounded-xl bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-500"
-                            value={formData.pricePerUnit || ''}
+                            value={formData.price_per_unit || ''}
                             onChange={e => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
                           />
                         </div>
                         <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-3 flex flex-col justify-center min-w-[70px] text-right">
                           <span className="text-[8px] font-black text-emerald-300 uppercase">Bolívares</span>
                           <span className="text-xs font-black text-emerald-600 leading-none">
-                            {((formData.pricePerUnit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                            {((formData.price_per_unit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
@@ -557,9 +632,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
           <div className="p-3 sm:p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
             <h3 className="text-base sm:text-lg font-black text-gray-900">{editingProduct ? 'Editar' : 'Nuevo'} Producto</h3>
-            <button onClick={closeModal} className="text-gray-400 hover:text-black p-1">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              {editingProduct && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(editingProduct.id);
+                    closeModal();
+                  }}
+                  className="text-red-400 hover:text-red-600 p-1"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+              <button onClick={closeModal} className="text-gray-400 hover:text-black p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto">
@@ -578,132 +667,192 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 <button
                   type="button"
                   onClick={() => setIsVariantConfigOpen(true)}
-                  className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.sellingMode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
-                  title="Agregar variante"
+                  className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.selling_mode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
+                  title="Cambiar tipo"
                 >
-                  {formData.sellingMode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : formData.sellingMode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  {formData.selling_mode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : formData.selling_mode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
                 </button>
               </div>
             </div>
 
             {/* CATEGORÍA Y STOCK */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
+            <div className="flex gap-2">
+              <div className="flex-1 space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
                 <button
                   type="button"
                   onClick={() => setIsCategoryModalOpen(true)}
-                  className="w-full p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
+                  className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
                 >
                   <span>{formData.category}</span>
                   <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
                 </button>
               </div>
-              <div className="space-y-1">
+              <div className="w-24 space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-                  {formData.sellingMode === 'weight' ? `Stock (${formData.measurementUnit})` : 'Stock'}
+                  {formData.selling_mode === 'weight' ? `Stock (${formData.measurement_unit})` : 'Stock'}
                 </label>
                 <input
                   type="number"
-                  step={formData.sellingMode === 'weight' ? "0.01" : "1"}
+                  step={formData.selling_mode === 'weight' ? "0.01" : "1"}
                   placeholder="0"
-                  className="w-full p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
+                  className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
                   value={formData.stock || ''}
                   onChange={e => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
 
-            {/* RESUMEN DE VARIANTE */}
-            {formData.sellingMode !== 'simple' && (
-              <div onClick={() => setIsVariantConfigOpen(true)} className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform">
-                <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
-                  {formData.sellingMode === 'weight' ? <Scale className="w-4 h-4" /> : <Box className="w-4 h-4" />}
-                </div>
-                <div className="text-xs flex-1">
-                  <span className="font-bold text-indigo-900 block">
-                    {formData.sellingMode === 'weight' ? `Venta por ${formData.measurementUnit}` : `Paquete x${formData.unitsPerPackage}`}
-                  </span>
-                  {formData.sellingMode === 'package' && (
-                    <span className="text-indigo-500">Unidad: ${formData.pricePerUnit?.toFixed(2)}</span>
-                  )}
-                </div>
-                <Edit className="w-4 h-4 text-indigo-400" />
-              </div>
-            )}
-
             {/* PRECIOS */}
             <div className="pt-2 border-t border-gray-100">
-              <div className="flex items-center gap-2 mb-3">
-                <DollarSign className="w-4 h-4 text-gray-400" />
-                <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Precios</h4>
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* COSTO */}
-                <div className="space-y-2">
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
                   <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500"
-                      value={formData.costPrice || ''}
-                      placeholder="0.00"
-                      onChange={e => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
-                    />
+                  {/* Fila 1: Bs + USD */}
+                  <div className="flex gap-2 items-center">
+                    {/* Costo Bs */}
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                        value={costBs ? Number(costBs.toFixed(2)) : ''}
+                        placeholder="0.00"
+                        onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    {/* Resultado USD */}
+                    <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                      <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
+                      <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2 flex justify-between items-center">
-                    <span className="text-[8px] font-bold text-red-400 uppercase">En Bs</span>
-                    <span className="text-sm font-black text-red-800">
-                      {((formData.costPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                    </span>
+
+                  {/* Fila 2: Fecha + Tasa */}
+                  <div className="flex gap-2">
+                    {/* Fecha */}
+                    <div className="flex-1">
+                      <input
+                        type="date"
+                        className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                        value={costDate}
+                        onChange={e => setCostDate(e.target.value)}
+                      />
+                    </div>
+                    {/* Tasa */}
+                    <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
+                      <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                      <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* VENTA */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">Venta</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500"
-                      value={formData.price || ''}
-                      placeholder="0.00"
-                      onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 flex justify-between items-center">
-                    <span className="text-[8px] font-bold text-emerald-400 uppercase">En Bs</span>
-                    <span className="text-sm font-black text-emerald-800">
-                      {((formData.price || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                {/* VENTA + RENTABILIDAD UNIFICADO */}
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+                  <div className="flex gap-3 items-stretch">
+                    {/* LADO IZQUIERDO: PRECIO */}
+                    <div className="flex-1 flex flex-col">
+                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
+                      {/* $ */}
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
+                          value={formData.price || ''}
+                          placeholder="0.00"
+                          onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      
+                      {/* Bs calculado */}
+                      <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                        <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
+                        <span className="text-sm font-black text-emerald-800">
+                          {((formData.price || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                        </span>
+                      </div>
+                    </div>
 
-            {/* RENTABILIDAD */}
-            <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-              <h5 className="text-center text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-3">
-                Rentabilidad
-              </h5>
-              <div className="flex items-center justify-center gap-8">
-                <div className="text-center">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Ganancia</p>
-                  <p className={`text-xl font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>${profit.toFixed(2)}</p>
-                </div>
-                <div className="w-px h-10 bg-indigo-200"></div>
-                <div className="text-center">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Margen</p>
-                  <p className={`text-2xl font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
-                    {margin.toFixed(0)}%
-                  </p>
+                    {/* LADO DERECHO: RENTABILIDAD */}
+                    <div className="flex-1 flex flex-col">
+                      <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                      
+                      {/* Ganancia */}
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                        <span className={`text-sm font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                          ${profit.toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      {/* Margen */}
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                        <span className={`text-sm font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                          {margin.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* PRECIO POR UNIDAD (solo para paquetes) */}
+              {formData.selling_mode === 'package' && (
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                  <div className="flex gap-3 items-stretch">
+                    {/* LADO IZQUIERDO: PRECIO POR UNIDAD */}
+                    <div className="flex-1 flex flex-col">
+                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">Precio x Unidad</label>
+                      {/* $ */}
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
+                          value={formData.price_per_unit || ''}
+                          placeholder="0.00"
+                          onChange={e => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
+                        />
+                      </div>
+                      
+                      {/* Bs calculado */}
+                      <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                        <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
+                        <span className="text-sm font-black text-blue-800">
+                          {((formData.price_per_unit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* LADO DERECHO: RENTABILIDAD */}
+                    <div className="flex-1 flex flex-col">
+                      <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                      
+                      {/* Ganancia */}
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                        <span className={`text-sm font-black ${profitPerUnit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                          ${profitPerUnit.toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      {/* Margen */}
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                        <span className={`text-sm font-black ${marginPerUnit >= 30 ? 'text-emerald-500' : marginPerUnit > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                          {marginPerUnit.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* BOTONES DE ACCIÓN */}
@@ -734,6 +883,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );

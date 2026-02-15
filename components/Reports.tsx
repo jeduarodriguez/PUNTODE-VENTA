@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sale, Customer, TreasuryTransaction, Product } from '../types';
+import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
 import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
@@ -10,12 +10,13 @@ interface ReportsProps {
     customers?: Customer[];
     exchangeRate: number;
     treasuryTransactions?: TreasuryTransaction[];
+    rateHistory?: ExchangeRateRecord[];
     onOpenPOS: () => void;
     onVoidSale: (saleId: string) => void;
     onEditSale: (sale: Sale) => void;
     onAddTreasuryTransaction: (t: TreasuryTransaction) => void;
     onOpenRateModal?: () => void;
-    onPurchaseProducts: (items: { product: Product; quantity: number; costPrice: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
+    onPurchaseProducts: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
     onAddProduct: (product: Product) => void;
     onUpdateTreasuryTransaction?: (t: TreasuryTransaction) => void;
     onDeleteTreasuryTransaction?: (id: string) => void;
@@ -24,7 +25,7 @@ interface ReportsProps {
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction }) => {
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
@@ -701,6 +702,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 <PurchasePOS
                     products={products}
                     exchangeRate={exchangeRate}
+                    rateHistory={rateHistory}
                     onClose={() => setShowPurchasePOS(false)}
                     onPurchase={onPurchaseProducts}
                     onAddProduct={onAddProduct}

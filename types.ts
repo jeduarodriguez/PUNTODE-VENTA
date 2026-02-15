@@ -1,20 +1,28 @@
-
+  
 export interface Product {
   id: string;
   name: string;
   category: string;
-  price: number;      // Selling price in USD (Precio Principal / Paquete Completo)
-  costPrice: number;  // Purchase price (cost) in USD
+  price: number;
+  cost_price: number;
   stock: number;
   image?: string;
   description?: string;
 
-  // Nuevos campos para Variantes/Modos de Venta
+  // Campos para Variantes/Modos de Venta
+  selling_mode?: 'simple' | 'weight' | 'package';
+  measurement_unit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
+  units_per_package?: number;
+  price_per_unit?: number;
+  remaining_units?: number;
+  
+  // Aliases para compatibilidad con datos existentes
+  costPrice?: number;
   sellingMode?: 'simple' | 'weight' | 'package';
-  measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm'; // Para venta por peso/volumen
-  unitsPerPackage?: number; // Cuantas unidades trae el paquete (si es modo paquete)
-  pricePerUnit?: number;    // Precio de venta de la unidad suelta (si es modo paquete)
-  remainingUnits?: number;  // Unidades restantes del paquete (para seguimiento de inventario)
+  measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
+  unitsPerPackage?: number;
+  pricePerUnit?: number;
+  remainingUnits?: number;
 }
 
 export interface CartItem extends Product {
