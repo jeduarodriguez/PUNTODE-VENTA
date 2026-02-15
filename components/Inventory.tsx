@@ -106,7 +106,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         sellingMode: product.sellingMode || 'simple',
         measurementUnit: product.measurementUnit || 'kg',
         unitsPerPackage: product.unitsPerPackage || 0,
-        pricePerUnit: product.pricePerUnit || 0
+        pricePerUnit: product.pricePerUnit || 0,
+        remainingUnits: product.remainingUnits || 0
       });
     } else {
       setEditingProduct(null);
@@ -121,6 +122,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         sellingMode: 'simple',
         unitsPerPackage: 0,
         pricePerUnit: 0,
+        remainingUnits: 0,
         measurementUnit: 'kg'
       });
     }

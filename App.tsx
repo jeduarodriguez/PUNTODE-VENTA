@@ -141,11 +141,61 @@ const App: React.FC = () => {
     // Preparar actualizaciones de stock
     const updatedProducts = [...products];
     sale.items.forEach(item => {
-      const pIndex = updatedProducts.findIndex(prod => prod.id === item.id);
+      const isUnitSale = item.id && item.id.endsWith('-unit');
+      const productId = isUnitSale ? item.id.replace('-unit', '') : item.id;
+      const pIndex = updatedProducts.findIndex(prod => prod.id === productId);
+      
       if (pIndex !== -1) {
-        const p = { ...updatedProducts[pIndex], stock: Math.max(0, updatedProducts[pIndex].stock - item.quantity) };
-        updatedProducts[pIndex] = p;
-        updates[`products/${p.id}`] = p;
+        const product = updatedProducts[pIndex];
+        
+        if (product.sellingMode === 'package' && isUnitSale) {
+          // Venta por unidad de producto paquete
+          let qtyNeeded = item.quantity;
+          let newRemainingUnits = product.remainingUnits || 0;
+          let newStock = product.stock;
+          
+          // Primero usar las unidades sueltas
+          if (newRemainingUnits >= qtyNeeded) {
+            newRemainingUnits -= qtyNeeded;
+            qtyNeeded = 0;
+          } else {
+            qtyNeeded -= newRemainingUnits;
+            newRemainingUnits = 0;
+          }
+          
+          // Si necesita más, abrir paquetes
+          if (qtyNeeded > 0 && newStock > 0) {
+            const packagesToOpen = Math.min(Math.ceil(qtyNeeded / (product.unitsPerPackage || 1)), newStock);
+            newStock -= packagesToOpen;
+            const unitsFromPackages = packagesToOpen * (product.unitsPerPackage || 0);
+            newRemainingUnits += unitsFromPackages;
+            qtyNeeded -= unitsFromPackages;
+          }
+          
+          const p = { 
+            ...product, 
+            stock: Math.max(0, newStock),
+            remainingUnits: Math.max(0, newRemainingUnits)
+          };
+          updatedProducts[pIndex] = p;
+          updates[`products/${productId}`] = p;
+        } else if (product.sellingMode === 'package' && !isUnitSale) {
+          // Venta por paquete
+          const p = { 
+            ...product, 
+            stock: Math.max(0, product.stock - item.quantity)
+          };
+          updatedProducts[pIndex] = p;
+          updates[`products/${productId}`] = p;
+        } else {
+          // Venta normal (simple o peso)
+          const p = { 
+            ...product, 
+            stock: Math.max(0, product.stock - item.quantity)
+          };
+          updatedProducts[pIndex] = p;
+          updates[`products/${productId}`] = p;
+        }
       }
     });
 
@@ -216,12 +266,28 @@ const App: React.FC = () => {
     // Revertir stock
     const updatedProducts = [...products];
     sale.items.forEach(item => {
-      if (item.id === 'debt_payment') return;
-      const pIndex = updatedProducts.findIndex(prod => prod.id === item.id);
+      if (item.id === 'debt_payment' || item.id === 'worker_debt_payment') return;
+      
+      const isUnitSale = item.id && item.id.endsWith('-unit');
+      const productId = isUnitSale ? item.id.replace('-unit', '') : item.id;
+      const pIndex = updatedProducts.findIndex(prod => prod.id === productId);
+      
       if (pIndex !== -1) {
-        const p = { ...updatedProducts[pIndex], stock: updatedProducts[pIndex].stock + item.quantity };
-        updatedProducts[pIndex] = p;
-        updates[`products/${p.id}`] = p;
+        const product = updatedProducts[pIndex];
+        
+        if (product.sellingMode === 'package' && isUnitSale) {
+          // Anular venta por unidad - reintegrar a remainingUnits
+          const qtyToReturn = item.quantity;
+          const newRemainingUnits = (product.remainingUnits || 0) + qtyToReturn;
+          const p = { ...product, remainingUnits: newRemainingUnits };
+          updatedProducts[pIndex] = p;
+          updates[`products/${productId}`] = p;
+        } else {
+          // Anulación normal - reintegrar al stock
+          const p = { ...product, stock: product.stock + item.quantity };
+          updatedProducts[pIndex] = p;
+          updates[`products/${productId}`] = p;
+        }
       }
     });
 
