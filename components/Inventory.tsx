@@ -281,13 +281,6 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     {product.stock * product.unitsPerPackage + (product.remainingUnits || 0)}
                   </div>
                 )}
-
-                {/* Icon Badge for Variants - solo para paquetes */}
-                {isPackage && (
-                  <div className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm z-10">
-                    <Box className="w-2.5 h-2.5 text-blue-500" />
-                  </div>
-                )}
               </div>
 
               {/* NOMBRE Y CATEGORIA */}
@@ -562,43 +555,45 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             </div>
           )}
 
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
-            <h3 className="text-xl font-black text-gray-900">{editingProduct ? 'Editar' : 'Nuevo'} Producto</h3>
-            <button onClick={closeModal} className="text-gray-400 text-3xl font-light hover:text-black">&times;</button>
+          <div className="p-3 sm:p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+            <h3 className="text-base sm:text-lg font-black text-gray-900">{editingProduct ? 'Editar' : 'Nuevo'} Producto</h3>
+            <button onClick={closeModal} className="text-gray-400 hover:text-black p-1">
+              <X className="w-6 h-6" />
+            </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 w-full max-w-4xl mx-auto">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto">
+            {/* NOMBRE DEL PRODUCTO */}
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre Comercial</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre del Producto</label>
               <div className="flex gap-2">
                 <input
                   required
-                  autoFocus={!editingProduct} // Changed here
+                  autoFocus={!editingProduct}
                   placeholder="Ej. Café Molido 1kg"
-                  className="flex-1 p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition-all text-sm font-bold text-gray-900"
+                  className="flex-1 p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                 />
-                {/* BOTÓN DE VARIANTE */}
                 <button
                   type="button"
                   onClick={() => setIsVariantConfigOpen(true)}
-                  className={`w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.sellingMode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
-                  title="Agregar variante / característica especial"
+                  className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.sellingMode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
+                  title="Agregar variante"
                 >
-                  {formData.sellingMode === 'weight' ? <Scale className="w-6 h-6" /> : formData.sellingMode === 'package' ? <Box className="w-6 h-6" /> : <Settings className="w-6 h-6" />}
+                  {formData.sellingMode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : formData.sellingMode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* CATEGORÍA Y STOCK */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
-                {/* TRIGGER PARA ABRIR MODAL DE CATEGORIA */}
                 <button
                   type="button"
                   onClick={() => setIsCategoryModalOpen(true)}
-                  className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
+                  className="w-full p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
                 >
                   <span>{formData.category}</span>
                   <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
@@ -606,126 +601,113 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-                  {formData.sellingMode === 'weight' ? `Stock (${formData.measurementUnit})` : 'Stock Actual'}
+                  {formData.sellingMode === 'weight' ? `Stock (${formData.measurementUnit})` : 'Stock'}
                 </label>
                 <input
                   type="number"
                   step={formData.sellingMode === 'weight' ? "0.01" : "1"}
                   placeholder="0"
-                  className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
+                  className="w-full p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
                   value={formData.stock || ''}
                   onChange={e => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
 
-            <div className="pt-4 border-t border-gray-100">
+            {/* RESUMEN DE VARIANTE */}
+            {formData.sellingMode !== 'simple' && (
+              <div onClick={() => setIsVariantConfigOpen(true)} className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform">
+                <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
+                  {formData.sellingMode === 'weight' ? <Scale className="w-4 h-4" /> : <Box className="w-4 h-4" />}
+                </div>
+                <div className="text-xs flex-1">
+                  <span className="font-bold text-indigo-900 block">
+                    {formData.sellingMode === 'weight' ? `Venta por ${formData.measurementUnit}` : `Paquete x${formData.unitsPerPackage}`}
+                  </span>
+                  {formData.sellingMode === 'package' && (
+                    <span className="text-indigo-500">Unidad: ${formData.pricePerUnit?.toFixed(2)}</span>
+                  )}
+                </div>
+                <Edit className="w-4 h-4 text-indigo-400" />
+              </div>
+            )}
+
+            {/* PRECIOS */}
+            <div className="pt-2 border-t border-gray-100">
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign className="w-4 h-4 text-gray-400" />
-                <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Estructura de Costos</h4>
+                <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Precios</h4>
               </div>
 
-              {/* FORCED 2-COLUMN LAYOUT FOR KEYBOARD OPTIMIZATION */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* COLUMNA IZQUIERDA: INPUTS DE COSTO Y VENTA (Apilados) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* COSTO */}
                 <div className="space-y-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1 flex items-center gap-1">
-                      Costo {formData.sellingMode === 'package' ? 'Paquete' : ''}
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
-                          value={formData.costPrice || ''}
-                          placeholder="0.00"
-                          onChange={e => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="bg-red-50 border border-red-100 rounded-xl px-2 flex flex-col justify-center min-w-[60px] text-right shrink-0">
-                        <span className="text-[8px] font-black text-red-300 uppercase">Bs</span>
-                        <span className="text-[10px] font-black text-red-800 leading-none truncate">
-                          {((formData.costPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
+                  <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500"
+                      value={formData.costPrice || ''}
+                      placeholder="0.00"
+                      onChange={e => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
+                    />
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1 flex items-center gap-1">
-                      Venta {formData.sellingMode === 'package' ? 'Paquete' : ''}
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
-                          value={formData.price || ''}
-                          placeholder="0.00"
-                          onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-2 flex flex-col justify-center min-w-[60px] text-right shrink-0">
-                        <span className="text-[8px] font-black text-emerald-300 uppercase">Bs</span>
-                        <span className="text-[10px] font-black text-emerald-600 leading-none truncate">
-                          {((formData.price || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2 flex justify-between items-center">
+                    <span className="text-[8px] font-bold text-red-400 uppercase">En Bs</span>
+                    <span className="text-sm font-black text-red-800">
+                      {((formData.costPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
 
-                {/* COLUMNA DERECHA: PANEL RENTABILIDAD */}
-                <div className="bg-indigo-50/50 p-2 rounded-xl border border-indigo-100 flex flex-col justify-center h-full">
-                  <h5 className="text-center text-[9px] font-black text-indigo-300 uppercase tracking-widest mb-2">
-                    Rentabilidad
-                  </h5>
-                  <div className="flex flex-col items-center justify-center flex-1 gap-1">
-                    {/* Utilidad */}
-                    <div className="text-center">
-                      <p className="text-[8px] font-bold text-gray-400 uppercase mb-0.5">Ganancia</p>
-                      <p className={`text-lg font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>${profit.toFixed(2)}</p>
-                    </div>
-
-                    {/* Divider Horizontal */}
-                    <div className="w-8 h-px bg-indigo-100 my-1"></div>
-
-                    {/* Margen */}
-                    <div className="text-center">
-                      <p className="text-[8px] font-bold text-gray-400 uppercase mb-0.5">Margen</p>
-                      <p className={`text-2xl font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
-                        {margin.toFixed(0)}%
-                      </p>
-                    </div>
+                {/* VENTA */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">Venta</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full pl-6 pr-2 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500"
+                      value={formData.price || ''}
+                      placeholder="0.00"
+                      onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 flex justify-between items-center">
+                    <span className="text-[8px] font-bold text-emerald-400 uppercase">En Bs</span>
+                    <span className="text-sm font-black text-emerald-800">
+                      {((formData.price || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Resumen de Variante en el formulario principal */}
-            {formData.sellingMode !== 'simple' && (
-              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex items-center gap-3">
-                <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
-                  {formData.sellingMode === 'weight' ? <Scale className="w-4 h-4" /> : <Box className="w-4 h-4" />}
+            {/* RENTABILIDAD */}
+            <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+              <h5 className="text-center text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-3">
+                Rentabilidad
+              </h5>
+              <div className="flex items-center justify-center gap-8">
+                <div className="text-center">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Ganancia</p>
+                  <p className={`text-xl font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>${profit.toFixed(2)}</p>
                 </div>
-                <div className="text-xs">
-                  <span className="font-bold text-indigo-900 block">
-                    {formData.sellingMode === 'weight' ? `Venta por ${formData.measurementUnit}` : `Venta por Paquete (x${formData.unitsPerPackage})`}
-                  </span>
-                  {formData.sellingMode === 'package' && (
-                    <span className="text-indigo-500">Unidad suelta: ${formData.pricePerUnit?.toFixed(2)}</span>
-                  )}
+                <div className="w-px h-10 bg-indigo-200"></div>
+                <div className="text-center">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase mb-1">Margen</p>
+                  <p className={`text-2xl font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                    {margin.toFixed(0)}%
+                  </p>
                 </div>
-                <button type="button" onClick={() => setIsVariantConfigOpen(true)} className="ml-auto text-xs font-bold text-indigo-600 underline">Editar</button>
               </div>
-            )}
+            </div>
 
-            <div className="pt-4 flex gap-3 mt-auto">
+            {/* BOTONES DE ACCIÓN */}
+            <div className="pt-2 flex gap-3">
               <button
                 type="button"
                 onClick={closeModal}
