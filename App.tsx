@@ -331,7 +331,7 @@ const App: React.FC = () => {
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
-      items: [{ id: 'debt_payment', name: 'Abono de Deuda', category: 'Pagos', price: amount, costPrice: 0, stock: 1, quantity: 1 }],
+      items: [{ id: 'debt_payment', name: 'Abono de Deuda', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
       total: amount,
       exchangeRate,
       paymentMethod: method,
@@ -530,7 +530,7 @@ const App: React.FC = () => {
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
-      items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, costPrice: 0, stock: 1, quantity: 1 }],
+      items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
       total: amount,
       exchangeRate,
       paymentMethod: method,
@@ -581,6 +581,12 @@ const App: React.FC = () => {
       setCategories(newCats);
       await saveData('settings/categories', newCats);
     }
+  };
+
+  const handleDeleteCategory = async (cat: string) => {
+    const newCats = categories.filter(c => c !== cat);
+    setCategories(newCats);
+    await saveData('settings/categories', newCats);
   };
 
   const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => {
@@ -669,7 +675,7 @@ const App: React.FC = () => {
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
           {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} />}
-          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} />}
+          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>

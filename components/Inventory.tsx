@@ -3,6 +3,11 @@ import React, { useState, useMemo } from 'react';
 import { Product, ExchangeRateRecord } from '../types';
 import { Plus, Trash2, Search, CATEGORIES, DollarSign, TrendingDown, Filter, ArrowUpDown, PiggyBank, ShoppingBag, TrendingUp, Package, Scale, Box, Layers, Settings, X, Check, Calculator, Divide, ArrowRight, ChevronDown, Tag, ChevronRight, Calendar } from '../constants';
 
+type FilterStatus = 'all' | 'low-stock' | 'out-of-stock';
+type FilterCategory = 'all' | string;
+type FilterMode = 'all' | 'simple' | 'weight' | 'package';
+type SortBy = 'name' | 'price-high' | 'price-low' | 'stock-high' | 'stock-low' | 'margin-high' | 'cost-high' | 'cost-low';
+
 interface InventoryProps {
   products: Product[];
   exchangeRate: number;
@@ -12,14 +17,10 @@ interface InventoryProps {
   onUpdate: (product: Product) => void;
   onDelete: (id: string) => void;
   onAddCategory: (category: string) => void;
+  onDeleteCategory: (category: string) => void;
 }
 
-type FilterStatus = 'all' | 'low-stock' | 'out-of-stock';
-type FilterCategory = 'all' | string;
-type FilterMode = 'all' | 'simple' | 'weight' | 'package';
-type SortBy = 'name' | 'price-high' | 'price-low' | 'stock-high' | 'stock-low' | 'margin-high' | 'cost-high' | 'cost-low';
-
-const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, rateHistory, onAdd, onUpdate, onDelete, onAddCategory }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, rateHistory, onAdd, onUpdate, onDelete, onAddCategory, onDeleteCategory }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -61,6 +62,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const [costBs, setCostBs] = useState<number>(0);
   const [costDate, setCostDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [costMode, setCostMode] = useState<'calculated' | 'manual'>('calculated');
+  const [manualCostUsd, setManualCostUsd] = useState<number>(0);
 
   const getRateForDate = (dateStr: string): number => {
     if (!rateHistory || rateHistory.length === 0) return exchangeRate;
@@ -75,7 +78,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const currentRate = useMemo(() => getRateForDate(costDate), [costDate, rateHistory]);
   const calculatedCostUsd = currentRate > 0 ? costBs / currentRate : 0;
 
-  const totalCostValue = products.reduce((sum, p) => sum + (p.cost_price * p.stock), 0);
+  const totalCostValue = products.reduce((sum, p) => sum + ((p.cost_price ?? p.costPrice ?? 0) * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const totalPotentialProfit = totalRetailValue - totalCostValue;
   const profitMarginPercent = totalRetailValue > 0 ? (totalPotentialProfit / totalRetailValue) * 100 : 0;
@@ -107,7 +110,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const costPriceUsd = calculatedCostUsd || Number(formData.cost_price) || 0;
+    const costPriceUsd = costMode === 'calculated' ? (calculatedCostUsd || Number(formData.cost_price) || 0) : (manualCostUsd || Number(formData.cost_price) || 0);
     const sanitizedData: Product = {
       id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
       name: formData.name || 'Producto sin nombre',
@@ -135,17 +138,26 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const openModal = (product?: Product) => {
     if (product) {
       setEditingProduct(product);
+      const existingCost = getCostPrice(product);
       setFormData({
         ...product,
-        cost_price: getCostPrice(product),
+        cost_price: existingCost,
         selling_mode: getSellingMode(product),
         measurement_unit: getMeasurementUnit(product),
         units_per_package: getUnitsPerPackage(product),
         price_per_unit: getPricePerUnit(product),
         remaining_units: getRemainingUnits(product)
       });
-      setCostBs(Math.round((getCostPrice(product) * exchangeRate) * 100) / 100);
-      setCostDate(new Date().toISOString().split('T')[0]);
+      if (existingCost > 0) {
+        setCostMode('manual');
+        setManualCostUsd(existingCost);
+        setCostBs(0);
+        setCostDate(new Date().toISOString().split('T')[0]);
+      } else {
+        setCostMode('calculated');
+        setCostBs(0);
+        setCostDate(new Date().toISOString().split('T')[0]);
+      }
     } else {
       setEditingProduct(null);
       setFormData({
@@ -162,7 +174,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         remaining_units: 0,
         measurement_unit: 'kg'
       });
+      setCostMode('calculated');
       setCostBs(0);
+      setManualCostUsd(0);
       setCostDate(new Date().toISOString().split('T')[0]);
     }
     setIsVariantConfigOpen(false);
@@ -190,7 +204,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   // Helper para cálculos de variantes
   const getPackageCalculations = () => {
-    const packageCost = Number(formData.cost_price) || 0;
+    const cost = costMode === 'calculated' ? calculatedCostUsd : manualCostUsd;
+    const packageCost = cost || Number(formData.cost_price) || 0;
     const units = Number(formData.units_per_package) || 1;
     const unitSellPrice = Number(formData.price_per_unit) || 0;
 
@@ -203,19 +218,21 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   // Helper para cálculo principal - usa el costo USD calculado desde Bs
   const getMainCalculations = () => {
-    const cost = calculatedCostUsd || Number(formData.cost_price) || 0;
+    const cost = costMode === 'calculated' ? calculatedCostUsd : manualCostUsd;
+    const finalCost = cost || Number(formData.cost_price) || 0;
     const price = Number(formData.price) || 0;
-    const profit = price - cost;
-    const margin = cost > 0 ? (profit / cost) * 100 : 0;
+    const profit = price - finalCost;
+    const margin = finalCost > 0 ? (profit / finalCost) * 100 : 0;
     return { profit, margin };
   };
 
   const { profit, margin } = getMainCalculations();
 
   const getUnitPriceCalculations = () => {
-    const cost = calculatedCostUsd || Number(formData.cost_price) || 0;
+    const cost = costMode === 'calculated' ? calculatedCostUsd : manualCostUsd;
+    const finalCost = cost || Number(formData.cost_price) || 0;
     const unitsPerPackage = Number(formData.units_per_package) || 1;
-    const costPerUnit = unitsPerPackage > 0 ? cost / unitsPerPackage : 0;
+    const costPerUnit = unitsPerPackage > 0 ? finalCost / unitsPerPackage : 0;
     const pricePerUnit = Number(formData.price_per_unit) || 0;
     const profitPerUnit = pricePerUnit - costPerUnit;
     const marginPerUnit = costPerUnit > 0 ? (profitPerUnit / costPerUnit) * 100 : 0;
@@ -229,7 +246,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
       {/* Estadísticas */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4 mt-2">
-        <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
+        <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-0.5 overflow-hidden">
             <TrendingDown className="w-3 h-3 text-red-400 shrink-0" />
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Inversión</span>
@@ -237,25 +254,22 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
           <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
         </div>
-        <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
+        <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-0.5 overflow-hidden">
             <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span className="text-[8px] font-black text-gray-400 uppercase truncate">Valor Venta</span>
+            <span className="text-[8px] font-black text-gray-400 uppercase truncate">Valor</span>
           </div>
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
           <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
         </div>
-        <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 text-white flex flex-col justify-center relative overflow-hidden">
+        <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 text-white flex flex-col items-center text-center relative overflow-hidden">
           <div className="flex items-center gap-1.5 mb-0.5 relative z-10">
             <PiggyBank className="w-3 h-3 text-indigo-200 shrink-0" />
             <span className="text-[8px] font-black text-indigo-200 uppercase truncate">Utilidad</span>
           </div>
-          <div className="flex items-end justify-between relative z-10">
-            <div>
-              <p className="text-sm sm:text-lg font-black leading-tight">${totalPotentialProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-              <p className="text-[9px] font-bold text-indigo-300 mt-1">{(totalPotentialProfit * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
-            </div>
-            <div className="bg-white/10 px-1.5 py-0.5 rounded text-[9px] font-black text-indigo-100">
+          <div className="flex flex-col items-center relative z-10">
+            <p className="text-sm sm:text-lg font-black leading-tight">${totalPotentialProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+            <div className="bg-white/10 px-1.5 py-0.5 rounded text-[9px] font-black text-indigo-100 mt-1">
               {profitMarginPercent.toFixed(0)}%
             </div>
           </div>
@@ -277,7 +291,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
           <select
-            className="pl-2 pr-5 py-2 bg-white border border-gray-100 rounded-lg text-[8px] font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
+            className="pl-3 pr-6 py-2 bg-white border border-gray-100 rounded-lg text-xs font-bold uppercase outline-none shadow-sm cursor-pointer text-gray-600 focus:border-indigo-500 whitespace-nowrap shrink-0"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
@@ -328,7 +342,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       {/* LISTA DE PRODUCTOS */}
       <div className="flex flex-col gap-2">
         {filteredProducts.map(product => {
-          const profit = product.price - product.costPrice;
+          const productCostPrice = product.cost_price ?? product.costPrice ?? 0;
+          const profit = product.price - productCostPrice;
           const margin = product.price > 0 ? (profit / product.price) * 100 : 0;
           const isLowStock = product.stock < 10;
           const isOutOfStock = product.stock === 0;
@@ -378,7 +393,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 {isPackage && product.pricePerUnit ? (
                   <p className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-1 rounded mt-0.5">Unidad: ${product.pricePerUnit.toFixed(2)}</p>
                 ) : (
-                  <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">Costo: ${product.costPrice.toFixed(2)}</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">Costo: ${productCostPrice.toFixed(2)}</p>
                 )}
               </div>
 
@@ -428,15 +443,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-2 w-full max-w-4xl mx-auto">
+              <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-2 w-full max-w-4xl mx-auto">
                 {categories.filter(c => c !== 'Todas').map(cat => (
                   <button
                     key={cat}
                     onClick={() => handleSelectCategory(cat)}
-                    className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-[0.98] ${formData.category === cat ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'}`}
+                    className={`w-full p-3 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-[0.98] ${formData.category === cat ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'}`}
                   >
-                    <span className="font-bold text-sm">{cat}</span>
-                    {formData.category === cat && <Check className="w-5 h-5 text-emerald-600" />}
+                    <span className="font-bold text-sm truncate">{cat}</span>
+                    <div className="flex items-center gap-1">
+                      {formData.category === cat && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteCategory(cat); }}
+                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -488,7 +511,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, sellingMode: 'simple' })}
+                    onClick={() => setFormData({ ...formData, selling_mode: 'simple' })}
                     className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'simple' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Package className="w-6 h-6" />
@@ -496,7 +519,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, sellingMode: 'weight' })}
+                    onClick={() => setFormData({ ...formData, selling_mode: 'weight' })}
                     className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'weight' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Scale className="w-6 h-6" />
@@ -504,7 +527,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, sellingMode: 'package' })}
+                    onClick={() => setFormData({ ...formData, selling_mode: 'package' })}
                     className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'package' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
                     <Box className="w-6 h-6" />
@@ -542,7 +565,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
                     <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 uppercase">Costo Total Paquete (Ref)</span>
-                      <span className="text-sm font-black text-blue-900">${Number(formData.cost_price || 0).toFixed(2)}</span>
+                      <span className="text-sm font-black text-blue-900">${(costMode === 'calculated' ? calculatedCostUsd : manualCostUsd || Number(formData.cost_price) || 0).toFixed(2)}</span>
                     </div>
 
                     {/* Reorganización: Unidades y Costo Unitario en la misma fila */}
@@ -573,29 +596,6 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             </div>
                           );
                         })()}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest px-1">Precio Venta (Unidad Suelta)</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            className="w-full pl-8 pr-4 py-3 border-2 border-emerald-100 rounded-xl bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-500"
-                            value={formData.price_per_unit || ''}
-                            onChange={e => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-3 flex flex-col justify-center min-w-[70px] text-right">
-                          <span className="text-[8px] font-black text-emerald-300 uppercase">Bolívares</span>
-                          <span className="text-xs font-black text-emerald-600 leading-none">
-                            {((formData.price_per_unit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
                       </div>
                     </div>
 
@@ -708,45 +708,75 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* COSTO */}
                 <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
-                  <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
-                  {/* Fila 1: Bs + USD */}
-                  <div className="flex gap-2 items-center">
-                    {/* Costo Bs */}
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                        value={costBs ? Number(costBs.toFixed(2)) : ''}
-                        placeholder="0.00"
-                        onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-                    {/* Resultado USD */}
-                    <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
-                      <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
-                      <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(2)}</span>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[8px] font-bold ${costMode === 'calculated' ? 'text-red-500' : 'text-gray-400'}`}>Calculado</span>
+                      <button
+                        type="button"
+                        onClick={() => setCostMode(costMode === 'calculated' ? 'manual' : 'calculated')}
+                        className={`w-10 h-5 rounded-full transition-colors ${costMode === 'manual' ? 'bg-red-400' : 'bg-gray-300'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${costMode === 'manual' ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                      <span className={`text-[8px] font-bold ${costMode === 'manual' ? 'text-red-500' : 'text-gray-400'}`}>Manual</span>
                     </div>
                   </div>
+                  
+                  {costMode === 'calculated' ? (
+                    <>
+                      <div className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                            value={costBs ? Number(costBs.toFixed(2)) : ''}
+                            placeholder="0.00"
+                            onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                          <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
+                          <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(2)}</span>
+                        </div>
+                      </div>
 
-                  {/* Fila 2: Fecha + Tasa */}
-                  <div className="flex gap-2">
-                    {/* Fecha */}
-                    <div className="flex-1">
-                      <input
-                        type="date"
-                        className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
-                        value={costDate}
-                        onChange={e => setCostDate(e.target.value)}
-                      />
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <input
+                            type="date"
+                            className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                            value={costDate}
+                            onChange={e => setCostDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
+                          <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                          <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex gap-2 items-center">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                          value={manualCostUsd ? Number(manualCostUsd.toFixed(2)) : ''}
+                          placeholder="0.00"
+                          onChange={e => setManualCostUsd(parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                        <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
+                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</span>
+                      </div>
                     </div>
-                    {/* Tasa */}
-                    <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
-                      <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
-                      <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* VENTA + RENTABILIDAD UNIFICADO */}

@@ -195,6 +195,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             name: newProductName,
             category: newProductCategory,
             price: newProductPrice,
+            cost_price: 0,
             costPrice: newProductPrice,
             stock: newProductStock,
             sellingMode: 'simple'

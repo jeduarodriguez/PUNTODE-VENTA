@@ -150,7 +150,13 @@ export const saveData = async (path: string, data: any) => {
         return obj;
     };
 
-    let payload: any = toSnakeCase(data);
+    // Caso especial para settings: estructurar como { id, value }
+    let payload: any;
+    if (table === 'settings') {
+        payload = { id: docId, value: data };
+    } else {
+        payload = toSnakeCase({ id: docId, ...data });
+    }
 
     console.log(`📝 Guardando en ${table}/${docId}:`, data);
     console.log(`📝 Payload convertido:`, payload);
