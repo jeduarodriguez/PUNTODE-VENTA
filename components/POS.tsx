@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Product, CartItem, Sale, Customer } from '../types';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator } from '../constants';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, CartItem, Sale, Customer, Worker } from '../types';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase } from '../constants';
 
 interface POSProps {
     products: Product[];
     customers: Customer[];
+    workers: Worker[];
     exchangeRate: number;
     onSale: (sale: Sale) => void;
     onUpdateRate: (rate: number) => void;
@@ -14,10 +15,15 @@ interface POSProps {
     onCartLoaded?: () => void;
 }
 
-const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, onUpdateRate, onAddCustomer, onBackToDashboard, initialCart, onCartLoaded }) => {
+const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, onSale, onUpdateRate, onAddCustomer, onBackToDashboard, initialCart, onCartLoaded }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
+    
+    // Weight modal state
+    const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
+    const [weightProduct, setWeightProduct] = useState<Product | null>(null);
+    const [weightQuantity, setWeightQuantity] = useState('0.5');
 
     // Quick Rate Update State
     const [isRateModalOpen, setIsRateModalOpen] = useState(false);
@@ -48,18 +54,56 @@ const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, on
         setTempRate(exchangeRate.toString());
     }, [exchangeRate]);
 
-    const filteredProducts = products.filter(p => {
+    // Generate display products with weight/package labels
+    const displayProducts = useMemo(() => {
+        const result: Product[] = [];
+        products.forEach(product => {
+            if (product.sellingMode === 'weight' && product.measurementUnit) {
+                const unitLabel = product.measurementUnit === 'kg' ? 'Kg' : product.measurementUnit;
+                result.push({ ...product, name: `${product.name} (${unitLabel})` });
+            } else if (product.sellingMode === 'package' && product.pricePerUnit) {
+                result.push({ ...product, name: `${product.name} (Paq)` });
+                const totalUnits = (product.stock * (product.unitsPerPackage || 0)) + (product.remainingUnits || 0);
+                result.push({ 
+                    ...product, 
+                    id: `${product.id}-unit`, 
+                    name: `${product.name} (Und)`, 
+                    price: product.pricePerUnit, 
+                    saleMode: 'unit',
+                    stock: totalUnits
+                });
+            } else {
+                result.push({ ...product, name: product.name });
+            }
+        });
+        return result;
+    }, [products]);
+
+    const filteredProducts = displayProducts.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesSearch;
     });
 
-    const filteredCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-        c.phone.includes(customerSearchTerm)
+    const filteredClients = customers.filter(c =>
+        (c.type === 'client' || !c.type) &&
+        (c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+        c.phone.includes(customerSearchTerm))
+    );
+
+    const filteredWorkers = workers.filter(w =>
+        w.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+        w.position.toLowerCase().includes(customerSearchTerm.toLowerCase())
     );
 
     const addToCart = (product: Product) => {
-        // Calculamos si ya alcanzamos el límite basado en el estado actual del carrito
+        // Open weight modal for weight products
+        if (product.sellingMode === 'weight') {
+            setWeightProduct(product);
+            setWeightQuantity('0.5');
+            setIsWeightModalOpen(true);
+            return;
+        }
+
         const currentInCart = cart.find(item => item.id === product.id)?.quantity || 0;
         if (currentInCart >= product.stock) return;
 
@@ -72,6 +116,26 @@ const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, on
             }
             return [...prev, { ...product, quantity: 1 }];
         });
+    };
+
+    const addWeightToCart = () => {
+        if (!weightProduct) return;
+        
+        const qty = parseFloat(weightQuantity) || 0;
+        if (qty <= 0 || qty > weightProduct.stock) return;
+
+        if (navigator.vibrate) navigator.vibrate(50);
+
+        setCart(prev => {
+            const existing = prev.find(item => item.id === weightProduct.id);
+            if (existing) {
+                return prev.map(item => item.id === weightProduct.id ? { ...item, quantity: item.quantity + qty } : item);
+            }
+            return [...prev, { ...weightProduct, quantity: qty }];
+        });
+
+        setIsWeightModalOpen(false);
+        setWeightProduct(null);
     };
 
     const removeFromCart = (productId: string) => {
@@ -211,7 +275,7 @@ const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, on
                                     {/* Stock Middle */}
                                     <div className="text-center w-24">
                                         <span className={`text-xs font-black ${currentStock === 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                                            {currentStock === 0 ? 'Agotado' : `${currentStock} Unds.`}
+                                            {currentStock === 0 ? 'Agotado' : (product.sellingMode === 'weight' ? `${currentStock}${product.measurementUnit || 'kg'}` : `${currentStock} Unds.`)}
                                         </span>
                                     </div>
 
@@ -472,12 +536,91 @@ const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, on
                 </div>
             )}
 
+            {/* Weight Product Modal */}
+            {isWeightModalOpen && weightProduct && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
+                        <div className="p-4 text-center border-b border-gray-100">
+                            <h3 className="font-black text-gray-900 text-xl">{weightProduct.name}</h3>
+                            <div className="flex items-center justify-center gap-4 mt-2">
+                                <div className="text-left">
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Stock</span>
+                                    <p className="text-lg font-black text-gray-700">{weightProduct.stock}{weightProduct.measurementUnit || 'kg'}</p>
+                                </div>
+                                <div className="w-px h-8 bg-gray-200"></div>
+                                <div className="text-right">
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Precio</span>
+                                    <p className="text-lg font-black text-purple-600">${weightProduct.price.toFixed(2)}/{weightProduct.measurementUnit || 'kg'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 space-y-4">
+                            <div className="bg-purple-50 p-5 rounded-2xl border-2 border-purple-200">
+                                <div className="flex justify-center">
+                                    <div className="text-center">
+                                        <div className="flex items-center justify-center gap-2 mb-2">
+                                            <span className="text-[10px] font-bold text-purple-500 uppercase">Cantidad</span>
+                                            <span className="text-[10px] font-bold text-purple-300">({weightProduct.measurementUnit || 'kg'})</span>
+                                        </div>
+                                        <input
+                                            autoFocus
+                                            type="number"
+                                            step="0.01"
+                                            min="0.01"
+                                            max={weightProduct.stock}
+                                            value={weightQuantity}
+                                            onChange={(e) => setWeightQuantity(e.target.value)}
+                                            className="w-48 bg-transparent text-7xl font-black text-purple-700 outline-none text-center"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-900 p-5 rounded-2xl">
+                                <div className="flex justify-between items-center">
+                                    <div className="text-left">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">USD</span>
+                                        <p className="text-2xl font-black text-white">
+                                            ${(parseFloat(weightQuantity || '0') * weightProduct.price).toFixed(2)}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">BS</span>
+                                        <p className="text-2xl font-black text-white">
+                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={() => setIsWeightModalOpen(false)}
+                                    className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl active:scale-95 transition-all hover:bg-gray-200"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={addWeightToCart}
+                                    disabled={!weightQuantity || parseFloat(weightQuantity) <= 0}
+                                    className="flex-1 py-4 bg-purple-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <Check className="w-4 h-4" /> Agregar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Credit Sale Modal */}
             {isCustomerModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-up">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="font-black text-gray-900 text-lg">Asignar a Cliente</h3>
+                            <h3 className="font-black text-gray-900 text-lg">Crédito</h3>
                             <button onClick={() => setIsCustomerModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button>
                         </div>
 
@@ -488,33 +631,76 @@ const POS: React.FC<POSProps> = ({ products, customers, exchangeRate, onSale, on
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                                         <input
                                             autoFocus
-                                            placeholder="Buscar cliente..."
+                                            placeholder="Buscar..."
                                             className="w-full pl-10 p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-sm outline-none focus:border-indigo-500"
                                             value={customerSearchTerm}
                                             onChange={(e) => setCustomerSearchTerm(e.target.value)}
                                         />
                                     </div>
 
-                                    <div className="max-h-60 overflow-y-auto space-y-2 mb-4">
-                                        {filteredCustomers.map(c => (
-                                            <button
-                                                key={c.id}
-                                                onClick={() => processSale('Credit', c.id)}
-                                                className="w-full p-3 text-left hover:bg-indigo-50 rounded-xl flex items-center justify-between group transition-colors"
-                                            >
-                                                <div>
-                                                    <p className="font-bold text-gray-900 text-sm">{c.name}</p>
-                                                    <p className="text-xs text-gray-400">{c.phone || 'Sin teléfono'}</p>
-                                                </div>
-                                                <div className="opacity-0 group-hover:opacity-100 text-indigo-600">
-                                                    <ArrowLeft className="w-4 h-4 rotate-180" />
-                                                </div>
-                                            </button>
-                                        ))}
-                                        {filteredCustomers.length === 0 && (
-                                            <p className="text-center text-xs text-gray-400 py-4">No se encontraron clientes</p>
-                                        )}
-                                    </div>
+                                    {filteredClients.length > 0 && (
+                                        <>
+                                            <div className="flex items-center justify-between mb-2 px-1">
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Clientes</p>
+                                                <p className="text-[10px] font-bold text-red-500">Por cobrar: ${customers.reduce((sum, c) => sum + c.balance, 0).toFixed(2)}</p>
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto space-y-2 mb-4">
+                                                {filteredClients.map(c => (
+                                                    <button
+                                                        key={c.id}
+                                                        onClick={() => processSale('Credit', c.id)}
+                                                        className="w-full p-3 text-left hover:bg-indigo-50 rounded-xl flex items-center justify-between group transition-colors bg-indigo-50/50 border border-indigo-100"
+                                                    >
+                                                        <div>
+                                                            <p className="font-bold text-gray-900 text-sm">{c.name}</p>
+                                                            <p className="text-xs text-gray-400">{c.phone || 'Sin teléfono'}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {c.balance > 0 ? (
+                                                                <span className="text-sm font-black text-red-500">${c.balance.toFixed(2)}</span>
+                                                            ) : (
+                                                                <span className="text-sm font-bold text-emerald-500">S/D</span>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {filteredWorkers.length > 0 && (
+                                        <>
+                                            <div className="flex items-center justify-between mb-2 px-1 mt-3">
+                                                <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Trabajadores</p>
+                                                <p className="text-[10px] font-bold text-orange-600">Por pagar: ${workers.reduce((sum, w) => sum + Math.max(0, w.salary - w.balance), 0).toFixed(2)}</p>
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto space-y-2 mb-4">
+                                                {filteredWorkers.map(w => (
+                                                    <button
+                                                        key={w.id}
+                                                        onClick={() => processSale('Credit', w.id)}
+                                                        className="w-full p-3 text-left hover:bg-orange-50 rounded-xl flex items-center justify-between group transition-colors bg-orange-50/50 border border-orange-100"
+                                                    >
+                                                        <div>
+                                                            <p className="font-bold text-gray-900 text-sm">{w.name}</p>
+                                                            <p className="text-xs text-gray-400">{w.position}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {w.balance > 0 ? (
+                                                                <span className="text-sm font-black text-red-500">${w.balance.toFixed(2)}</span>
+                                                            ) : (
+                                                                <span className="text-sm font-bold text-emerald-500">S/D</span>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {filteredClients.length === 0 && filteredWorkers.length === 0 && (
+                                        <p className="text-center text-xs text-gray-400 py-4">No se encontraron clientes</p>
+                                    )}
 
                                     <button
                                         onClick={() => setIsCreatingCustomer(true)}

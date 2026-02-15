@@ -26,6 +26,9 @@ const RateModal: React.FC<RateModalProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRate, setEditRate] = useState<string>('');
   const [editDate, setEditDate] = useState<string>('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newRate, setNewRate] = useState('');
+  const [newDate, setNewDate] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -74,11 +77,23 @@ const RateModal: React.FC<RateModalProps> = ({
     }
   };
 
+  const handleAddNewRate = () => {
+    const rate = parseFloat(newRate);
+    if (rate > 0 && newDate) {
+      const timestamp = new Date(newDate + 'T12:00:00').getTime();
+      const newRecord = { id: `rate_${Date.now()}`, rate, timestamp };
+      onHistoryUpdate(newRecord);
+      setNewRate('');
+      setNewDate('');
+      setShowAddForm(false);
+    }
+  };
+
   const sortedHistory = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl overflow-hidden animate-scale-up flex flex-col max-h-[85vh]">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden animate-scale-up flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
@@ -99,40 +114,68 @@ const RateModal: React.FC<RateModalProps> = ({
         <div className="overflow-y-auto p-6 space-y-6">
 
           {/* Current Rate Card */}
-          <div className="bg-gradient-to-br from-indigo-600 to-blue-600 p-6 rounded-[2rem] text-white shadow-lg relative overflow-hidden">
+          <div className="bg-gradient-to-br from-indigo-600 to-blue-600 p-4 rounded-[1.5rem] text-white shadow-lg relative overflow-hidden">
             <div className="relative z-10">
-              <h4 className="text-indigo-100 text-xs font-bold uppercase tracking-widest mb-4">Tasa del Día (BCV)</h4>
-              <form onSubmit={handleUpdateCurrentRate} className="flex gap-3 items-center">
+              <h4 className="text-indigo-100 text-xs font-bold uppercase tracking-widest mb-3">Tasa del Día (BCV)</h4>
+              <form onSubmit={handleUpdateCurrentRate} className="flex gap-2 items-center">
                 <div className="relative flex-1">
-                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-300 w-5 h-5" />
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-300 w-4 h-4" />
                   <input
                     autoFocus
                     type="number"
                     step="0.01"
                     value={localRate}
                     onChange={(e) => setLocalRate(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white/10 border-2 border-white/20 rounded-2xl text-2xl font-black text-white outline-none focus:bg-white/20 transition-all placeholder:text-white/50"
+                    className="w-full pl-10 pr-3 py-2 bg-white/10 border-2 border-white/20 rounded-xl text-xl font-black text-white outline-none focus:bg-white/20 transition-all placeholder:text-white/50"
                   />
                 </div>
-                <button type="submit" className="bg-white text-indigo-600 p-4 rounded-2xl shadow-lg hover:scale-105 active:scale-95 transition-all">
-                  <Save className="w-6 h-6" />
+                <button type="submit" className="bg-white text-indigo-600 p-3 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all">
+                  <Save className="w-5 h-5" />
                 </button>
               </form>
-              <p className="text-[10px] text-indigo-200 mt-3 flex items-center gap-1">
+              <p className="text-[10px] text-indigo-200 mt-2 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Se guardará en el historial automáticamente
               </p>
             </div>
-            <TrendingUp className="absolute -right-6 -bottom-6 w-32 h-32 text-white/10 rotate-12 pointer-events-none" />
+            <TrendingUp className="absolute -right-4 -bottom-4 w-20 h-20 text-white/10 rotate-12 pointer-events-none" />
           </div>
 
           {/* History List */}
           <div>
-            <div className="flex items-center gap-2 mb-4 px-2">
-              <History className="w-4 h-4 text-gray-400" />
-              <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">Historial Registrado</h4>
+            <div className="flex items-center justify-between mb-4 px-2">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-gray-400" />
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">Historial Registrado</h4>
+              </div>
+              <button
+                onClick={() => { setShowAddForm(true); setNewDate(new Date().toISOString().split('T')[0]); }}
+                className="p-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+              >
+                <DollarSign className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-2">
+              {showAddForm && (
+                <div className="flex-1 flex gap-2 items-center bg-indigo-50 p-3 rounded-2xl border border-indigo-200">
+                  <input
+                    type="date"
+                    className="bg-white p-2 rounded-xl text-xs font-bold border border-gray-200 outline-none focus:border-indigo-500"
+                    value={newDate}
+                    onChange={e => setNewDate(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Tasa"
+                    className="w-20 bg-white p-2 rounded-xl text-xs font-black text-emerald-600 border border-gray-200 outline-none focus:border-indigo-500"
+                    value={newRate}
+                    onChange={e => setNewRate(e.target.value)}
+                  />
+                  <button onClick={handleAddNewRate} className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm"><Save className="w-4 h-4" /></button>
+                  <button onClick={() => { setShowAddForm(false); setNewRate(''); setNewDate(''); }} className="p-2 text-gray-400 hover:text-gray-600 rounded-xl"><X className="w-4 h-4" /></button>
+                </div>
+              )}
               {sortedHistory.length === 0 ? (
                 <div className="text-center py-8 opacity-40">
                   <p className="text-xs font-bold text-gray-400">No hay historial disponible</p>
@@ -161,7 +204,7 @@ const RateModal: React.FC<RateModalProps> = ({
                       <>
                         <div className="flex items-center gap-3">
                           <div className="bg-white p-2 rounded-xl text-gray-400 font-bold text-xs shadow-sm border border-gray-100">
-                            {new Date(record.timestamp).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}
+                            {new Date(record.timestamp).toLocaleDateString('es-VE', { weekday: 'long', day: '2-digit', month: '2-digit' })}
                           </div>
                           <span className="text-lg font-black text-gray-700">{record.rate.toFixed(2)} Bs</span>
                         </div>

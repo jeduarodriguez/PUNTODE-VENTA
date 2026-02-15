@@ -7,9 +7,8 @@ import VentasCaja from './components/Reports';
 import Customers from './components/Customers';
 import Settings from './components/Settings';
 import RateModal from './components/RateModal';
-import Treasury from './components/Treasury';
 import Dashboard from './components/Dashboard';
-import { Product, Sale, View, Customer, ExchangeRateRecord, CartItem, TreasuryTransaction } from './types';
+import { Product, Sale, View, Customer, ExchangeRateRecord, CartItem, TreasuryTransaction, Worker } from './types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_SALES, INITIAL_RATE_HISTORY, INITIAL_TREASURY, CheckCircle2, Settings as SettingsIcon, Smartphone, Share as ShareIcon, DollarSign, Plus, X, ShoppingCart, Package, Users, Banknote, Landmark, PieChart } from './constants';
 // Cambiamos el servicio a Supabase
 import { syncPath, saveData, deleteData, updateBatch } from './services/supabaseService';
@@ -18,6 +17,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<View>('reports');
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [treasuryTransactions, setTreasuryTransactions] = useState<TreasuryTransaction[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(1);
@@ -63,7 +63,13 @@ const App: React.FC = () => {
       setCustomers(data ? Object.values(data).filter(Boolean) as Customer[] : []);
     });
 
+    const unsubWorkers = syncPath('workers', (data) => {
+      console.log('🔄 Workers sync:', data);
+      setWorkers(data ? Object.values(data).filter(Boolean) as Worker[] : []);
+    });
+
     const unsubSales = syncPath('sales', (data) => {
+      console.log('📥 Sales loaded:', data);
       setSales(data ? Object.values(data).filter(Boolean) as Sale[] : []);
     });
 
@@ -72,12 +78,30 @@ const App: React.FC = () => {
     });
 
     const unsubRate = syncPath('settings/exchangeRate', (data) => {
+      console.log('📥 Rate loaded from settings:', data);
       if (data) setExchangeRate(data);
       else setExchangeRate(47.90);
     });
 
     const unsubHistory = syncPath('rate_history', (data) => {
-      setRateHistory(data ? Object.values(data).filter(Boolean) as ExchangeRateRecord[] : []);
+      const history = data ? Object.values(data).filter(Boolean) as ExchangeRateRecord[] : [];
+      setRateHistory(history);
+      
+      // Actualizar tasa si hay historial
+      if (history.length > 0) {
+        const today = new Date();
+        const todayDayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const sortedRates = [...history].sort((a, b) => b.timestamp - a.timestamp);
+        const todayRate = sortedRates.find(r => r.timestamp <= todayDayStart);
+        
+        if (todayRate) {
+          setExchangeRate(todayRate.rate);
+          console.log('📥 Rate from history for today:', todayRate.rate);
+        } else if (sortedRates.length > 0) {
+          setExchangeRate(sortedRates[0].rate);
+          console.log('📥 Rate from latest history:', sortedRates[0].rate);
+        }
+      }
     });
 
     const unsubCategories = syncPath('settings/categories', (data) => {
@@ -86,7 +110,7 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
-      unsubProducts(); unsubCustomers(); unsubSales(); unsubTreasury(); unsubRate(); unsubHistory(); unsubCategories();
+      unsubProducts(); unsubCustomers(); unsubWorkers(); unsubSales(); unsubTreasury(); unsubRate(); unsubHistory(); unsubCategories();
     };
   }, []);
 
@@ -109,8 +133,10 @@ const App: React.FC = () => {
   };
 
   const handleSale = async (sale: Sale) => {
+    console.log('💰 Sale received:', sale);
     const updates: any = {};
     const saleWithRate = { ...sale, exchangeRate };
+    console.log('💰 Sale with rate:', saleWithRate);
 
     // Preparar actualizaciones de stock
     const updatedProducts = [...products];
@@ -126,11 +152,22 @@ const App: React.FC = () => {
     // Preparar actualización de cliente (si es crédito)
     const updatedCustomers = [...customers];
     if (sale.paymentMethod === 'Credit' && sale.customerId) {
+      console.log('💳 Processing credit sale for customerId:', sale.customerId);
+      
       const cIndex = updatedCustomers.findIndex(cust => cust.id === sale.customerId);
       if (cIndex !== -1) {
         const c = { ...updatedCustomers[cIndex], balance: (updatedCustomers[cIndex].balance || 0) + sale.total };
         updatedCustomers[cIndex] = c;
         updates[`customers/${c.id}`] = c;
+      }
+
+      // También verificar si es un trabajador
+      const wIndex = workers.findIndex(w => w.id === sale.customerId);
+      if (wIndex !== -1) {
+        const worker = workers[wIndex];
+        const updatedWorker = { ...worker, balance: (worker.balance || 0) + sale.total };
+        updates[`workers/${worker.id}`] = updatedWorker;
+        setWorkers(prev => prev.map(w => w.id === worker.id ? updatedWorker : w));
       }
     }
 
@@ -367,6 +404,60 @@ const App: React.FC = () => {
     showNotification('Cliente eliminado');
   };
 
+  const handleWorkerAdd = async (w: Worker) => {
+    setWorkers(prev => [...prev, w]);
+    const success = await saveData(`workers/${w.id}`, w);
+    if (success) showNotification('Trabajador guardado');
+    else showNotification('Error al guardar trabajador', 'error');
+  };
+
+  const handleWorkerUpdate = async (w: Worker) => {
+    setWorkers(prev => prev.map(worker => worker.id === w.id ? w : worker));
+    const success = await saveData(`workers/${w.id}`, w);
+    if (success) showNotification('Trabajador actualizado');
+    else showNotification('Error al actualizar trabajador', 'error');
+  };
+
+  const handleWorkerDelete = async (id: string) => {
+    if (!confirm('¿Eliminar este trabajador?')) return;
+    setWorkers(prev => prev.filter(w => w.id !== id));
+    await deleteData(`workers/${id}`);
+    showNotification('Trabajador eliminado');
+  };
+
+  const handleWorkerDebtPayment = async (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => {
+    const paymentSale: Sale = {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: Date.now(),
+      items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, costPrice: 0, stock: 1, quantity: 1 }],
+      total: amount,
+      exchangeRate,
+      paymentMethod: method,
+      customerId: workerId
+    };
+
+    const updates: any = {};
+    updates[`sales/${paymentSale.id}`] = paymentSale;
+
+    const updatedWorkers = [...workers];
+    const wIndex = updatedWorkers.findIndex(w => w.id === workerId);
+    if (wIndex !== -1) {
+      const w = { ...updatedWorkers[wIndex], balance: Math.max(0, (updatedWorkers[wIndex].balance || 0) - amount) };
+      updatedWorkers[wIndex] = w;
+      updates[`workers/${workerId}`] = w;
+    }
+
+    setWorkers(updatedWorkers);
+    setSales(prev => [...prev, paymentSale]);
+
+    try {
+      await updateBatch(updates);
+      showNotification(`Pago registrado: $${amount.toFixed(2)}`);
+    } catch (e) {
+      showNotification('Error', 'error');
+    }
+  };
+
   const handleAddCategory = async (cat: string) => {
     if (!categories.includes(cat)) {
       const newCats = [...categories, cat];
@@ -458,14 +549,13 @@ const App: React.FC = () => {
           </div>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} />}
+          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} />}
-          {view === 'customers' && <Customers customers={customers} sales={sales} exchangeRate={exchangeRate} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} />}
-          {view === 'treasury' && <Treasury transactions={treasuryTransactions} sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} rateHistory={rateHistory} onAddTransaction={handleAddTreasuryTransaction} onDeleteTransaction={handleDeleteTreasuryTransaction} onRestock={handleRestock} />}
+          {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>
 
-        {view === 'pos' && <div className="absolute inset-0 bg-gray-50 z-20"><POS products={products} customers={customers} exchangeRate={exchangeRate} onSale={handleSale} onUpdateRate={handleUpdateExchangeRate} onAddCustomer={handleCustomerAdd} onBackToDashboard={() => setView('reports')} initialCart={pendingCart} onCartLoaded={handleCartLoaded} /></div>}
+        {view === 'pos' && <div className="absolute inset-0 bg-gray-50 z-20"><POS products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} onSale={handleSale} onUpdateRate={handleUpdateExchangeRate} onAddCustomer={handleCustomerAdd} onBackToDashboard={() => setView('reports')} initialCart={pendingCart} onCartLoaded={handleCartLoaded} /></div>}
 
         <RateModal
           isOpen={isRateModalOpen}
@@ -532,18 +622,6 @@ const App: React.FC = () => {
       {view !== 'pos' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-gray-200 md:hidden z-50 safe-area-bottom">
           <div className="flex items-center justify-around px-2 py-2">
-            {/* Estadísticas (Dashboard) */}
-            <button
-              onClick={() => setView('dashboard')}
-              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${view === 'dashboard'
-                ? 'text-indigo-600 bg-indigo-50'
-                : 'text-gray-500'
-                }`}
-            >
-              <PieChart className="w-5 h-5" />
-              <span className="text-[10px] font-bold">Estadísticas</span>
-            </button>
-
             {/* Balance */}
             <button
               onClick={() => setView('reports')}
@@ -565,7 +643,7 @@ const App: React.FC = () => {
                 }`}
             >
               <Package className="w-5 h-5" />
-              <span className="text-[10px] font-bold">Stock</span>
+              <span className="text-[10px] font-bold">Inventario</span>
             </button>
 
             {/* Clientes */}
@@ -577,7 +655,19 @@ const App: React.FC = () => {
                 }`}
             >
               <Users className="w-5 h-5" />
-              <span className="text-[10px] font-bold">Clientes</span>
+              <span className="text-[10px] font-bold">Crédito</span>
+            </button>
+
+            {/* Estadísticas */}
+            <button
+              onClick={() => setView('dashboard')}
+              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${view === 'dashboard'
+                ? 'text-indigo-600 bg-indigo-50'
+                : 'text-gray-500'
+                }`}
+            >
+              <PieChart className="w-5 h-5" />
+              <span className="text-[10px] font-bold">Estadísticas</span>
             </button>
 
             {/* Ajustes */}

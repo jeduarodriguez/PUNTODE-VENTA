@@ -14,6 +14,7 @@ export interface Product {
   measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm'; // Para venta por peso/volumen
   unitsPerPackage?: number; // Cuantas unidades trae el paquete (si es modo paquete)
   pricePerUnit?: number;    // Precio de venta de la unidad suelta (si es modo paquete)
+  remainingUnits?: number;  // Unidades restantes del paquete (para seguimiento de inventario)
 }
 
 export interface CartItem extends Product {
@@ -26,6 +27,16 @@ export interface Customer {
   email?: string;
   phone: string;
   balance: number; // Current debt in USD
+  createdAt: number;
+}
+
+export interface Worker {
+  id: string;
+  name: string;
+  position: string; // Cargo
+  salary: number; // Salario en dólares
+  payDay: string; // Día de pago (Lunes, Martes, etc.)
+  balance: number; // Deuda actual por compras a crédito en USD
   createdAt: number;
 }
 

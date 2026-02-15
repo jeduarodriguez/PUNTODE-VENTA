@@ -42,6 +42,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     sellingMode: 'simple',
     unitsPerPackage: 0,
     pricePerUnit: 0,
+    remainingUnits: 0,
     measurementUnit: 'kg'
   });
 
@@ -85,7 +86,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       sellingMode: formData.sellingMode || 'simple',
       measurementUnit: formData.measurementUnit,
       unitsPerPackage: Number(formData.unitsPerPackage) || 0,
-      pricePerUnit: Number(formData.pricePerUnit) || 0
+      pricePerUnit: Number(formData.pricePerUnit) || 0,
+      remainingUnits: editingProduct?.remainingUnits || 0
     };
 
     if (editingProduct) {
@@ -265,12 +267,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               {/* STOCK/VARIANT ICON */}
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border-2 relative ${isOutOfStock ? 'bg-red-50 border-red-100 text-red-500' : isLowStock ? 'bg-orange-50 border-orange-100 text-orange-500' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
                 {/* Number always in center */}
-                <span className="font-black text-lg">{product.stock}</span>
+                {product.sellingMode === 'weight' ? (
+                  <span className="font-black text-sm">{product.stock}{product.measurementUnit || ''}</span>
+                ) : (
+                  <span className="font-black text-lg">{product.stock}</span>
+                )}
 
-                {/* Icon Badge for Variants */}
-                {(isWeight || isPackage) && (
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm z-10">
-                    {isWeight ? <Scale className="w-3 h-3 text-purple-500" /> : <Box className="w-3 h-3 text-blue-500" />}
+                {/* Badge de unidades para paquetes */}
+                {product.sellingMode === 'package' && product.unitsPerPackage && product.unitsPerPackage > 0 && (
+                  <div className={`absolute -top-1.5 -right-1.5 ${product.stock > 0 || (product.remainingUnits || 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'} text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm`}>
+                    {product.stock * product.unitsPerPackage + (product.remainingUnits || 0)}
+                  </div>
+                )}
+
+                {/* Icon Badge for Variants - solo para paquetes */}
+                {isPackage && (
+                  <div className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-white rounded-full border border-gray-100 flex items-center justify-center shadow-sm z-10">
+                    <Box className="w-2.5 h-2.5 text-blue-500" />
                   </div>
                 )}
               </div>

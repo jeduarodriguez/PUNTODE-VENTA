@@ -74,11 +74,28 @@ export const syncPath = (path: string, callback: (data: any) => void) => {
 
     // CASO 2: Colección completa (ej: products, customers, sales)
     else {
+        // Convertir snake_case a camelCase
+        const toCamelCase = (obj: any): any => {
+            if (Array.isArray(obj)) return obj.map(toCamelCase);
+            if (obj !== null && typeof obj === 'object') {
+                return Object.keys(obj).reduce((result, key) => {
+                    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                    result[camelKey] = toCamelCase(obj[key]);
+                    return result;
+                }, {} as any);
+            }
+            return obj;
+        };
+        
         // Carga inicial
         supabase.from(table).select('*')
-            .then(({ data }) => {
-                const map = arrayToMap(data || []);
-                callback(map);
+            .then(({ data, error }) => {
+                console.log(`📥 Cargando ${table}:`, data, error);
+                const mapped = arrayToMap(data || []);
+                const converted = Object.fromEntries(
+                    Object.entries(mapped).map(([k, v]) => [k, toCamelCase(v)])
+                );
+                callback(converted);
             });
 
         // Suscripción de toda la tabla
@@ -91,7 +108,11 @@ export const syncPath = (path: string, callback: (data: any) => void) => {
                     // (Supabase realtime envía solo el registro cambiado, pero la app espera el objeto completo del estado actual)
                     supabase.from(table).select('*')
                         .then(({ data }) => {
-                            callback(arrayToMap(data || []));
+                            const mapped = arrayToMap(data || []);
+                            const converted = Object.fromEntries(
+                                Object.entries(mapped).map(([k, v]) => [k, toCamelCase(v)])
+                            );
+                            callback(converted);
                         });
                 }
             )
@@ -116,31 +137,39 @@ export const saveData = async (path: string, data: any) => {
         return;
     }
 
+    // Convertir camelCase a snake_case para Supabase
+    const toSnakeCase = (obj: any): any => {
+        if (Array.isArray(obj)) return obj.map(toSnakeCase);
+        if (obj !== null && typeof obj === 'object') {
+            return Object.keys(obj).reduce((result, key) => {
+                const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+                result[snakeKey] = toSnakeCase(obj[key]);
+                return result;
+            }, {} as any);
+        }
+        return obj;
+    };
+
+    let payload: any = toSnakeCase(data);
+
     console.log(`📝 Guardando en ${table}/${docId}:`, data);
-
-    let payload: any = data;
-
-    // Adaptación para Settings (guardar valor en columna 'value')
-    if (table === 'settings') {
-        // Si data es primitivo (numero, string) o un objeto sin ID, lo envolvemos
-        if (typeof data !== 'object' || data === null || !data.id) {
-            payload = { id: docId, value: data };
-        } else {
-            payload = { id: docId, value: data };
-        }
-    } else {
-        // Para otras tablas, asegurarnos que el ID esté en el objeto
-        if (typeof data === 'object') {
-            payload = { ...data, id: docId };
-        }
-    }
-
-    console.log(`💾 Payload final para ${table}:`, payload);
+    console.log(`📝 Payload convertido:`, payload);
 
     const { data: result, error } = await supabase.from(table).upsert(payload);
 
     if (error) {
         console.error(`❌ Error guardando en ${path}:`, error);
+        console.error(`❌ Error details:`, JSON.stringify(error));
+        
+        // Mostrar alert con el error específico
+        alert(`Error al guardar: ${error.message}`);
+        
+        // Mostrar error más detallado
+        if (error.message && error.message.includes('relation')) {
+            console.error(`⚠️ La tabla '${table}' no existe en Supabase. Debes crearla en el panel de Supabase.`);
+            alert(`Error: La tabla '${table}' no existe. Por favor, créala en Supabase SQL Editor:\n\nCREATE TABLE workers (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  position TEXT,\n  salary NUMERIC DEFAULT 0,\n  pay_day TEXT,\n  balance NUMERIC DEFAULT 0,\n  created_at BIGINT\n);`);
+        }
+        
         return false;
     } else {
         console.log(`✅ Guardado exitoso en ${path}:`, result);
