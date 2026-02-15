@@ -206,17 +206,22 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
         }
     });
 
-    const salesCashBs = currentSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + (s.total * s.exchangeRate), 0);
-    const salesCardBs = currentSales.filter(s => s.paymentMethod === 'Card').reduce((sum, s) => sum + (s.total * s.exchangeRate), 0);
-    const salesPagoMovilBs = currentSales.filter(s => s.paymentMethod === 'PagoMovil').reduce((sum, s) => sum + (s.total * s.exchangeRate), 0);
+    const salesCashBs = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const salesPagoMovilBs = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'PagoMovil' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const salesCardBs = treasuryTransactions.filter(t => t.type === 'income' && (t.method === 'Card' || t.method === 'PointOfSale') && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const salesCashUsd = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
+    const salesPagoMovilUsd = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'PagoMovil' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
+    const salesCardUsd = treasuryTransactions.filter(t => t.type === 'income' && (t.method === 'Card' || t.method === 'PointOfSale') && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
     const totalSalesBs = salesCashBs + salesCardBs + salesPagoMovilBs;
-    const totalSalesBsFiltered = currentSales.filter(s => s.paymentMethod !== 'Credit').reduce((sum, s) => sum + (s.total * s.exchangeRate), 0);
+    const totalSalesBsFiltered = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const totalSalesUsdFiltered = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
     const expensesBs = treasuryTransactions.filter(t => t.type === 'expense' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const expensesUsd = treasuryTransactions.filter(t => t.type === 'expense' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
     const incomeBs = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const incomeUsd = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
+    const netBalanceUsd = totalSalesUsdFiltered - expensesUsd;
     const bankTransactions = treasuryTransactions.filter(t => t.method !== 'Cash');
     const bankBalanceFromTxs = bankTransactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amountBs : -t.amountBs), 0);
-    const allPagoMovilBs = sales.filter(s => s.paymentMethod === 'PagoMovil').reduce((acc, s) => acc + (s.total * s.exchangeRate), 0);
-    const mercantilGlobalBalance = bankBalanceFromTxs + allPagoMovilBs;
 
     const handleAddExpense = () => {
         const amount = parseFloat(expenseAmount);
@@ -559,7 +564,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <span className="text-[8px] font-black text-emerald-600 uppercase tracking-wider">Ingresos</span>
                         </div>
                         <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
-                        <p className="text-[9px] font-bold text-emerald-500">${((totalSalesBsFiltered + incomeBs) / getDisplayedExchangeRate()).toFixed(2)}</p>
+                        <p className="text-[9px] font-bold text-emerald-500">${(totalSalesUsdFiltered + incomeUsd).toFixed(2)}</p>
                     </div>
 
                     <div className={`border-2 rounded-xl p-3 flex flex-col items-center ${
@@ -587,7 +592,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 ? 'text-indigo-500' 
                                 : 'text-orange-500'
                         }`}>
-                            ${((totalSalesBsFiltered + incomeBs - expensesBs) / getDisplayedExchangeRate()).toFixed(2)}
+                            ${netBalanceUsd.toFixed(2)}
                         </p>
                     </div>
 
@@ -597,7 +602,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <TrendingDown className="w-3 h-3 text-red-600" />
                         </div>
                         <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
-                        <p className="text-[9px] font-bold text-red-500">${(expensesBs / getDisplayedExchangeRate()).toFixed(2)}</p>
+                        <p className="text-[9px] font-bold text-red-500">${expensesUsd.toFixed(2)}</p>
                     </div>
                 </div>
 
@@ -605,17 +610,17 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-100"><Banknote className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Efectivo</span></div>
                         <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
-                        <p className="text-[9px] text-emerald-200">${(salesCashBs / getDisplayedExchangeRate()).toFixed(2)}</p>
+                        <p className="text-[9px] text-emerald-200">${salesCashUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-500 hover:bg-purple-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-purple-100"><Smartphone className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Pago Movil</span></div>
                         <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
-                        <p className="text-[9px] text-purple-200">${(salesPagoMovilBs / getDisplayedExchangeRate()).toFixed(2)}</p>
+                        <p className="text-[9px] text-purple-200">${salesPagoMovilUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('Card')} className="bg-blue-500 hover:bg-blue-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-blue-100"><CreditCard className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Punto</span></div>
                         <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
-                        <p className="text-[9px] text-blue-200">${(salesCardBs / getDisplayedExchangeRate()).toFixed(2)}</p>
+                        <p className="text-[9px] text-blue-200">${salesCardUsd.toFixed(2)}</p>
                     </div>
                 </div>
             </div>

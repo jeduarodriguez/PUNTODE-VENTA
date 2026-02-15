@@ -173,6 +173,25 @@ const App: React.FC = () => {
 
     updates[`sales/${sale.id}`] = saleWithRate;
 
+    // Registrar ingreso en treasury (excepto ventas a crédito)
+    if (sale.paymentMethod !== 'Credit') {
+      const totalBs = sale.total * sale.exchangeRate;
+      const treasuryTransaction: TreasuryTransaction = {
+        id: `sale_${sale.id}`,
+        timestamp: sale.timestamp,
+        type: 'income',
+        category: 'Ventas',
+        description: sale.items.map(i => `${i.quantity} ${i.name}`).join(', '),
+        amount: sale.total, // Referencia en USD
+        amountBs: totalBs, // Monto real en Bs
+        exchangeRate: sale.exchangeRate,
+        method: sale.paymentMethod
+      };
+      updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
+      // Actualización optimista
+      setTreasuryTransactions(prev => [...prev, treasuryTransaction]);
+    }
+
     // --- ACTUALIZACIÓN OPTIMISTA ---
     setProducts(updatedProducts);
     setCustomers(updatedCustomers);
@@ -264,6 +283,22 @@ const App: React.FC = () => {
       updatedCustomers[cIndex] = c;
       updates[`customers/${customerId}`] = c;
     }
+
+    // Registrar ingreso en treasury por pago de deuda
+    const totalBs = amount * exchangeRate;
+    const treasuryTransaction: TreasuryTransaction = {
+      id: `debt_payment_${paymentSale.id}`,
+      timestamp: paymentSale.timestamp,
+      type: 'income',
+      category: 'Cobros',
+      description: 'Abono de Deuda',
+      amount: amount,
+      amountBs: totalBs,
+      exchangeRate,
+      method: method
+    };
+    updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
+    setTreasuryTransactions(prev => [...prev, treasuryTransaction]);
 
     // --- ACTUALIZACIÓN OPTIMISTA ---
     setCustomers(updatedCustomers);
@@ -446,6 +481,22 @@ const App: React.FC = () => {
       updatedWorkers[wIndex] = w;
       updates[`workers/${workerId}`] = w;
     }
+
+    // Registrar ingreso en treasury por pago de deuda de trabajador
+    const totalBs = amount * exchangeRate;
+    const treasuryTransaction: TreasuryTransaction = {
+      id: `worker_debt_payment_${paymentSale.id}`,
+      timestamp: paymentSale.timestamp,
+      type: 'income',
+      category: 'Cobros',
+      description: 'Abono Deuda Trabajador',
+      amount: amount,
+      amountBs: totalBs,
+      exchangeRate,
+      method: method
+    };
+    updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
+    setTreasuryTransactions(prev => [...prev, treasuryTransaction]);
 
     setWorkers(updatedWorkers);
     setSales(prev => [...prev, paymentSale]);
