@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Product, CartItem, Sale, Customer, Worker } from '../types';
+import { Product, CartItem, Sale, Customer, Worker, ExchangeRateRecord } from '../types';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase } from '../constants';
 
 interface POSProps {
@@ -7,6 +7,7 @@ interface POSProps {
     customers: Customer[];
     workers: Worker[];
     exchangeRate: number;
+    rateHistory?: ExchangeRateRecord[];
     onSale: (sale: Sale) => void;
     onUpdateRate: (rate: number) => void;
     onAddCustomer: (customer: Customer) => void;
@@ -15,7 +16,7 @@ interface POSProps {
     onCartLoaded?: () => void;
 }
 
-const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, onSale, onUpdateRate, onAddCustomer, onBackToDashboard, initialCart, onCartLoaded }) => {
+const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, rateHistory = [], onSale, onUpdateRate, onAddCustomer, onBackToDashboard, initialCart, onCartLoaded }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
@@ -53,6 +54,27 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
     useEffect(() => {
         setTempRate(exchangeRate.toString());
     }, [exchangeRate]);
+
+    // Función para obtener la tasa del día
+    const getTodayRate = (): number => {
+        if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+        
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        
+        const todayRate = sortedRates.find(r => {
+            const rateDate = new Date(r.timestamp);
+            const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
+            return rateDateStart === todayStart;
+        });
+        
+        if (todayRate) return todayRate.rate;
+        
+        return sortedRates[0]?.rate || exchangeRate;
+    };
+
+    const todayRate = useMemo(() => getTodayRate(), [rateHistory, exchangeRate]);
 
     // Generate display products with weight/package labels
     const displayProducts = useMemo(() => {
@@ -204,7 +226,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     // Cash Calculation Helpers
-    const totalBs = calculateTotal() * exchangeRate;
+    const totalBs = calculateTotal() * todayRate;
     const tenderedBs = parseFloat(tenderedAmount) || 0;
     const changeBs = tenderedBs - totalBs;
     const isSufficient = tenderedBs >= totalBs - 0.01; // Small epsilon for float logic
@@ -381,7 +403,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
  
                                     {/* Price Layout */}
                                     <div className="text-right flex flex-col items-end w-16 shrink-0">
-                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
                                         <p className="text-[7px] font-bold text-indigo-400 mt-0.5">${product.price.toFixed(2)}</p>
                                     </div>
                                 </button>
@@ -475,7 +497,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                                             </button>
                                         </div>
                                         <div className="text-right w-16">
-                                            <p className="text-xs font-black text-gray-900">{(item.price * item.quantity * exchangeRate).toFixed(2)}</p>
+                                            <p className="text-xs font-black text-gray-900">{(item.price * item.quantity * todayRate).toFixed(2)}</p>
                                             <p className="text-[9px] font-bold text-gray-400">${(item.price * item.quantity).toFixed(2)}</p>
                                         </div>
                                     </div>
@@ -490,7 +512,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                             {/* Total BS - Arriba y Grande */}
                             <div className="flex justify-between items-center mb-1">
                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total BS</span>
-                                <span className="text-xl font-black text-gray-900">{(calculateTotal() * exchangeRate).toFixed(2)} Bs</span>
+                                <span className="text-xl font-black text-gray-900">{(calculateTotal() * todayRate).toFixed(2)} Bs</span>
                             </div>
                             {/* Total USD - Abajo y Pequeño */}
                             <div className="flex justify-between items-center">
@@ -559,7 +581,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                         <ShoppingCart className="w-6 h-6" />
                         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-gray-900">{totalItems}</span>
                     </div>
-                    <span className="font-black pr-2">{(calculateTotal() * exchangeRate).toFixed(2)} Bs</span>
+                    <span className="font-black pr-2">{(calculateTotal() * todayRate).toFixed(2)} Bs</span>
                 </button>
             )}
 
@@ -683,7 +705,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                                     <div className="text-right">
                                         <span className="text-[10px] font-bold text-gray-400 uppercase">BS</span>
                                         <p className="text-2xl font-black text-white">
-                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
                                         </p>
                                     </div>
                                 </div>

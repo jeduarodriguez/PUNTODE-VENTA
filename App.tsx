@@ -14,10 +14,28 @@ import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_SALES, INITIAL_RATE_HISTOR
 import { syncPath, saveData, deleteData, updateBatch } from './services/supabaseService';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<View>('reports');
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem('pointy_last_view');
+    return (saved as View) || 'reports';
+  });
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem('pointy_last_view', view);
+  }, [view]);
+
+  useEffect(() => {
+    const handleBackButton = (e: PopStateEvent) => {
+      if (view !== 'reports') {
+        e.preventDefault();
+        setView('reports');
+      }
+    };
+    window.addEventListener('popstate', handleBackButton);
+    return () => window.removeEventListener('popstate', handleBackButton);
+  }, [view]);
 
   // Helpers para compatibilidad de propiedades
   const getProductProps = (p: Product) => ({
@@ -96,19 +114,24 @@ const App: React.FC = () => {
       const history = data ? Object.values(data).filter(Boolean) as ExchangeRateRecord[] : [];
       setRateHistory(history);
       
-      // Actualizar tasa si hay historial
       if (history.length > 0) {
         const today = new Date();
-        const todayDayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         const sortedRates = [...history].sort((a, b) => b.timestamp - a.timestamp);
-        const todayRate = sortedRates.find(r => r.timestamp <= todayDayStart);
+        
+        const todayRate = sortedRates.find(r => {
+          const rateDate = new Date(r.timestamp);
+          const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
+          return rateDateStart === todayStart;
+        });
         
         if (todayRate) {
           setExchangeRate(todayRate.rate);
-          console.log('📥 Rate from history for today:', todayRate.rate);
-        } else if (sortedRates.length > 0) {
-          setExchangeRate(sortedRates[0].rate);
-          console.log('📥 Rate from latest history:', sortedRates[0].rate);
+        } else {
+          const closestRate = sortedRates[0];
+          if (closestRate) {
+            setExchangeRate(closestRate.rate);
+          }
         }
       }
     });
@@ -682,7 +705,7 @@ const App: React.FC = () => {
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>
 
-        {view === 'pos' && <div className="absolute inset-0 bg-gray-50 z-20"><POS products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} onSale={handleSale} onUpdateRate={handleUpdateExchangeRate} onAddCustomer={handleCustomerAdd} onBackToDashboard={() => setView('reports')} initialCart={pendingCart} onCartLoaded={handleCartLoaded} /></div>}
+        {view === 'pos' && <div className="absolute inset-0 bg-gray-50 z-20"><POS products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} onSale={handleSale} onUpdateRate={handleUpdateExchangeRate} onAddCustomer={handleCustomerAdd} onBackToDashboard={() => setView('reports')} initialCart={pendingCart} onCartLoaded={handleCartLoaded} /></div>}
 
         <RateModal
           isOpen={isRateModalOpen}

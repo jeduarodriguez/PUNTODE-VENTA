@@ -440,7 +440,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                             {/* Derecha: Deuda en bolívares - más grande */}
                             <div className="text-right shrink-0 min-w-[90px]">
                                 <span className="block text-[10px] font-bold text-gray-400">Bs</span>
-                                <span className="block text-xl font-black text-red-600">{debtBs.toLocaleString('es-VE', {maximumFractionDigits: 0})}</span>
+                                <span className="block text-xl font-black text-red-600">{debtBs.toLocaleString('es-VE', {maximumFractionDigits: 2})}</span>
                             </div>
                         </>
                     ) : (
@@ -587,7 +587,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                             </div>
                             <div className="text-center">
                                 <p className="text-[10px] font-bold text-orange-300 uppercase">Bolivares</p>
-                                <p className="text-xl font-black">{((sales.filter(s => s.customerId === historyWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0)) * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 0})}</p>
+                                <p className="text-xl font-black">{((sales.filter(s => s.customerId === historyWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0)) * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 2})}</p>
                             </div>
                             {sales.filter(s => s.customerId === historyWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0) > 0 ? (
                                 <button 
@@ -720,7 +720,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                               <span className="font-bold">${workerDebt.toFixed(2)} Deuda</span>
                           </div>
                           <div className="text-3xl font-black">
-                              {(workerDebt * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 0})} Bs
+                              {(workerDebt * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 2})} Bs
                           </div>
                       </div>
                   </div>
@@ -791,7 +791,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                               </div>
                           </div>
                           <div className="text-3xl font-black text-orange-400">
-                              {(Math.max(0, paymentWorker.salary - workerDebt) * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 0})} Bs
+                              {(Math.max(0, paymentWorker.salary - workerDebt) * exchangeRate).toLocaleString('es-VE', {maximumFractionDigits: 2})} Bs
                           </div>
                       </div>
                   </div>

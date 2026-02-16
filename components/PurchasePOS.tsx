@@ -317,7 +317,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             
                                             return (
                                                 <>
-                                                    <p className="font-black text-gray-900 text-lg leading-none">Bs {displayCostBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                                    <p className="font-black text-gray-900 text-lg leading-none">Bs {displayCostBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
                                                     <p className="text-xs font-bold text-indigo-400 mt-0.5">${displayCostUsd.toFixed(2)}</p>
                                                 </>
                                             );
@@ -412,7 +412,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                         </div>
 
                                         <div className="flex flex-col items-end w-22 shrink-0">
-                                            <p className="font-bold text-gray-900 text-sm leading-tight">Bs {(item.costPriceBs || item.costPrice * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                            <p className="font-bold text-gray-900 text-sm leading-tight">Bs {(item.costPriceBs || item.costPrice * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
                                             <p className="text-[9px] font-bold text-indigo-400">${(item.costPrice * item.quantity).toFixed(2)}</p>
                                         </div>
 
@@ -439,7 +439,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                         <div className="bg-indigo-600 p-3 rounded-xl shadow-lg">
                             <div className="flex justify-between items-center">
                                 <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Total</span>
-                                <span className="text-xl font-black text-white leading-none">Bs {(calculateTotal() * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</span>
+                                <span className="text-xl font-black text-white leading-none">Bs {(calculateTotal() * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center mt-1">
                                 <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Referencia</span>
@@ -490,7 +490,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             {totalItems}
                         </span>
                     </div>
-                    <span className="font-bold">{(calculateTotal() * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</span>
+                    <span className="font-bold">{(calculateTotal() * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</span>
                 </button>
             )}
 
@@ -658,7 +658,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                         <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center">
                                             <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
                                             <span className="text-sm font-black text-emerald-800">
-                                                {((editPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                                                {((editPrice || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
                                             </span>
                                         </div>
                                     </div>
@@ -683,7 +683,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center">
                                         <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
                                         <span className="text-sm font-black text-blue-800">
-                                            {((editPricePerUnit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                                            {((editPricePerUnit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
                                         </span>
                                     </div>
                                 </div>

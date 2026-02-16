@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
 import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon } from '../constants';
 import PurchasePOS from './PurchasePOS';
@@ -49,8 +49,15 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [expenseCategory, setExpenseCategory] = useState<string>('Otros');
     const [expenseMethod, setExpenseMethod] = useState<'Cash' | 'Transfer' | 'PagoMovil' | 'Card'>('Cash');
     const [expenseMethodLabel, setExpenseMethodLabel] = useState<'Bs' | '$'>('$');
-    const [dateFilter, setDateFilter] = useState<DateFilter>('today');
+    const [dateFilter, setDateFilter] = useState<DateFilter>(() => {
+      const saved = localStorage.getItem('pointy_date_filter');
+      return (saved as DateFilter) || 'today';
+    });
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+    useEffect(() => {
+      localStorage.setItem('pointy_date_filter', dateFilter);
+    }, [dateFilter]);
     const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
     const [customStartDate, setCustomStartDate] = useState<string>('');
     const [customEndDate, setCustomEndDate] = useState<string>('');
@@ -92,7 +99,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             }];
         } else if (dateFilter === 'week') {
             const currentWeekStart = new Date(now);
-            currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + (quickNavOffset * 7));
+            const dayOfWeek = currentWeekStart.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            currentWeekStart.setDate(currentWeekStart.getDate() + mondayOffset + (quickNavOffset * 7));
             const currentWeekEnd = new Date(currentWeekStart);
             currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
             return [{
@@ -126,13 +135,11 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             return targetTime < today;
         } else if (dateFilter === 'week') {
             const currentWeekStart = new Date(now);
-            currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + (quickNavOffset * 7));
+            const dayOfWeek = currentWeekStart.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            currentWeekStart.setDate(currentWeekStart.getDate() + mondayOffset + (quickNavOffset * 7));
             const weekTime = new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), currentWeekStart.getDate()).getTime();
             return weekTime < today;
-        } else if (dateFilter === 'month') {
-            const currentMonthDate = new Date(now.getFullYear(), now.getMonth() + (quickNavOffset * 3), 1);
-            const monthTime = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1).getTime();
-            return monthTime < now.getTime();
         }
         return false;
     };
@@ -154,7 +161,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             case 'today': return { start: selectedStart, end: selectedStart + (24 * 60 * 60 * 1000) - 1 };
             case 'week': {
                 const weekStart = new Date(selectedDate);
-                weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+                const dayOfWeek = weekStart.getDay();
+                const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                weekStart.setDate(weekStart.getDate() + mondayOffset);
                 const start = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()).getTime();
                 const end = start + (7 * 24 * 60 * 60 * 1000) - 1;
                 return { start, end };
@@ -169,14 +178,27 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
 
     const { start: filterStart, end: filterEnd } = getFilterRange();
 
+    const getTodayRate = (): number => {
+        if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+        
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        
+        const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        
+        const todayRate = sortedRates.find(r => {
+            const rateDate = new Date(r.timestamp);
+            const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
+            return rateDateStr === todayStr;
+        });
+        
+        if (todayRate) return todayRate.rate;
+        
+        return sortedRates[0]?.rate || exchangeRate;
+    };
+
     const getDisplayedExchangeRate = () => {
-        if (dateFilter === 'today') {
-            const daySales = sales.filter(s => s.timestamp >= filterStart && s.timestamp <= filterEnd);
-            if (daySales.length > 0) {
-                return daySales[0].exchangeRate;
-            }
-        }
-        return exchangeRate;
+        return getTodayRate();
     };
 
     const currentSales = sales.filter(s => s.timestamp >= filterStart && s.timestamp <= filterEnd).sort((a, b) => b.timestamp - a.timestamp);
@@ -286,7 +308,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             return `${shortDays[currentDate.getDay()]} ${currentDate.getDate().toString().padStart(2, '0')}/${(currentDate.getMonth() + 1).toString().padStart(2, '0')}`;
         } else if (dateFilter === 'week') {
             const currentWeekStart = new Date(now);
-            currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay() + (quickNavOffset * 7));
+            const dayOfWeek = currentWeekStart.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            currentWeekStart.setDate(currentWeekStart.getDate() + mondayOffset + (quickNavOffset * 7));
             const currentWeekEnd = new Date(currentWeekStart);
             currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
             return `${shortDays[currentWeekStart.getDay()]} ${currentWeekStart.getDate()} - ${shortDays[currentWeekEnd.getDay()]} ${currentWeekEnd.getDate()} ${shortMonths[currentWeekEnd.getMonth()]}`;
@@ -368,7 +392,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 </>
                                             ) : (
                                                 <>
-                                                    <p className="text-lg font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+                                                    <p className="text-lg font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
                                                     <p className="text-[9px] text-gray-400">${sale.total.toFixed(2)}</p>
                                                 </>
                                             )}
@@ -528,8 +552,8 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                         </div>
                                         <span className={`text-xs font-black ${item.type === 'sale' ? 'text-gray-900' : (item.data.type === 'expense' ? 'text-red-600' : 'text-emerald-600')}`}>
                                             {item.type === 'sale' 
-                                                ? `${(item.data.total * item.data.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs`
-                                                : `${item.data.type === 'expense' ? '-' : '+'}${item.data.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs`
+                                                ? `${(item.data.total * item.data.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs`
+                                                : `${item.data.type === 'expense' ? '-' : '+'}${item.data.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs`
                                             }
                                         </span>
                                     </div>
@@ -566,7 +590,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <TrendingUp className="w-3 h-3 text-emerald-600" />
                             <span className="text-[8px] font-black text-emerald-600 uppercase tracking-wider">Ingresos</span>
                         </div>
-                        <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
                         <p className="text-[9px] font-bold text-emerald-500">${(totalSalesUsdFiltered + incomeUsd).toFixed(2)}</p>
                     </div>
 
@@ -588,7 +612,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 : 'text-orange-800'
                         }`}>
                             {(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? '+' : ''}
-                            {(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-VE', { maximumFractionDigits: 0 })}
+                            {(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
                         </p>
                         <p className={`text-[9px] font-bold text-center ${
                             (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
@@ -604,7 +628,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <span className="text-[8px] font-black text-red-600 uppercase tracking-wider">Egresos</span>
                             <TrendingDown className="w-3 h-3 text-red-600" />
                         </div>
-                        <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
                         <p className="text-[9px] font-bold text-red-500">${expensesUsd.toFixed(2)}</p>
                     </div>
                 </div>
@@ -612,17 +636,17 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-100"><Banknote className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Efectivo</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
                         <p className="text-[9px] text-emerald-200">${salesCashUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-500 hover:bg-purple-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-purple-100"><Smartphone className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Pago Movil</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
                         <p className="text-[9px] text-purple-200">${salesPagoMovilUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('Card')} className="bg-blue-500 hover:bg-blue-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-blue-100"><CreditCard className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Punto</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
                         <p className="text-[9px] text-blue-200">${salesCardUsd.toFixed(2)}</p>
                     </div>
                 </div>
@@ -661,7 +685,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <p className="text-base font-black text-gray-900">{(s.total * s.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+                                                        <p className="text-base font-black text-gray-900">{(s.total * s.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
                                                         <p className="text-[9px] text-gray-400">${s.total.toFixed(2)}</p>
                                                     </>
                                                 )}
@@ -687,7 +711,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                             </div>
                                             <div className="text-right shrink-0 ml-2">
                                                 <p className={`text-base font-black ${isExpense ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                    {isExpense ? '-' : '+'}{t.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                                                    {isExpense ? '-' : '+'}{t.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
                                                 </p>
                                                 <p className="text-[9px] text-gray-400">${t.amount.toFixed(2)}</p>
                                             </div>
@@ -738,7 +762,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 <div className={`p-2 rounded-lg bg-${info.color}-50 text-${info.color}-600`}><info.icon className="w-4 h-4" /></div>
                                                 <div><p className="text-xs font-bold text-gray-900">{sale.items.some(i => i.id === 'debt_payment') ? `Pago: ${getCustomerName(sale.customerId)}` : getSaleDescription(sale)}</p><p className="text-[10px] text-gray-400">{new Date(sale.timestamp).toLocaleTimeString()}</p></div>
                                             </div>
-                                            <div className="text-right"><p className="text-sm font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p></div>
+                                            <div className="text-right"><p className="text-sm font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p></div>
                                         </div>
                                     ))
                                 )}

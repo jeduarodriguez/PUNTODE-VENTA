@@ -52,6 +52,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     measurement_unit: 'kg'
   });
 
+  // Estados para manejar valores decimales como strings
+  const [priceDisplay, setPriceDisplay] = useState('');
+  const [pricePerUnitDisplay, setPricePerUnitDisplay] = useState('');
+  const [manualCostDisplay, setManualCostDisplay] = useState('');
+
   // Helpers para compatibilidad con ambos formatos
   const getCostPrice = (p: Product | Partial<Product>) => p.costPrice ?? (p as any).cost_price ?? 0;
   const getCostMode = (p: Product | Partial<Product>) => p.cost_mode ?? (p as any).costMode ?? 'calculated';
@@ -81,10 +86,35 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [calcDisplay, setCalcDisplay] = useState('');
   const [calcResult, setCalcResult] = useState<number>(0);
+  const [calcAccumulator, setCalcAccumulator] = useState<number>(0);
 
   const handleCalcInput = (value: string) => {
     if (value === '=') {
-      setCalcResult(calculateResult());
+      const result = calculateResult();
+      setCalcResult(result);
+      setCalcDisplay(result.toString());
+    } else if (value === 'C') {
+      setCalcDisplay('');
+      setCalcResult(0);
+      setCalcAccumulator(0);
+    } else if (value === '%') {
+      try {
+        if (calcDisplay.includes('+') || calcDisplay.includes('-') || calcDisplay.includes('*') || calcDisplay.includes('/')) {
+          const lastOpIndex = Math.max(
+            calcDisplay.lastIndexOf('+'),
+            calcDisplay.lastIndexOf('-'),
+            calcDisplay.lastIndexOf('*'),
+            calcDisplay.lastIndexOf('/')
+          );
+          const baseNum = parseFloat(calcDisplay.substring(0, lastOpIndex));
+          const percentNum = parseFloat(calcDisplay.substring(lastOpIndex + 1));
+          if (!isNaN(baseNum) && !isNaN(percentNum)) {
+            const result = baseNum + (baseNum * percentNum / 100);
+            setCalcResult(result);
+            setCalcDisplay(result.toString());
+          }
+        }
+      } catch {}
     } else {
       setCalcDisplay(prev => prev + value);
     }
@@ -92,7 +122,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const calculateResult = (): number => {
     try {
-      const sanitized = calcDisplay.replace(/[^0-9+\-*/.]/g, '');
+      let sanitized = calcDisplay;
+      sanitized = sanitized.replace(/[^0-9+\-*/.]/g, '');
       if (!sanitized) return 0;
       const result = Function('"use strict"; return (' + sanitized + ')')();
       return typeof result === 'number' ? result : 0;
@@ -122,6 +153,26 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     
     return sortedRates[0]?.rate || exchangeRate;
   };
+
+  const getTodayRate = (): number => {
+    if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+    
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+    
+    const todayRate = sortedRates.find(r => {
+      const rateDate = new Date(r.timestamp);
+      const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
+      return rateDateStart === todayStart;
+    });
+    
+    if (todayRate) return todayRate.rate;
+    
+    return sortedRates[0]?.rate || exchangeRate;
+  };
+
+  const todayRate = getTodayRate();
 
   const currentRate = useMemo(() => getRateForDate(costDate), [costDate, rateHistory]);
   const calculatedCostUsd = currentRate > 0 ? costBs / currentRate : 0;
@@ -247,6 +298,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     if (product) {
       setEditingProduct(product);
       const existingCost = getCostPrice(product);
+      const productPrice = product.price || 0;
+      const productPricePerUnit = getPricePerUnit(product) || 0;
+      
       setFormData({
         ...product,
         cost_price: existingCost,
@@ -256,6 +310,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         price_per_unit: getPricePerUnit(product),
         remaining_units: getRemainingUnits(product)
       });
+      
+      // Inicializar display de precios
+      setPriceDisplay(productPrice > 0 ? productPrice.toString() : '');
+      setPricePerUnitDisplay(productPricePerUnit > 0 ? productPricePerUnit.toString() : '');
+      setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
       
       // Cargar modo guardado o determinar si no existe
       const savedCostMode = getCostMode(product);
@@ -292,6 +351,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         remaining_units: 0,
         measurement_unit: 'kg'
       });
+      setPriceDisplay('');
+      setPricePerUnitDisplay('');
+      setManualCostDisplay('');
       setCostMode('calculated');
       setCostBs(0);
       setManualCostUsd(0);
@@ -363,6 +425,16 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const { profitPerUnit, marginPerUnit } = getUnitPriceCalculations();
 
+  const handleUsdInput = (value: string): number => {
+    if (!value || value === '.' || value === ',') return 0;
+    const normalized = value.replace(',', '.');
+    return parseFloat(normalized) || 0;
+  };
+
+  const handleUsdInputDisplay = (value: string): string => {
+    return value;
+  };
+
   return (
     <div className="space-y-4 pb-24">
 
@@ -374,7 +446,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Inversión</span>
           </div>
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
         </div>
         <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-0.5 overflow-hidden">
@@ -382,7 +454,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Valor</span>
           </div>
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
+          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
         </div>
         <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 text-white flex flex-col items-center text-center relative overflow-hidden">
           <div className="flex items-center gap-1.5 mb-0.5 relative z-10">
@@ -511,21 +583,21 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               </div>
 
               {/* 3. COSTO */}
-              <div className="text-center min-w-[55px]">
-                <span className="text-[7px] font-black text-gray-400 uppercase block">Costo</span>
-                <span className="text-[10px] font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+              <div className="text-center min-w-[45px] mr-1">
+                <span className="text-[6px] font-black text-gray-400 uppercase block">Costo</span>
+                <span className="text-xs font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
               </div>
 
               {/* 4. VENTA */}
-              <div className="text-center min-w-[55px]">
-                <span className="text-[7px] font-black text-gray-400 uppercase block">Venta</span>
-                <span className="text-[10px] font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+              <div className="text-center min-w-[45px] mr-1">
+                <span className="text-[6px] font-black text-gray-400 uppercase block">Venta</span>
+                <span className="text-xs font-bold text-emerald-600">${product.price.toFixed(2)}</span>
               </div>
 
               {/* 5. GANANCIA */}
-              <div className="text-center min-w-[50px]">
-                <span className="text-[7px] font-black text-gray-400 uppercase block">Ganancia</span>
-                <span className={`text-[10px] font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+              <div className="text-center min-w-[40px]">
+                <span className="text-[6px] font-black text-gray-400 uppercase block">Ganancia</span>
+                <span className={`text-xs font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
                   {margin.toFixed(0)}%
                 </span>
               </div>
@@ -724,24 +796,6 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                         })()}
                       </div>
                     </div>
-
-                    {/* CÁLCULO DE RENTABILIDAD POR UNIDAD (Barra Horizontal) */}
-                    {(() => {
-                      const { unitProfit, unitMargin } = getPackageCalculations();
-                      return (
-                        <div className="bg-white p-3 rounded-xl border border-gray-200 flex items-center justify-around shadow-sm mt-2">
-                          <div className="text-center">
-                            <p className="text-[9px] uppercase font-bold text-emerald-600">Ganancia/Unidad</p>
-                            <p className="text-sm font-black text-emerald-700">+${unitProfit.toFixed(2)}</p>
-                          </div>
-                          <div className="w-px h-8 bg-gray-100"></div>
-                          <div className="text-center">
-                            <p className="text-[9px] uppercase font-bold text-blue-600">Margen %</p>
-                            <p className="text-sm font-black text-blue-700">{unitMargin.toFixed(0)}%</p>
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
                 )}
               </div>
@@ -873,7 +927,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                         </button>
                         <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                           <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
-                          <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(2)}</span>
+                          <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(3)}</span>
                         </div>
                       </div>
 
@@ -897,17 +951,22 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="relative flex-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                          value={manualCostUsd ? Number(manualCostUsd.toFixed(2)) : ''}
+                          value={manualCostDisplay}
                           placeholder="0.00"
-                          onChange={e => setManualCostUsd(parseFloat(e.target.value) || 0)}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setManualCostDisplay(val);
+                            const normalized = val.replace(',', '.');
+                            setManualCostUsd(parseFloat(normalized) || 0);
+                          }}
                         />
                       </div>
                       <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                         <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
-                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</span>
+                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   )}
@@ -923,12 +982,17 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="relative flex-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
-                          value={formData.price || ''}
+                          value={priceDisplay}
                           placeholder="0.00"
-                          onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setPriceDisplay(val);
+                            const normalized = val.replace(',', '.');
+                            setFormData({ ...formData, price: parseFloat(normalized) || 0 });
+                          }}
                         />
                       </div>
                       
@@ -936,7 +1000,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
                         <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
                         <span className="text-sm font-black text-emerald-800">
-                          {((formData.price || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                          {((formData.price || 0) * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
                         </span>
                       </div>
                     </div>
@@ -971,17 +1035,22 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   <div className="flex gap-3 items-stretch">
                     {/* LADO IZQUIERDO: PRECIO POR UNIDAD */}
                     <div className="flex-1 flex flex-col">
-                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">Precio x Unidad</label>
+                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">VENTA X UNIDAD</label>
                       {/* $ */}
                       <div className="relative flex-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
-                          value={formData.price_per_unit || ''}
+                          value={pricePerUnitDisplay}
                           placeholder="0.00"
-                          onChange={e => setFormData({ ...formData, price_per_unit: parseFloat(e.target.value) || 0 })}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setPricePerUnitDisplay(val);
+                            const normalized = val.replace(',', '.');
+                            setFormData({ ...formData, price_per_unit: parseFloat(normalized) || 0 });
+                          }}
                         />
                       </div>
                       
@@ -989,7 +1058,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
                         <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
                         <span className="text-sm font-black text-blue-800">
-                          {((formData.price_per_unit || 0) * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs
+                          {((formData.price_per_unit || 0) * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
                         </span>
                       </div>
                     </div>
@@ -1048,33 +1117,37 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   </button>
                 </div>
                 
-                <div className="bg-gray-900 rounded-xl p-3 mb-3">
-                  <div className="text-right text-white font-bold text-xl truncate">{calcDisplay || '0'}</div>
-                  <div className="text-right text-emerald-400 font-black text-lg">= {calcResult.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</div>
+                <div className="bg-gray-900 rounded-xl p-4 mb-3">
+                  <div className="text-right text-white font-bold text-2xl truncate">{calcDisplay || '0'}</div>
+                  <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2">
-                  {['7','8','9','/'].map(btn => (
-                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
-                  ))}
-                  {['4','5','6','*'].map(btn => (
-                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
-                  ))}
-                  {['1','2','3','-'].map(btn => (
-                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
-                  ))}
-                  {['0','00','.','+'].map(btn => (
-                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
-                  ))}
+                <div className="grid grid-cols-4 gap-3">
+                  <button onClick={() => handleCalcInput('C')} className="p-4 bg-red-100 rounded-xl font-bold text-red-700 hover:bg-red-200 text-lg">C</button>
+                  <button onClick={() => handleCalcInput('%')} className="p-4 bg-purple-100 rounded-xl font-bold text-purple-700 hover:bg-purple-200 text-lg">%</button>
+                  <button onClick={() => handleCalcInput('/')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">/</button>
+                  <button onClick={() => handleCalcInput('*')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">×</button>
+                  
+                  <button onClick={() => handleCalcInput('7')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">7</button>
+                  <button onClick={() => handleCalcInput('8')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">8</button>
+                  <button onClick={() => handleCalcInput('9')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">9</button>
+                  <button onClick={() => handleCalcInput('-')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">-</button>
+                  
+                  <button onClick={() => handleCalcInput('4')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">4</button>
+                  <button onClick={() => handleCalcInput('5')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">5</button>
+                  <button onClick={() => handleCalcInput('6')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">6</button>
+                  <button onClick={() => handleCalcInput('+')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">+</button>
+                  
+                  <button onClick={() => handleCalcInput('1')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">1</button>
+                  <button onClick={() => handleCalcInput('2')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">2</button>
+                  <button onClick={() => handleCalcInput('3')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">3</button>
+                  <button onClick={() => handleCalcInput('=')} className="p-4 bg-orange-100 rounded-xl font-bold text-orange-700 hover:bg-orange-200 text-lg row-span-2">=</button>
+                  
+                  <button onClick={() => handleCalcInput('0')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg col-span-2">0</button>
+                  <button onClick={() => handleCalcInput('.')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">.</button>
                 </div>
 
                 <div className="flex gap-2 mt-3">
-                  <button 
-                    onClick={() => { setCalcDisplay(''); setCalcResult(0); }}
-                    className="flex-1 py-3 bg-red-100 text-red-600 rounded-xl font-bold text-sm hover:bg-red-200"
-                  >
-                    C
-                  </button>
                   <button 
                     onClick={() => { 
                       const result = calculateResult();
@@ -1082,6 +1155,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       setIsCalculatorOpen(false);
                       setCalcDisplay('');
                       setCalcResult(0);
+                      setCalcAccumulator(0);
                     }}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
                   >
