@@ -56,7 +56,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
 
     // Generate display products with weight/package labels
     const displayProducts = useMemo(() => {
-        const result: Product[] = [];
+        const result: Array<Product & { displayVariant?: string }> = [];
         products.forEach(product => {
             const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
             const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
@@ -68,15 +68,17 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                 const unitLabel = measurementUnit === 'kg' ? 'Kg' : measurementUnit;
                 result.push({ ...product, name: `${product.name} (${unitLabel})` });
             } else if (sellingMode === 'package' && unitsPerPackage > 0 && pricePerUnit > 0) {
-                result.push({ ...product, name: `${product.name} (Paq)` });
+                // Producto paquete (venta por paquete)
+                result.push({ ...product, displayVariant: 'Paq' });
                 const totalUnits = (product.stock * unitsPerPackage) + remainingUnits;
+                // Producto virtual para venta por unidad
                 result.push({ 
                     ...product, 
                     id: `${product.id}-unit`, 
-                    name: `${product.name} (Und)`, 
                     price: pricePerUnit, 
                     selling_mode: 'simple',
-                    stock: totalUnits
+                    stock: totalUnits,
+                    displayVariant: 'Und'
                 });
             } else {
                 result.push({ ...product, name: product.name });
@@ -265,39 +267,123 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
                     <div className="flex flex-col gap-2">
                         {filteredProducts.map(product => {
                             const qtyInCart = cart.find(i => i.id === product.id)?.quantity || 0;
-                            const currentStock = Math.max(0, product.stock - qtyInCart);
+                            
+                            // Calcular stock disponible considerando el carrito
+                            let currentStock = product.stock;
+                            let displayStock = '';
+                            let isOutOfStock = false;
+                            
+                            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
+                            const isUnitSale = product.id && product.id.endsWith('-unit');
+                            const displayVariant = (product as any).displayVariant;
+                            
+                            // Para productos paquete vendidos por unidad
+                            if (sellingMode === 'package' && isUnitSale) {
+                                const productId = product.id.replace('-unit', '');
+                                const originalProduct = products.find(p => p.id === productId);
+                                const unitsPerPkg = (originalProduct?.units_per_package ?? (originalProduct as any)?.unitsPerPackage ?? 0);
+                                const remainingUnits = originalProduct?.remaining_units ?? (originalProduct as any)?.remainingUnits ?? 0;
+                                const pkgStock = originalProduct?.stock ?? 0;
+                                
+                                // Calcular unidades totales disponibles
+                                const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnits;
+                                const unitsAfterCart = totalUnitsAvailable - qtyInCart;
+                                
+                                if (unitsAfterCart <= 0) {
+                                    isOutOfStock = true;
+                                    displayStock = 'Agotado';
+                                } else {
+                                    const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
+                                    const remainingUnd = unitsAfterCart % unitsPerPkg;
+                                    displayStock = `${remainingPkgs} Paq / ${remainingUnd} Und`;
+                                }
+                            } else if (displayVariant === 'Paq') {
+                                // Producto paquete vendido por paquete - considerar también unidades en carrito
+                                const unitsInCart = cart.find(i => i.id === `${product.id}-unit`)?.quantity || 0;
+                                const unitsPerPkg = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
+                                const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
+                                
+                                // Calcular unidades totales disponibles considerando both package and unit sales
+                                const totalUnitsAvailable = (product.stock * unitsPerPkg) + remainingUnits;
+                                const totalUnitsInCart = (qtyInCart * unitsPerPkg) + unitsInCart;
+                                const unitsAfterCart = totalUnitsAvailable - totalUnitsInCart;
+                                
+                                if (unitsAfterCart <= 0) {
+                                    isOutOfStock = true;
+                                    displayStock = 'Agotado';
+                                } else {
+                                    const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
+                                    const remainingUnd = unitsAfterCart % unitsPerPkg;
+                                    displayStock = `${remainingPkgs} Paq / ${remainingUnd} Und`;
+                                }
+                            } else {
+                                // Stock normal o para venta por peso
+                                currentStock = Math.max(0, product.stock - qtyInCart);
+                                if (currentStock === 0) {
+                                    isOutOfStock = true;
+                                    displayStock = 'Agotado';
+                                } else {
+                                    const unitLabel = sellingMode === 'weight' ? (product.measurement_unit ?? (product as any).measurementUnit ?? 'kg') : 'Unds.';
+                                    displayStock = sellingMode === 'weight' ? `${currentStock}${unitLabel}` : `${currentStock} ${unitLabel}`;
+                                }
+                            }
 
                             return (
                                 <button
                                     key={product.id}
                                     onClick={() => addToCart(product)}
-                                    disabled={currentStock === 0}
-                                    className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${currentStock === 0 ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-gray-50 hover:border-indigo-100 shadow-sm'
+                                    disabled={isOutOfStock}
+                                    className={`flex items-center gap-2 p-3 rounded-2xl border-2 transition-all active:scale-[0.98] ${isOutOfStock ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-gray-50 hover:border-indigo-100 shadow-sm'
                                         }`}
                                 >
-                                    <div className="flex-1 text-left">
-                                        <h3 className="font-bold text-gray-900 leading-tight">{product.name}</h3>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase">{product.category}</p>
+                                    <div className="flex-1 text-left min-w-0">
+                                        <h3 className="font-bold text-gray-900 leading-tight truncate">{product.name}</h3>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase">
+                                            {product.category}
+                                            {(product as any).displayVariant && <span className="text-indigo-500 ml-1">({(product as any).displayVariant})</span>}
+                                        </p>
                                     </div>
 
                                     {/* Stock Middle */}
-                                    <div className="text-center w-24">
-                                        <span className={`text-xs font-black ${currentStock === 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                                            {currentStock === 0 ? 'Agotado' : (product.sellingMode === 'weight' ? `${currentStock}${product.measurementUnit || 'kg'}` : `${currentStock} Unds.`)}
+                                    <div className="text-center w-14 shrink-0">
+                                        <span className={`text-[9px] font-black ${isOutOfStock ? 'text-red-400' : 'text-gray-400'}`}>
+                                            {displayStock}
                                         </span>
                                     </div>
 
-                                    {/* Price Layout */}
-                                    <div className="text-right flex flex-col items-end w-24">
-                                        <p className="font-black text-gray-900 text-lg leading-none">{(product.price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })} Bs</p>
-                                        <p className="text-[10px] font-bold text-indigo-400 mt-0.5">Ref: ${product.price.toFixed(2)}</p>
+                                    {/* Controles de cantidad */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {qtyInCart > 0 && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateQuantity(product.id, -1);
+                                                }}
+                                                className="w-7 h-7 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200 active:scale-95 transition-all"
+                                            >
+                                                <Minus className="w-3 h-3" />
+                                            </button>
+                                        )}
+                                        {qtyInCart > 0 && (
+                                            <span className="w-6 text-center text-xs font-black text-indigo-600">{qtyInCart}</span>
+                                        )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                addToCart(product);
+                                            }}
+                                            disabled={isOutOfStock}
+                                            className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            <Plus className="w-3 h-3" />
+                                        </button>
                                     </div>
-
-                                    {qtyInCart > 0 && (
-                                        <div className="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full text-xs font-black shadow-sm shrink-0">
-                                            {qtyInCart}
-                                        </div>
-                                    )}
+ 
+                                    {/* Price Layout */}
+                                    <div className="text-right flex flex-col items-end w-16 shrink-0">
+                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                        <p className="text-[7px] font-bold text-indigo-400 mt-0.5">${product.price.toFixed(2)}</p>
+                                    </div>
                                 </button>
                             );
                         })}

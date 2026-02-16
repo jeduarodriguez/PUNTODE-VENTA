@@ -58,10 +58,19 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? (p as any).measurementUnit ?? 'kg';
   const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
   const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
-  const getRemainingUnits = (p: Product | Partial<Product>) => p.remaining_units ?? (p as any).remainingUnits ?? 0;
+  const getRemainingUnits = (p: Product | Partial<Product> | null | undefined) => {
+    if (!p) return 0;
+    return p.remaining_units ?? (p as any).remainingUnits ?? 0;
+  };
 
   const [costBs, setCostBs] = useState<number>(0);
-  const [costDate, setCostDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [costDate, setCostDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [costMode, setCostMode] = useState<'calculated' | 'manual'>('calculated');
   const [manualCostUsd, setManualCostUsd] = useState<number>(0);
 
@@ -91,11 +100,23 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const getRateForDate = (dateStr: string): number => {
     if (!rateHistory || rateHistory.length === 0) return exchangeRate;
-    const targetDate = new Date(dateStr).getTime();
-    const dayStart = new Date(dateStr).setHours(0, 0, 0, 0);
+    
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const targetTime = targetDate.getTime();
+    
     const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
-    const rateOnDate = sortedRates.find(r => r.timestamp <= dayStart);
-    if (rateOnDate) return rateOnDate.rate;
+    
+    const exactMatch = sortedRates.find(r => {
+      const rateDate = new Date(r.timestamp);
+      const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
+      return rateDateStr === dateStr;
+    });
+    
+    if (exactMatch) return exactMatch.rate;
+    
+    const closestRate = sortedRates.find(r => r.timestamp < targetTime);
+    if (closestRate) return closestRate.rate;
+    
     return sortedRates[0]?.rate || exchangeRate;
   };
 
@@ -168,29 +189,45 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const costPriceUsd = costMode === 'calculated' ? (calculatedCostUsd || Number(formData.cost_price) || 0) : (manualCostUsd || Number(formData.cost_price) || 0);
-    const sanitizedData: Product = {
-      id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
-      name: formData.name || 'Producto sin nombre',
-      category: formData.category || 'Bebidas',
-      price: Number(formData.price) || 0,
-      cost_price: costPriceUsd,
-      stock: Number(formData.stock) || 0,
-      description: formData.description || '',
-      image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
-      selling_mode: formData.selling_mode || 'simple',
-      measurement_unit: formData.measurement_unit,
-      units_per_package: Number(formData.units_per_package) || 0,
-      price_per_unit: Number(formData.price_per_unit) || 0,
-      remaining_units: getRemainingUnits(editingProduct)
-    };
+    
+    try {
+      let finalCost = 0;
+      if (costMode === 'calculated') {
+        if (costBs > 0 && currentRate > 0) {
+          finalCost = costBs / currentRate;
+        } else if (formData.cost_price) {
+          finalCost = Number(formData.cost_price);
+        }
+      } else {
+        finalCost = manualCostUsd || Number(formData.cost_price) || 0;
+      }
+      
+      const sanitizedData: Product = {
+        id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
+        name: formData.name || 'Producto sin nombre',
+        category: formData.category || 'Bebidas',
+        price: Number(formData.price) || 0,
+        cost_price: finalCost,
+        stock: Number(formData.stock) || 0,
+        description: formData.description || '',
+        image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
+        selling_mode: formData.selling_mode || 'simple',
+        measurement_unit: formData.measurement_unit,
+        units_per_package: Number(formData.units_per_package) || 0,
+        price_per_unit: Number(formData.price_per_unit) || 0,
+        remaining_units: getRemainingUnits(editingProduct)
+      };
 
-    if (editingProduct) {
-      onUpdate(sanitizedData);
-    } else {
-      onAdd(sanitizedData);
+      if (editingProduct) {
+        onUpdate(sanitizedData);
+      } else {
+        onAdd(sanitizedData);
+      }
+      closeModal();
+    } catch (error) {
+      console.error('Error guardando producto:', error);
+      alert('Error al guardar producto');
     }
-    closeModal();
   };
 
   const openModal = (product?: Product) => {
@@ -206,16 +243,21 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         price_per_unit: getPricePerUnit(product),
         remaining_units: getRemainingUnits(product)
       });
+      
+      // Determinar modo según si tiene costo o no
       if (existingCost > 0) {
         setCostMode('manual');
         setManualCostUsd(existingCost);
-        setCostBs(0);
-        setCostDate(new Date().toISOString().split('T')[0]);
       } else {
         setCostMode('calculated');
-        setCostBs(0);
-        setCostDate(new Date().toISOString().split('T')[0]);
+        setManualCostUsd(0);
       }
+      setCostBs(0);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      setCostDate(`${year}-${month}-${day}`);
     } else {
       setEditingProduct(null);
       setFormData({
@@ -235,7 +277,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setCostMode('calculated');
       setCostBs(0);
       setManualCostUsd(0);
-      setCostDate(new Date().toISOString().split('T')[0]);
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      setCostDate(`${year}-${month}-${day}`);
     }
     setIsVariantConfigOpen(false);
     setIsCategoryModalOpen(false);
@@ -794,7 +840,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             type="number"
                             step="0.01"
                             className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                            value={costBs ? Number(costBs.toFixed(2)) : ''}
+                            value={costBs || ''}
                             placeholder="0.00"
                             onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
                           />
