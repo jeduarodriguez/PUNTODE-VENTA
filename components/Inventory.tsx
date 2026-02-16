@@ -53,17 +53,41 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   });
 
   // Helpers para compatibilidad con ambos formatos
-  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price ?? p.cost_price ?? 0;
-  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? p.selling_mode ?? 'simple';
-  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? p.measurement_unit ?? 'kg';
-  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? p.units_per_package ?? 0;
-  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? p.price_per_unit ?? 0;
-  const getRemainingUnits = (p: Product | Partial<Product>) => p.remaining_units ?? p.remaining_units ?? 0;
+  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price ?? (p as any).costPrice ?? 0;
+  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? (p as any).sellingMode ?? 'simple';
+  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? (p as any).measurementUnit ?? 'kg';
+  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
+  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
+  const getRemainingUnits = (p: Product | Partial<Product>) => p.remaining_units ?? (p as any).remainingUnits ?? 0;
 
   const [costBs, setCostBs] = useState<number>(0);
   const [costDate, setCostDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [costMode, setCostMode] = useState<'calculated' | 'manual'>('calculated');
   const [manualCostUsd, setManualCostUsd] = useState<number>(0);
+
+  // Calculadora
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [calcDisplay, setCalcDisplay] = useState('');
+  const [calcResult, setCalcResult] = useState<number>(0);
+
+  const handleCalcInput = (value: string) => {
+    if (value === '=') {
+      setCalcResult(calculateResult());
+    } else {
+      setCalcDisplay(prev => prev + value);
+    }
+  };
+
+  const calculateResult = (): number => {
+    try {
+      const sanitized = calcDisplay.replace(/[^0-9+\-*/.]/g, '');
+      if (!sanitized) return 0;
+      const result = Function('"use strict"; return (' + sanitized + ')')();
+      return typeof result === 'number' ? result : 0;
+    } catch {
+      return 0;
+    }
+  };
 
   const getRateForDate = (dateStr: string): number => {
     if (!rateHistory || rateHistory.length === 0) return exchangeRate;
@@ -98,7 +122,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       switch (sortBy) {
         case 'name': return a.name.localeCompare(b.name);
         case 'price-high': return b.price - a.price;
-        case 'price-low': return a.price - b.price;
+        case 'price-low': return a.price - a.price;
         case 'stock-high': return b.stock - a.stock;
         case 'stock-low': return a.stock - b.stock;
         case 'margin-high': return (b.price - b.costPrice) - (a.price - a.costPrice);
@@ -107,6 +131,40 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         default: return 0;
       }
     });
+
+  // Generar lista extendida con productos virtuales de paquetes
+  const extendedProducts = useMemo(() => {
+    const result: Array<Product & { isVirtualUnit?: boolean; parentProduct?: Product }> = [...filteredProducts];
+    
+    filteredProducts.forEach(p => {
+      const unitsPerPkg = p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
+      const pricePerU = p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
+      const sellingMode = p.selling_mode ?? (p as any).sellingMode ?? 'simple';
+      
+      if (sellingMode === 'package' && unitsPerPkg > 0 && pricePerU > 0) {
+        const unitStock = p.stock * unitsPerPkg + (p.remaining_units ?? (p as any).remainingUnits ?? 0);
+        const unitCost = (p.cost_price ?? (p as any).costPrice ?? 0) / unitsPerPkg;
+        const unitProfit = pricePerU - unitCost;
+        const unitMargin = pricePerU > 0 ? (unitProfit / pricePerU) * 100 : 0;
+        
+        const virtualProduct: Product & { isVirtualUnit: true; parentProduct: Product } = {
+          ...p,
+          id: `${p.id}_virtual`,
+          name: p.name,
+          category: p.category,
+          price: pricePerU,
+          cost_price: unitCost,
+          stock: unitStock,
+          selling_mode: 'simple',
+          isVirtualUnit: true,
+          parentProduct: p
+        };
+        result.push(virtualProduct);
+      }
+    });
+    
+    return result;
+  }, [filteredProducts]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,72 +399,76 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
       {/* LISTA DE PRODUCTOS */}
       <div className="flex flex-col gap-2">
-        {filteredProducts.map(product => {
+        {extendedProducts.map(product => {
           const productCostPrice = product.cost_price ?? product.costPrice ?? 0;
           const profit = product.price - productCostPrice;
           const margin = product.price > 0 ? (profit / product.price) * 100 : 0;
           const isLowStock = product.stock < 10;
           const isOutOfStock = product.stock === 0;
-          const isPackage = product.sellingMode === 'package';
-          const isWeight = product.sellingMode === 'weight';
+          const isPackage = (product.selling_mode || product.sellingMode) === 'package';
+          const isWeight = (product.selling_mode || product.sellingMode) === 'weight';
+          const isVirtualUnit = (product as any).isVirtualUnit;
+
+          const handleClick = () => {
+            if (isVirtualUnit && (product as any).parentProduct) {
+              openModal((product as any).parentProduct);
+            } else {
+              openModal(product);
+            }
+          };
 
           return (
             <div
               key={product.id}
-              onClick={() => openModal(product)}
-              className="bg-white p-3 rounded-2xl border border-gray-100 flex items-center gap-2 sm:gap-3 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer active:scale-[0.99]"
+              onClick={handleClick}
+              className={`bg-white p-3 rounded-2xl border border-gray-100 flex items-center gap-2 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer active:scale-[0.99] ${isVirtualUnit ? 'bg-blue-50/50 border-blue-100' : ''}`}
             >
-              {/* STOCK/VARIANT ICON */}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border-2 relative ${isOutOfStock ? 'bg-red-50 border-red-100 text-red-500' : isLowStock ? 'bg-orange-50 border-orange-100 text-orange-500' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
-                {/* Number always in center */}
-                {product.sellingMode === 'weight' ? (
-                  <span className="font-black text-sm">{product.stock}{product.measurementUnit || ''}</span>
+              {/* 1. STOCK */}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border-2 relative ${isOutOfStock ? 'bg-red-50 border-red-100 text-red-500' : isLowStock ? 'bg-orange-50 border-orange-100 text-orange-500' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+                {isWeight ? (
+                  <span className="font-black text-xs">{product.stock}{product.measurement_unit || product.measurementUnit || ''}</span>
                 ) : (
-                  <span className="font-black text-lg">{product.stock}</span>
+                  <span className="font-black text-sm">{product.stock}</span>
                 )}
-
-                {/* Badge de unidades para paquetes */}
-                {product.selling_mode === 'package' && product.units_per_package && product.units_per_package > 0 && (
-                  <div className={`absolute -top-1.5 -right-1.5 ${product.stock > 0 || (product.remaining_units || 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'} text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm`}>
+                {isPackage && !isVirtualUnit && product.units_per_package && product.units_per_package > 0 && (
+                  <div className={`absolute -top-1.5 -right-1.5 ${product.stock > 0 || (product.remaining_units || 0) > 0 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'} text-[8px] font-black px-1 py-0.5 rounded-full shadow-sm`}>
                     {product.stock * product.units_per_package + (product.remaining_units || 0)}
                   </div>
                 )}
               </div>
 
-              {/* NOMBRE Y CATEGORIA */}
+              {/* 2. NOMBRE + CATEGORIA */}
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-gray-800 text-sm leading-tight truncate">{product.name}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide truncate">{product.category}</p>
-                  {/* Badges de Variante */}
-                  {isPackage && <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-1.5 rounded uppercase">Pack x{product.unitsPerPackage}</span>}
-                  {isWeight && <span className="text-[8px] font-black bg-purple-50 text-purple-600 px-1.5 rounded uppercase">x {product.measurementUnit}</span>}
-                </div>
-              </div>
-
-              {/* PRECIOS */}
-              <div className="text-right flex flex-col items-end">
-                {/* Precio Principal */}
-                <p className="font-black text-sm text-indigo-700">${product.price.toFixed(2)}</p>
-
-                {/* Precio Secundario (Unidad suelta o Costo) */}
-                {isPackage && product.pricePerUnit ? (
-                  <p className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-1 rounded mt-0.5">Unidad: ${product.pricePerUnit.toFixed(2)}</p>
-                ) : (
-                  <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">Costo: ${productCostPrice.toFixed(2)}</p>
-                )}
-              </div>
-
-              {/* MARGEN */}
-              <div className="bg-gray-50 rounded-lg p-1.5 min-w-[50px] text-center border border-gray-100 hidden sm:block">
-                <p className={`text-[9px] font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
-                  {margin.toFixed(0)}%
+                <h3 className={`font-bold text-sm leading-tight truncate ${isVirtualUnit ? 'text-blue-700' : 'text-gray-800'}`}>{product.name}</h3>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                  {product.category}
+                  {isVirtualUnit && <span className="text-blue-500 ml-1">(unidad)</span>}
                 </p>
+              </div>
+
+              {/* 3. COSTO */}
+              <div className="text-center min-w-[55px]">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Costo</span>
+                <span className="text-[10px] font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+              </div>
+
+              {/* 4. VENTA */}
+              <div className="text-center min-w-[55px]">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Venta</span>
+                <span className="text-[10px] font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+              </div>
+
+              {/* 5. GANANCIA */}
+              <div className="text-center min-w-[50px]">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Ganancia</span>
+                <span className={`text-[10px] font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                  {margin.toFixed(0)}%
+                </span>
               </div>
             </div>
           );
         })}
-        {filteredProducts.length === 0 && (
+        {extendedProducts.length === 0 && (
           <div className="py-12 text-center flex flex-col items-center justify-center opacity-30 gap-2">
             <Package className="w-10 h-10" />
             <p className="text-xs font-black uppercase tracking-widest">Inventario Vacío</p>
@@ -579,7 +641,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             placeholder="Ej. 12"
                             className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
                             value={formData.units_per_package || ''}
-                            onChange={e => setFormData({ ...formData, unitsPerPackage: parseInt(e.target.value) || 0 })}
+                            onChange={e => setFormData({ ...formData, units_per_package: parseInt(e.target.value) || 0 })}
                           />
                         </div>
                       </div>
@@ -737,6 +799,14 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
                           />
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsCalculatorOpen(true)}
+                          className="w-10 h-10 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500 transition-all"
+                          title="Calculadora"
+                        >
+                          <Calculator className="w-5 h-5" />
+                        </button>
                         <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                           <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
                           <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(2)}</span>
@@ -847,7 +917,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                           className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
                           value={formData.price_per_unit || ''}
                           placeholder="0.00"
-                          onChange={e => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
+                          onChange={e => setFormData({ ...formData, price_per_unit: parseFloat(e.target.value) || 0 })}
                         />
                       </div>
                       
@@ -902,6 +972,61 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               </button>
             </div>
           </form>
+
+          {/* CALCULADORA POPUP */}
+          {isCalculatorOpen && (
+            <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsCalculatorOpen(false)}>
+              <div className="bg-white rounded-2xl p-4 w-72 shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-xs font-black text-gray-400 uppercase">Calculadora</span>
+                  <button onClick={() => setIsCalculatorOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="bg-gray-900 rounded-xl p-3 mb-3">
+                  <div className="text-right text-white font-bold text-xl truncate">{calcDisplay || '0'}</div>
+                  <div className="text-right text-emerald-400 font-black text-lg">= {calcResult.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {['7','8','9','/'].map(btn => (
+                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
+                  ))}
+                  {['4','5','6','*'].map(btn => (
+                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
+                  ))}
+                  {['1','2','3','-'].map(btn => (
+                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
+                  ))}
+                  {['0','00','.','+'].map(btn => (
+                    <button key={btn} onClick={() => handleCalcInput(btn)} className="p-3 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 active:scale-95">{btn}</button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  <button 
+                    onClick={() => { setCalcDisplay(''); setCalcResult(0); }}
+                    className="flex-1 py-3 bg-red-100 text-red-600 rounded-xl font-bold text-sm hover:bg-red-200"
+                  >
+                    C
+                  </button>
+                  <button 
+                    onClick={() => { 
+                      const result = calculateResult();
+                      setCostBs(prev => prev + result);
+                      setIsCalculatorOpen(false);
+                      setCalcDisplay('');
+                      setCalcResult(0);
+                    }}
+                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
+                  >
+                    Sumar a Bs
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -911,6 +1036,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
           to { transform: translateY(0); }
         }
         .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes scale-in {
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-scale-in { animation: scale-in 0.2s ease-out; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }

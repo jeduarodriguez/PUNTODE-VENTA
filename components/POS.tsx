@@ -58,18 +58,24 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
     const displayProducts = useMemo(() => {
         const result: Product[] = [];
         products.forEach(product => {
-            if (product.sellingMode === 'weight' && product.measurementUnit) {
-                const unitLabel = product.measurementUnit === 'kg' ? 'Kg' : product.measurementUnit;
+            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
+            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
+            const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
+            const pricePerUnit = product.price_per_unit ?? (product as any).pricePerUnit ?? 0;
+            const measurementUnit = product.measurement_unit ?? (product as any).measurementUnit ?? 'kg';
+            
+            if (sellingMode === 'weight' && measurementUnit) {
+                const unitLabel = measurementUnit === 'kg' ? 'Kg' : measurementUnit;
                 result.push({ ...product, name: `${product.name} (${unitLabel})` });
-            } else if (product.sellingMode === 'package' && product.pricePerUnit) {
+            } else if (sellingMode === 'package' && unitsPerPackage > 0 && pricePerUnit > 0) {
                 result.push({ ...product, name: `${product.name} (Paq)` });
-                const totalUnits = (product.stock * (product.unitsPerPackage || 0)) + (product.remainingUnits || 0);
+                const totalUnits = (product.stock * unitsPerPackage) + remainingUnits;
                 result.push({ 
                     ...product, 
                     id: `${product.id}-unit`, 
                     name: `${product.name} (Und)`, 
-                    price: product.pricePerUnit, 
-                    saleMode: 'unit',
+                    price: pricePerUnit, 
+                    selling_mode: 'simple',
                     stock: totalUnits
                 });
             } else {
@@ -96,8 +102,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, o
     );
 
     const addToCart = (product: Product) => {
+        const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
+        
         // Open weight modal for weight products
-        if (product.sellingMode === 'weight') {
+        if (sellingMode === 'weight') {
             setWeightProduct(product);
             setWeightQuantity('0.5');
             setIsWeightModalOpen(true);

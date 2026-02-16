@@ -18,6 +18,15 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+
+  // Helpers para compatibilidad de propiedades
+  const getProductProps = (p: Product) => ({
+    sellingMode: p.selling_mode ?? (p as any).sellingMode ?? 'simple',
+    unitsPerPackage: p.units_per_package ?? (p as any).unitsPerPackage ?? 0,
+    remainingUnits: p.remaining_units ?? (p as any).remainingUnits ?? 0,
+    pricePerUnit: p.price_per_unit ?? (p as any).pricePerUnit ?? 0,
+    stock: p.stock
+  });
   const [sales, setSales] = useState<Sale[]>([]);
   const [treasuryTransactions, setTreasuryTransactions] = useState<TreasuryTransaction[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(1);
@@ -147,11 +156,12 @@ const App: React.FC = () => {
       
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
+        const { sellingMode, unitsPerPackage, remainingUnits } = getProductProps(product);
         
-        if (product.sellingMode === 'package' && isUnitSale) {
+        if (sellingMode === 'package' && isUnitSale) {
           // Venta por unidad de producto paquete
           let qtyNeeded = item.quantity;
-          let newRemainingUnits = product.remainingUnits || 0;
+          let newRemainingUnits = remainingUnits;
           let newStock = product.stock;
           
           // Primero usar las unidades sueltas
@@ -165,9 +175,9 @@ const App: React.FC = () => {
           
           // Si necesita más, abrir paquetes
           if (qtyNeeded > 0 && newStock > 0) {
-            const packagesToOpen = Math.min(Math.ceil(qtyNeeded / (product.unitsPerPackage || 1)), newStock);
+            const packagesToOpen = Math.min(Math.ceil(qtyNeeded / (unitsPerPackage || 1)), newStock);
             newStock -= packagesToOpen;
-            const unitsFromPackages = packagesToOpen * (product.unitsPerPackage || 0);
+            const unitsFromPackages = packagesToOpen * (unitsPerPackage || 0);
             newRemainingUnits += unitsFromPackages;
             qtyNeeded -= unitsFromPackages;
           }
@@ -175,15 +185,7 @@ const App: React.FC = () => {
           const p = { 
             ...product, 
             stock: Math.max(0, newStock),
-            remainingUnits: Math.max(0, newRemainingUnits)
-          };
-          updatedProducts[pIndex] = p;
-          updates[`products/${productId}`] = p;
-        } else if (product.sellingMode === 'package' && !isUnitSale) {
-          // Venta por paquete
-          const p = { 
-            ...product, 
-            stock: Math.max(0, product.stock - item.quantity)
+            remaining_units: Math.max(0, newRemainingUnits)
           };
           updatedProducts[pIndex] = p;
           updates[`products/${productId}`] = p;
