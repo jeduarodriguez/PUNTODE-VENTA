@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Product, TreasuryTransaction, ExchangeRateRecord } from '../types';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Wallet, CreditCard, X, RefreshCw, TrendingUp, Smartphone, Banknote, Check, ArrowLeft, ShoppingBag, Calculator, DollarSign, Tag, ChevronRight, Edit, ChevronLeft, Calendar } from '../constants';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Wallet, CreditCard, X, RefreshCw, TrendingUp, Smartphone, Banknote, Check, ArrowLeft, ShoppingBag, Calculator, DollarSign, Tag, ChevronRight, Edit, ChevronLeft, Calendar, Package } from '../constants';
 
 interface PurchasePOSProps {
     products: Product[];
@@ -9,6 +9,7 @@ interface PurchasePOSProps {
     onClose: () => void;
     onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
     onAddProduct?: (product: Product) => void;
+    onOpenInventory?: () => void;
 }
 
 interface CartItem {
@@ -20,7 +21,7 @@ interface CartItem {
     rateAtPurchase?: number;
 }
 
-const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], onClose, onPurchase, onAddProduct }) => {
+const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], onClose, onPurchase, onAddProduct, onOpenInventory }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
@@ -36,6 +37,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     // Helpers para compatibilidad
     const getCostPrice = (p: Product | CartItem) => p.cost_price ?? p.costPrice ?? 0;
+    const getCostMode = (p: Product | CartItem) => (p as any).cost_mode ?? (p as any).costMode ?? 'calculated';
+    const getCostBs = (p: Product | CartItem) => (p as any).cost_bs ?? (p as any).costBs ?? 0;
+    const getCostDate = (p: Product | CartItem) => (p as any).cost_date ?? (p as any).costDate ?? '';
     const getSellingMode = (p: Product) => p.selling_mode ?? p.sellingMode ?? 'simple';
     const getPricePerUnit = (p: Product) => p.price_per_unit ?? p.pricePerUnit ?? 0;
 
@@ -97,7 +101,21 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         }
         if (navigator.vibrate) navigator.vibrate(50);
 
-        const costPriceBs = product.cost_price * currentRate;
+        // Calcular costo según el modo guardado
+        const costMode = getCostMode(product);
+        let finalCostUsd = 0;
+        let costPriceBs = 0;
+
+        if (costMode === 'calculated') {
+            // Usar cost_bs guardado con la tasa actual
+            const savedCostBs = getCostBs(product);
+            costPriceBs = savedCostBs;
+            finalCostUsd = currentRate > 0 ? savedCostBs / currentRate : 0;
+        } else {
+            // Modo manual: usar costo guardado directamente
+            finalCostUsd = getCostPrice(product);
+            costPriceBs = finalCostUsd * currentRate;
+        }
         
         setCart(prev => {
             const existing = prev.find(item => item.product.id === product.id);
@@ -107,7 +125,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                     : item
                 );
             }
-            return [...prev, { product, quantity: 1, costPrice: product.cost_price, costPriceBs, rateAtPurchase: currentRate }];
+            return [...prev, { product, quantity: 1, costPrice: finalCostUsd, costPriceBs, rateAtPurchase: currentRate }];
         });
     };
 
@@ -253,10 +271,10 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             const qtyInCart = cart.find(i => i.product.id === product.id)?.quantity || 0;
                             const newStock = getProductStock(product);
                             return (
-                                <button
+                                <div
                                     key={product.id}
                                     onClick={() => addToCart(product)}
-                                    className="flex items-center gap-3 p-2 rounded-xl border-2 transition-all active:scale-[0.98] bg-white border-gray-50 hover:border-indigo-100 shadow-sm relative overflow-hidden"
+                                    className="flex items-center gap-3 p-2 rounded-xl border-2 transition-all active:scale-[0.98] bg-white border-gray-50 hover:border-indigo-100 shadow-sm relative overflow-hidden cursor-pointer"
                                 >
                                     <div className="flex flex-col items-center w-12 shrink-0">
                                         <div className={`w-11 h-11 rounded-lg flex items-center justify-center font-black text-base ${qtyInCart > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -283,10 +301,29 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     </div>
 
                                     <div className="flex flex-col items-end w-22 shrink-0">
-                                        <p className="font-black text-gray-900 text-lg leading-none">Bs {(product.cost_price * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
-                                        <p className="text-xs font-bold text-indigo-400 mt-0.5">${product.cost_price.toFixed(2)}</p>
+                                        {(() => {
+                                            const costMode = getCostMode(product);
+                                            let displayCostUsd = 0;
+                                            let displayCostBs = 0;
+                                            
+                                            if (costMode === 'calculated') {
+                                                const savedCostBs = getCostBs(product);
+                                                displayCostBs = savedCostBs;
+                                                displayCostUsd = currentRate > 0 ? savedCostBs / currentRate : 0;
+                                            } else {
+                                                displayCostUsd = getCostPrice(product);
+                                                displayCostBs = displayCostUsd * currentRate;
+                                            }
+                                            
+                                            return (
+                                                <>
+                                                    <p className="font-black text-gray-900 text-lg leading-none">Bs {displayCostBs.toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
+                                                    <p className="text-xs font-bold text-indigo-400 mt-0.5">${displayCostUsd.toFixed(2)}</p>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -436,115 +473,6 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             >
                                 <CreditCard className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase">Tarjeta</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 -mr-1">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center opacity-40 space-y-4">
-                                <ShoppingBag className="w-16 h-16 text-gray-300" />
-                                <p className="font-bold text-gray-400 text-sm">El carrito está vacío</p>
-                            </div>
-                        ) : (
-                            cart.map(item => {
-                                const originalProduct = products.find(p => p.id === item.product.id);
-                                const lastInventoryPrice = originalProduct?.costPrice || item.costPrice;
-                                const isUsingLastPrice = item.costPrice === lastInventoryPrice;
-                                return (
-                                    <div key={item.product.id} className="flex items-center gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-gray-900 text-sm truncate">{item.product.name}</h4>
-                                            <p className="text-xs font-bold text-gray-400 uppercase">{item.product.category}</p>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 bg-white rounded-xl p-1 shadow-sm border border-gray-200">
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, -1)}
-                                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
-                                            >
-                                                <Minus className="w-4 h-4" />
-                                            </button>
-                                            <span className="w-8 text-center font-black text-sm">{item.quantity}</span>
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, 1)}
-                                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
-                                            >
-                                                <Plus className="w-4 h-4" />
-                                            </button>
-                                        </div>
-
-                                        <div className="flex flex-col items-end w-24 shrink-0">
-                                            <p className="font-black text-gray-900">Bs {(item.costPrice * item.quantity * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</p>
-                                            <p className="text-xs font-bold text-indigo-400">${(item.costPrice * item.quantity).toFixed(2)}</p>
-                                        </div>
-
-                                        <button 
-                                            onClick={() => {
-                                                const newPrice = prompt(`Precio de compra para ${item.product.name}:`, item.costPrice.toFixed(2));
-                                                if (newPrice && !isNaN(parseFloat(newPrice)) && parseFloat(newPrice) > 0) {
-                                                    setCart(prev => prev.map(cartItem => 
-                                                        cartItem.product.id === item.product.id 
-                                                            ? { ...cartItem, costPrice: parseFloat(newPrice), price: parseFloat(newPrice) }
-                                                            : cartItem
-                                                    ));
-                                                }
-                                            }}
-                                            className="p-2 bg-blue-50 text-blue-400 rounded-lg hover:bg-blue-100 transition-colors"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </button>
-
-                                        <button 
-                                            onClick={() => removeFromCart(item.product.id)}
-                                            className="p-2 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                );
-                            })
-                        )}
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                        <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-bold text-indigo-200 uppercase tracking-widest">Total</span>
-                                <span className="text-2xl font-black text-white">Bs {(calculateTotal() * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Referencia</span>
-                                <span className="text-sm font-black text-indigo-200">${calculateTotal().toFixed(2)}</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                            <button
-                                disabled={cart.length === 0}
-                                onClick={() => initiatePurchase('Cash')}
-                                className="p-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-100 active:scale-95"
-                            >
-                                <Banknote className="w-6 h-6" />
-                                <span className="text-xs font-black uppercase">Efectivo</span>
-                            </button>
-
-                            <button
-                                disabled={cart.length === 0}
-                                onClick={() => initiatePurchase('PagoMovil')}
-                                className="p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-blue-100 active:scale-95"
-                            >
-                                <Smartphone className="w-6 h-6" />
-                                <span className="text-xs font-black uppercase">Pago Móvil</span>
-                            </button>
-                            
-                            <button
-                                disabled={cart.length === 0}
-                                onClick={() => initiatePurchase('Card')}
-                                className="p-4 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200 active:scale-95"
-                            >
-                                <CreditCard className="w-6 h-6" />
-                                <span className="text-xs font-black uppercase">Tarjeta</span>
                             </button>
                         </div>
                     </div>
@@ -762,6 +690,16 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             )}
 
                             <div className="pt-2 flex gap-3 mt-auto">
+                                {onOpenInventory && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { closeEditPriceModal(); onOpenInventory(); }}
+                                        className="flex-1 py-3 border-2 border-blue-200 bg-blue-50 text-blue-600 rounded-2xl font-bold text-xs hover:bg-blue-100 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <Package className="w-4 h-4" />
+                                        Editar en Inventario
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={closeEditPriceModal}

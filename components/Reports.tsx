@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
-import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X } from '../constants';
+import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
 
@@ -20,12 +20,14 @@ interface ReportsProps {
     onAddProduct: (product: Product) => void;
     onUpdateTreasuryTransaction?: (t: TreasuryTransaction) => void;
     onDeleteTreasuryTransaction?: (id: string) => void;
+    onOpenWorkers?: () => void;
+    onGoToInventory?: () => void;
 }
 
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onOpenWorkers, onGoToInventory }) => {
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
@@ -706,6 +708,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     onClose={() => setShowPurchasePOS(false)}
                     onPurchase={onPurchaseProducts}
                     onAddProduct={onAddProduct}
+                    onOpenInventory={() => { setShowPurchasePOS(false); onGoToInventory?.(); }}
                 />
             )}
 
@@ -791,11 +794,25 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                         </div>
                         <div className="space-y-3">
                             <button 
+                                onClick={() => { setShowExpenseTypeModal(false); setShowPurchasePOS(true); }} 
+                                className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                            >
+                                <ShoppingCart className="w-5 h-5" />
+                                Comprar Productos (Inventario)
+                            </button>
+                            <button 
                                 onClick={() => { setShowExpenseTypeModal(false); setShowExpenseModal(true); }} 
                                 className="w-full bg-orange-100 hover:bg-orange-200 text-orange-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
                             >
                                 <Wallet className="w-5 h-5" />
                                 Gasto por Categoría
+                            </button>
+                            <button 
+                                onClick={() => { setShowExpenseTypeModal(false); onOpenWorkers?.(); }} 
+                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                            >
+                                <BanknoteIcon className="w-5 h-5" />
+                                Pagar Nómina
                             </button>
                         </div>
                         <div className="mt-4">

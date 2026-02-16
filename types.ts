@@ -27,6 +27,9 @@ export interface Product {
   cost_mode?: 'calculated' | 'manual';
   cost_bs?: number;
   cost_date?: string;
+  
+  // Alias para compatibilidad
+  cost_price?: number;
 }
 
 export interface CartItem extends Product {

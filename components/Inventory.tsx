@@ -129,7 +129,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const totalCostValue = products.reduce((sum, p) => sum + ((p.cost_price ?? p.costPrice ?? 0) * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const totalPotentialProfit = totalRetailValue - totalCostValue;
-  const profitMarginPercent = totalRetailValue > 0 ? (totalPotentialProfit / totalRetailValue) * 100 : 0;
+  const profitMarginPercent = totalCostValue > 0 ? (totalPotentialProfit / totalCostValue) * 100 : 0;
 
   const filteredProducts = products
     .filter(p => {
@@ -143,24 +143,31 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       return matchesSearch && matchesStatus && matchesCategory && matchesMode;
     })
     .sort((a, b) => {
+      const costA = getCostPrice(a);
+      const costB = getCostPrice(b);
       switch (sortBy) {
         case 'name': return a.name.localeCompare(b.name);
         case 'price-high': return b.price - a.price;
-        case 'price-low': return a.price - a.price;
+        case 'price-low': return a.price - b.price;
         case 'stock-high': return b.stock - a.stock;
         case 'stock-low': return a.stock - b.stock;
-        case 'margin-high': return (b.price - b.costPrice) - (a.price - a.costPrice);
-        case 'cost-high': return b.costPrice - a.costPrice;
-        case 'cost-low': return a.costPrice - b.costPrice;
+        case 'margin-high': 
+          const marginA = costA > 0 ? ((a.price - costA) / costA) * 100 : 0;
+          const marginB = costB > 0 ? ((b.price - costB) / costB) * 100 : 0;
+          return marginB - marginA;
+        case 'cost-high': return costB - costA;
+        case 'cost-low': return costA - costB;
         default: return 0;
       }
     });
 
   // Generar lista extendida con productos virtuales de paquetes
   const extendedProducts = useMemo(() => {
-    const result: Array<Product & { isVirtualUnit?: boolean; parentProduct?: Product }> = [...filteredProducts];
+    const result: Array<Product & { isVirtualUnit?: boolean; parentProduct?: Product }> = [];
     
     filteredProducts.forEach(p => {
+      result.push(p);
+      
       const unitsPerPkg = p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
       const pricePerU = p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
       const sellingMode = p.selling_mode ?? (p as any).sellingMode ?? 'simple';
@@ -169,7 +176,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         const unitStock = p.stock * unitsPerPkg + (p.remaining_units ?? (p as any).remainingUnits ?? 0);
         const unitCost = (p.cost_price ?? (p as any).costPrice ?? 0) / unitsPerPkg;
         const unitProfit = pricePerU - unitCost;
-        const unitMargin = pricePerU > 0 ? (unitProfit / pricePerU) * 100 : 0;
+        const unitMargin = unitCost > 0 ? (unitProfit / unitCost) * 100 : 0;
         
         const virtualProduct: Product & { isVirtualUnit: true; parentProduct: Product } = {
           ...p,
@@ -326,7 +333,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
     const unitCost = units > 0 ? packageCost / units : 0;
     const unitProfit = unitSellPrice - unitCost;
-    const unitMargin = unitSellPrice > 0 ? (unitProfit / unitSellPrice) * 100 : 0;
+    const unitMargin = unitCost > 0 ? (unitProfit / unitCost) * 100 : 0;
 
     return { unitCost, unitProfit, unitMargin };
   };
@@ -459,7 +466,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         {extendedProducts.map(product => {
           const productCostPrice = product.cost_price ?? product.costPrice ?? 0;
           const profit = product.price - productCostPrice;
-          const margin = product.price > 0 ? (profit / product.price) * 100 : 0;
+          const margin = productCostPrice > 0 ? (profit / productCostPrice) * 100 : 0;
           const isLowStock = product.stock < 10;
           const isOutOfStock = product.stock === 0;
           const isPackage = (product.selling_mode || product.sellingMode) === 'package';
@@ -594,7 +601,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory(); } }}
                   />
-                  <button
+      <button
                     onClick={handleCreateCategory}
                     disabled={!newCategoryName.trim()}
                     className="bg-gray-900 text-white p-4 rounded-2xl shadow-lg disabled:opacity-50 disabled:shadow-none active:scale-95 transition-all"
