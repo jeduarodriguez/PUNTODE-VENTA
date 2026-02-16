@@ -1,7 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, ExchangeRateRecord } from '../types';
-import { Plus, Trash2, Search, CATEGORIES, DollarSign, TrendingDown, Filter, ArrowUpDown, PiggyBank, ShoppingBag, TrendingUp, Package, Scale, Box, Layers, Settings, X, Check, Calculator, Divide, ArrowRight, ChevronDown, Tag, ChevronRight, Calendar } from '../constants';
+import { Plus, Trash2, Search, CATEGORIES, DollarSign, TrendingDown, Filter, ArrowUpDown, PiggyBank, ShoppingBag, TrendingUp, Package, Scale, Box, Layers, Settings, X, Check, Calculator, Divide, ArrowRight, ChevronDown, Tag, ChevronRight, Calendar, LayoutGrid, List } from '../constants';
+
+type ViewMode = 'list' | 'grid';
 
 type FilterStatus = 'all' | 'low-stock' | 'out-of-stock';
 type FilterCategory = 'all' | string;
@@ -31,11 +33,19 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
-  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all');
-  const [modeFilter, setModeFilter] = useState<FilterMode>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('name');
+  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('inv_search') || '');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>(() => (localStorage.getItem('inv_status') as FilterStatus) || 'all');
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>(() => localStorage.getItem('inv_category') || 'all');
+  const [modeFilter, setModeFilter] = useState<FilterMode>(() => (localStorage.getItem('inv_mode') as FilterMode) || 'all');
+  const [sortBy, setSortBy] = useState<SortBy>(() => (localStorage.getItem('inv_sort') as SortBy) || 'name');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('inv_view') as ViewMode) || 'list');
+
+  useEffect(() => { localStorage.setItem('inv_search', searchTerm); }, [searchTerm]);
+  useEffect(() => { localStorage.setItem('inv_status', statusFilter); }, [statusFilter]);
+  useEffect(() => { localStorage.setItem('inv_category', categoryFilter); }, [categoryFilter]);
+  useEffect(() => { localStorage.setItem('inv_mode', modeFilter); }, [modeFilter]);
+  useEffect(() => { localStorage.setItem('inv_sort', sortBy); }, [sortBy]);
+  useEffect(() => { localStorage.setItem('inv_view', viewMode); }, [viewMode]);
 
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
@@ -530,11 +540,18 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <option value="stock-high">STK↑</option>
             <option value="stock-low">STK↓</option>
           </select>
+
+          <button
+            onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+            className="pl-2 pr-3 py-2 bg-white border border-gray-100 rounded-lg shadow-sm shrink-0"
+          >
+            {viewMode === 'list' ? <LayoutGrid className="w-4 h-4 text-gray-600" /> : <List className="w-4 h-4 text-gray-600" />}
+          </button>
         </div>
       </div>
 
       {/* LISTA DE PRODUCTOS */}
-      <div className="flex flex-col gap-2">
+      <div className={viewMode === 'grid' ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
         {extendedProducts.map(product => {
           const productCostPrice = product.cost_price ?? product.costPrice ?? 0;
           const profit = product.price - productCostPrice;
@@ -553,7 +570,26 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             }
           };
 
-          return (
+          return viewMode === 'grid' ? (
+            <div
+              key={product.id}
+              onClick={handleClick}
+              className={`bg-white p-2 rounded-xl border border-gray-100 flex flex-col gap-1 shadow-sm hover:border-indigo-200 cursor-pointer ${isVirtualUnit ? 'bg-blue-50/50 border-blue-100' : ''}`}
+            >
+              <div className={`w-full h-16 rounded-lg flex items-center justify-center ${isOutOfStock ? 'bg-red-50' : isLowStock ? 'bg-orange-50' : 'bg-gray-50'}`}>
+                <span className="font-black text-2xl text-gray-700">{product.stock}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-bold text-xs leading-tight truncate ${isVirtualUnit ? 'text-blue-700' : 'text-gray-800'}`}>{product.name}</h3>
+                <p className="text-[8px] font-bold text-gray-400 uppercase">{product.category}</p>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+                <span className="text-[10px] font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+                <span className={`text-[10px] font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>+{margin.toFixed(0)}%</span>
+              </div>
+            </div>
+          ) : (
             <div
               key={product.id}
               onClick={handleClick}
@@ -583,21 +619,21 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               </div>
 
               {/* 3. COSTO */}
-              <div className="text-center min-w-[45px] mr-1">
-                <span className="text-[6px] font-black text-gray-400 uppercase block">Costo</span>
-                <span className="text-xs font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+              <div className="text-center min-w-[48px] mr-1">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Costo</span>
+                <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
               </div>
 
               {/* 4. VENTA */}
-              <div className="text-center min-w-[45px] mr-1">
-                <span className="text-[6px] font-black text-gray-400 uppercase block">Venta</span>
-                <span className="text-xs font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+              <div className="text-center min-w-[48px] mr-1">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Venta</span>
+                <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
               </div>
 
               {/* 5. GANANCIA */}
-              <div className="text-center min-w-[40px]">
-                <span className="text-[6px] font-black text-gray-400 uppercase block">Ganancia</span>
-                <span className={`text-xs font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+              <div className="text-center min-w-[45px]">
+                <span className="text-[7px] font-black text-gray-400 uppercase block">Ganancia</span>
+                <span className={`text-sm font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
                   {margin.toFixed(0)}%
                 </span>
               </div>
@@ -621,7 +657,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
       {/* MAIN MODAL - TAMAÑO GRANDE (FULL SCREEN) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-white z-[100] flex flex-col animate-fade-in">
+        <div className="fixed inset-0 bg-white z-[100] flex flex-col animate-fade-in overflow-hidden overscroll-none">
 
           {/* 1. CATEGORY SELECTION OVERLAY (Ventana detallada para Categorías) */}
           {isCategoryModalOpen && (
@@ -831,7 +867,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto touch-manipulation">
             {/* NOMBRE DEL PRODUCTO */}
             <div className="space-y-1">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre del Producto</label>
@@ -1151,7 +1187,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                   <button 
                     onClick={() => { 
                       const result = calculateResult();
-                      setCostBs(prev => prev + result);
+                      const roundedResult = Math.round(result * 100) / 100;
+                      setCostBs(roundedResult);
                       setIsCalculatorOpen(false);
                       setCalcDisplay('');
                       setCalcResult(0);
@@ -1159,7 +1196,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     }}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
                   >
-                    Sumar a Bs
+                    Insertar
                   </button>
                 </div>
               </div>
