@@ -576,17 +576,28 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               onClick={handleClick}
               className={`bg-white p-2 rounded-xl border border-gray-100 flex flex-col gap-1 shadow-sm hover:border-indigo-200 cursor-pointer ${isVirtualUnit ? 'bg-blue-50/50 border-blue-100' : ''}`}
             >
-              <div className={`w-full h-16 rounded-lg flex items-center justify-center ${isOutOfStock ? 'bg-red-50' : isLowStock ? 'bg-orange-50' : 'bg-gray-50'}`}>
-                <span className="font-black text-2xl text-gray-700">{product.stock}</span>
+              <div className="w-full h-16 rounded-lg bg-gray-50 flex items-center justify-between px-2">
+                <div className="text-center">
+                  <span className="text-[9px] font-bold text-gray-400 uppercase block">Costo</span>
+                  <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+                </div>
+                <div className="text-center">
+                  <span className="text-[9px] font-bold text-gray-400 uppercase block">Venta</span>
+                  <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+                </div>
+                <div className="text-center">
+                  <span className="text-[9px] font-bold text-gray-400 uppercase block">Gan.</span>
+                  <span className={`text-sm font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>+{margin.toFixed(0)}%</span>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className={`font-bold text-xs leading-tight truncate ${isVirtualUnit ? 'text-blue-700' : 'text-gray-800'}`}>{product.name}</h3>
-                <p className="text-[8px] font-bold text-gray-400 uppercase">{product.category}</p>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
-                <span className="text-[10px] font-bold text-emerald-600">${product.price.toFixed(2)}</span>
-                <span className={`text-[10px] font-bold ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>+{margin.toFixed(0)}%</span>
+              <div className="flex justify-between items-start gap-1 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-bold text-xs leading-tight truncate ${isVirtualUnit ? 'text-blue-700' : 'text-gray-800'}`}>{product.name}</h3>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase">{product.category}</p>
+                </div>
+                <div className={`text-sm font-bold px-2 py-1 rounded ${isOutOfStock ? 'bg-red-100 text-red-600' : isLowStock ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                  {product.stock}
+                </div>
               </div>
             </div>
           ) : (
