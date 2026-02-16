@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
-import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon } from '../constants';
+import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
+
+type ViewMode = 'list' | 'grid';
 
 interface ReportsProps {
     sales: Sale[];
@@ -69,6 +71,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [showEditModal, setShowEditModal] = useState(false);
     const [editDate, setEditDate] = useState<string>('');
     const [editAmount, setEditAmount] = useState<string>('');
+    const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('reports_view') as ViewMode) || 'list');
+
+    useEffect(() => { localStorage.setItem('reports_view', viewMode); }, [viewMode]);
 
     const daysOfWeek = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
 
@@ -392,7 +397,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 </>
                                             ) : (
                                                 <>
-                                                    <p className="text-lg font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+                                                    <p className="text-lg font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                                                     <p className="text-[9px] text-gray-400">${sale.total.toFixed(2)}</p>
                                                 </>
                                             )}
@@ -552,8 +557,8 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                         </div>
                                         <span className={`text-xs font-black ${item.type === 'sale' ? 'text-gray-900' : (item.data.type === 'expense' ? 'text-red-600' : 'text-emerald-600')}`}>
                                             {item.type === 'sale' 
-                                                ? `${(item.data.total * item.data.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs`
-                                                : `${item.data.type === 'expense' ? '-' : '+'}${item.data.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs`
+                                                ? `${(item.data.total * item.data.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs`
+                                                : `${item.data.type === 'expense' ? '-' : '+'}${item.data.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs`
                                             }
                                         </span>
                                     </div>
@@ -590,7 +595,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <TrendingUp className="w-3 h-3 text-emerald-600" />
                             <span className="text-[8px] font-black text-emerald-600 uppercase tracking-wider">Ingresos</span>
                         </div>
-                        <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
+                        <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
                         <p className="text-[9px] font-bold text-emerald-500">${(totalSalesUsdFiltered + incomeUsd).toFixed(2)}</p>
                     </div>
 
@@ -612,7 +617,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 : 'text-orange-800'
                         }`}>
                             {(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? '+' : ''}
-                            {(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                            {(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
                         </p>
                         <p className={`text-[9px] font-bold text-center ${
                             (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
@@ -628,7 +633,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <span className="text-[8px] font-black text-red-600 uppercase tracking-wider">Egresos</span>
                             <TrendingDown className="w-3 h-3 text-red-600" />
                         </div>
-                        <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
+                        <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
                         <p className="text-[9px] font-bold text-red-500">${expensesUsd.toFixed(2)}</p>
                     </div>
                 </div>
@@ -636,17 +641,17 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-emerald-100"><Banknote className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Efectivo</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                         <p className="text-[9px] text-emerald-200">${salesCashUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-500 hover:bg-purple-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-purple-100"><Smartphone className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Pago Movil</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                         <p className="text-[9px] text-purple-200">${salesPagoMovilUsd.toFixed(2)}</p>
                     </div>
                     <div onClick={() => setActiveDetail('Card')} className="bg-blue-500 hover:bg-blue-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
                         <div className="flex items-center gap-1.5 mb-1 text-blue-100"><CreditCard className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Punto</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+                        <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                         <p className="text-[9px] text-blue-200">${salesCardUsd.toFixed(2)}</p>
                     </div>
                 </div>
@@ -685,7 +690,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <p className="text-base font-black text-gray-900">{(s.total * s.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+                                                        <p className="text-base font-black text-gray-900">{(s.total * s.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                                                         <p className="text-[9px] text-gray-400">${s.total.toFixed(2)}</p>
                                                     </>
                                                 )}
@@ -711,7 +716,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                             </div>
                                             <div className="text-right shrink-0 ml-2">
                                                 <p className={`text-base font-black ${isExpense ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                    {isExpense ? '-' : '+'}{t.amountBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
+                                                    {isExpense ? '-' : '+'}{t.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
                                                 </p>
                                                 <p className="text-[9px] text-gray-400">${t.amount.toFixed(2)}</p>
                                             </div>
@@ -750,7 +755,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                     </div>
                                     <button onClick={() => setActiveDetail(null)} className="bg-white/50 p-2 rounded-full"><span className="w-5 h-5 flex items-center justify-center text-gray-900">×</span></button>
                                 </div>
-                                <div className="mt-3 bg-white/60 p-3 rounded-xl"><p className="text-xs text-gray-500 uppercase font-bold">Total</p><p className="text-2xl font-black text-gray-900">{total.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs</p></div>
+                                <div className="mt-3 bg-white/60 p-3 rounded-xl"><p className="text-xs text-gray-500 uppercase font-bold">Total</p><p className="text-2xl font-black text-gray-900">{total.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs</p></div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-white">
                                 {getDetailSales().length === 0 ? (
@@ -762,7 +767,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 <div className={`p-2 rounded-lg bg-${info.color}-50 text-${info.color}-600`}><info.icon className="w-4 h-4" /></div>
                                                 <div><p className="text-xs font-bold text-gray-900">{sale.items.some(i => i.id === 'debt_payment') ? `Pago: ${getCustomerName(sale.customerId)}` : getSaleDescription(sale)}</p><p className="text-[10px] text-gray-400">{new Date(sale.timestamp).toLocaleTimeString()}</p></div>
                                             </div>
-                                            <div className="text-right"><p className="text-sm font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p></div>
+                                            <div className="text-right"><p className="text-sm font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p></div>
                                         </div>
                                     ))
                                 )}

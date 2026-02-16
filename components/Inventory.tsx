@@ -456,7 +456,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Inversión</span>
           </div>
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </div>
         <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-0.5 overflow-hidden">
@@ -464,7 +464,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Valor</span>
           </div>
           <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs</p>
+          <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </div>
         <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 text-white flex flex-col items-center text-center relative overflow-hidden">
           <div className="flex items-center gap-1.5 mb-0.5 relative z-10">
@@ -1013,7 +1013,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       </div>
                       <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                         <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
-                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</span>
+                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
                       </div>
                     </div>
                   )}
@@ -1047,7 +1047,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
                         <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
                         <span className="text-sm font-black text-emerald-800">
-                          {((formData.price || 0) * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
+                          {((formData.price || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
                         </span>
                       </div>
                     </div>
@@ -1105,7 +1105,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
                         <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
                         <span className="text-sm font-black text-blue-800">
-                          {((formData.price_per_unit || 0) * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
+                          {((formData.price_per_unit || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
                         </span>
                       </div>
                     </div>
@@ -1166,7 +1166,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                 
                 <div className="bg-gray-900 rounded-xl p-4 mb-3">
                   <div className="text-right text-white font-bold text-2xl truncate">{calcDisplay || '0'}</div>
-                  <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-VE', { maximumFractionDigits: 2 })}</div>
+                  <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</div>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3">

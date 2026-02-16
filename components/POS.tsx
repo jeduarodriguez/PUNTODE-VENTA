@@ -211,7 +211,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             timestamp: Date.now(),
             items: cart,
             total: calculateTotal(),
-            exchangeRate: exchangeRate,
+            exchangeRate: todayRate,
             paymentMethod: method,
             customerId: customerId
         };
@@ -403,7 +403,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
  
                                     {/* Price Layout */}
                                     <div className="text-right flex flex-col items-end w-16 shrink-0">
-                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}</p>
+                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
                                         <p className="text-[7px] font-bold text-indigo-400 mt-0.5">${product.price.toFixed(2)}</p>
                                     </div>
                                 </button>
@@ -705,7 +705,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     <div className="text-right">
                                         <span className="text-[10px] font-bold text-gray-400 uppercase">BS</span>
                                         <p className="text-2xl font-black text-white">
-                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * todayRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
                                         </p>
                                     </div>
                                 </div>

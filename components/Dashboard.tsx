@@ -126,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, customers, excha
                     </div>
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-2">Ventas Totales</p>
                     <p className="text-xl font-black text-gray-900 leading-tight">${stats.totalSalesUSD.toFixed(2)}</p>
-                    <p className="text-[9px] font-bold text-gray-400 mt-1">{stats.totalSalesBS.toLocaleString()} Bs</p>
+                    <p className="text-[9px] font-bold text-gray-400 mt-1">{stats.totalSalesBS.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
                     <div className="absolute -right-2 -bottom-2 opacity-5">
                         <TrendingUp className="w-20 h-20 text-indigo-600" />
                     </div>
