@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS public.products (
     "measurementUnit" TEXT DEFAULT 'kg',
     "unitsPerPackage" NUMERIC DEFAULT 0,
     "pricePerUnit" NUMERIC DEFAULT 0,
+    "costMode" TEXT DEFAULT 'calculated',
+    "costBs" NUMERIC DEFAULT 0,
+    "costDate" TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

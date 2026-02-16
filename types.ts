@@ -4,7 +4,7 @@ export interface Product {
   name: string;
   category: string;
   price: number;
-  cost_price: number;
+  costPrice: number;
   stock: number;
   image?: string;
   description?: string;
@@ -16,13 +16,17 @@ export interface Product {
   price_per_unit?: number;
   remaining_units?: number;
   
-  // Aliases para compatibilidad con datos existentes
-  costPrice?: number;
+  // Aliases para compatibilidad con datos existentes (snake_case)
   sellingMode?: 'simple' | 'weight' | 'package';
   measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
   unitsPerPackage?: number;
   pricePerUnit?: number;
   remainingUnits?: number;
+
+  // Campos para modo de costo
+  cost_mode?: 'calculated' | 'manual';
+  cost_bs?: number;
+  cost_date?: string;
 }
 
 export interface CartItem extends Product {

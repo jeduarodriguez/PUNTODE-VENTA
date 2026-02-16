@@ -53,7 +53,10 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   });
 
   // Helpers para compatibilidad con ambos formatos
-  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price ?? (p as any).costPrice ?? 0;
+  const getCostPrice = (p: Product | Partial<Product>) => p.costPrice ?? (p as any).cost_price ?? 0;
+  const getCostMode = (p: Product | Partial<Product>) => p.cost_mode ?? (p as any).costMode ?? 'calculated';
+  const getCostBs = (p: Product | Partial<Product>) => p.cost_bs ?? (p as any).costBs ?? 0;
+  const getCostDate = (p: Product | Partial<Product>) => p.cost_date ?? (p as any).costDate ?? '';
   const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? (p as any).sellingMode ?? 'simple';
   const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? (p as any).measurementUnit ?? 'kg';
   const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
@@ -195,11 +198,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       if (costMode === 'calculated') {
         if (costBs > 0 && currentRate > 0) {
           finalCost = costBs / currentRate;
-        } else if (formData.cost_price) {
-          finalCost = Number(formData.cost_price);
+        } else if (formData.costPrice) {
+          finalCost = Number(formData.costPrice);
         }
       } else {
-        finalCost = manualCostUsd || Number(formData.cost_price) || 0;
+        finalCost = manualCostUsd || Number(formData.costPrice) || 0;
       }
       
       const sanitizedData: Product = {
@@ -207,15 +210,18 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         name: formData.name || 'Producto sin nombre',
         category: formData.category || 'Bebidas',
         price: Number(formData.price) || 0,
-        cost_price: finalCost,
+        costPrice: finalCost,
         stock: Number(formData.stock) || 0,
         description: formData.description || '',
         image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
-        selling_mode: formData.selling_mode || 'simple',
-        measurement_unit: formData.measurement_unit,
-        units_per_package: Number(formData.units_per_package) || 0,
-        price_per_unit: Number(formData.price_per_unit) || 0,
-        remaining_units: getRemainingUnits(editingProduct)
+        sellingMode: formData.selling_mode || 'simple',
+        measurementUnit: formData.measurement_unit,
+        unitsPerPackage: Number(formData.units_per_package) || 0,
+        pricePerUnit: Number(formData.price_per_unit) || 0,
+        remainingUnits: getRemainingUnits(editingProduct),
+        cost_mode: costMode,
+        cost_bs: costMode === 'calculated' ? costBs : 0,
+        cost_date: costMode === 'calculated' ? costDate : ''
       };
 
       if (editingProduct) {
@@ -244,20 +250,25 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         remaining_units: getRemainingUnits(product)
       });
       
-      // Determinar modo según si tiene costo o no
-      if (existingCost > 0) {
-        setCostMode('manual');
-        setManualCostUsd(existingCost);
+      // Cargar modo guardado o determinar si no existe
+      const savedCostMode = getCostMode(product);
+      const savedCostBs = getCostBs(product);
+      const savedCostDate = getCostDate(product);
+      
+      setCostMode(savedCostMode);
+      setManualCostUsd(existingCost);
+      setCostBs(savedCostBs);
+      
+      // Usar fecha guardada o hoy si no existe
+      if (savedCostDate) {
+        setCostDate(savedCostDate);
       } else {
-        setCostMode('calculated');
-        setManualCostUsd(0);
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        setCostDate(`${year}-${month}-${day}`);
       }
-      setCostBs(0);
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      setCostDate(`${year}-${month}-${day}`);
     } else {
       setEditingProduct(null);
       setFormData({
