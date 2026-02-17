@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Product, TreasuryTransaction, ExchangeRateRecord } from '../types';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Wallet, CreditCard, X, RefreshCw, TrendingUp, Smartphone, Banknote, Check, ArrowLeft, ShoppingBag, Calculator, DollarSign, Tag, ChevronRight, Edit, ChevronLeft, Calendar, Package } from '../constants';
+import { Product, TreasuryTransaction, ExchangeRateRecord, BusinessDebt } from '../types';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Wallet, CreditCard, X, RefreshCw, TrendingUp, Smartphone, Banknote, Check, ArrowLeft, ShoppingBag, Calculator, DollarSign, Tag, ChevronRight, Edit, ChevronLeft, Calendar, Package, Settings, Scale, Box, Layers, ChevronDown, Clock } from '../constants';
 
 interface PurchasePOSProps {
     products: Product[];
     exchangeRate: number;
     rateHistory?: ExchangeRateRecord[];
     onClose: () => void;
-    onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
+    onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
     onOpenInventory?: () => void;
 }
@@ -34,6 +34,32 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [newProductPrice, setNewProductPrice] = useState(0);
     const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
     const [useCustomDate, setUseCustomDate] = useState(false);
+
+    const [newProductCostBs, setNewProductCostBs] = useState(0);
+    const [newProductCostDate, setNewProductCostDate] = useState(new Date().toISOString().split('T')[0]);
+    const [newProductCostMode, setNewProductCostMode] = useState<'calculated' | 'manual'>('calculated');
+    const [newProductManualCost, setNewProductManualCost] = useState(0);
+    const [newProductSellingMode, setNewProductSellingMode] = useState<'simple' | 'weight' | 'package'>('simple');
+    const [newProductUnitsPerPackage, setNewProductUnitsPerPackage] = useState(0);
+    const [newProductPricePerUnit, setNewProductPricePerUnit] = useState(0);
+    const [newProductMeasurementUnit, setNewProductMeasurementUnit] = useState('kg');
+    const [showNewProductCategoryModal, setShowNewProductCategoryModal] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [showNewProductVariantModal, setShowNewProductVariantModal] = useState(false);
+    const [newProductPriceDisplay, setNewProductPriceDisplay] = useState('');
+    const [newProductPricePerUnitDisplay, setNewProductPricePerUnitDisplay] = useState('');
+    const [newProductManualCostDisplay, setNewProductManualCostDisplay] = useState('');
+    const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+    const [calcDisplay, setCalcDisplay] = useState('');
+    const [calcResult, setCalcResult] = useState<number>(0);
+    const [calcAccumulator, setCalcAccumulator] = useState<number>(0);
+
+    // Estados para modal de deuda de crédito
+    const [isCreditDebtModalOpen, setIsCreditDebtModalOpen] = useState(false);
+    const [creditDebtTitle, setCreditDebtTitle] = useState('');
+    const [creditDebtCurrencyType, setCreditDebtCurrencyType] = useState<'usd' | 'bs'>('bs');
+    const [creditDebtAmount, setCreditDebtAmount] = useState(0);
+    const [creditDebtAmountUsd, setCreditDebtAmountUsd] = useState(0);
 
     // Helpers para compatibilidad
     const getCostPrice = (p: Product | CartItem) => p.cost_price ?? p.costPrice ?? 0;
@@ -76,6 +102,15 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     };
 
     const currentRate = useMemo(() => getRateForDate(purchaseDate), [purchaseDate, rateHistory]);
+
+    const newProductCalculatedCostUsd = currentRate > 0 ? newProductCostBs / currentRate : 0;
+    const newProductFinalCost = newProductCostMode === 'calculated' ? newProductCalculatedCostUsd : newProductManualCost;
+    const newProductProfit = newProductPrice - newProductFinalCost;
+    const newProductMargin = newProductFinalCost > 0 ? (newProductProfit / newProductFinalCost) * 100 : 0;
+    const newProductCostPerUnit = newProductUnitsPerPackage > 0 ? newProductFinalCost / newProductUnitsPerPackage : 0;
+    const newProductProfitPerUnit = newProductPricePerUnit - newProductCostPerUnit;
+    const newProductMarginPerUnit = newProductCostPerUnit > 0 ? (newProductProfitPerUnit / newProductCostPerUnit) * 100 : 0;
+    const newProductProfitBs = newProductPrice * currentRate - newProductFinalCost * currentRate;
 
     useEffect(() => {
         window.history.pushState({ purchasePOS: true }, '');
@@ -207,18 +242,55 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         setCart([]);
     };
 
+    const openCreditDebtModal = () => {
+        const totalUsd = calculateTotal();
+        const totalBsValue = totalUsd * currentRate;
+        setCreditDebtAmount(totalBsValue);
+        setCreditDebtAmountUsd(totalUsd);
+        setCreditDebtTitle('');
+        setCreditDebtCurrencyType('bs');
+        setIsCreditDebtModalOpen(true);
+    };
+
+    const handleCreditDebtSubmit = () => {
+        if (cart.length === 0) return;
+        
+        const debtData: BusinessDebt = {
+            id: `debt_${Date.now()}`,
+            timestamp: Date.now(),
+            title: creditDebtTitle || 'Deuda de compra',
+            amountUsd: creditDebtAmountUsd,
+            amountBs: creditDebtAmount,
+            currencyType: creditDebtCurrencyType,
+            rateAtCreation: currentRate,
+            isPaid: false,
+            notes: ''
+        };
+
+        onPurchase(cart, 'Credit', debtData);
+        setCart([]);
+        setIsCreditDebtModalOpen(false);
+    };
+
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     const handleAddProduct = () => {
         const product: Product = {
-            id: `temp_${Date.now()}`,
+            id: `prod_${Math.random().toString(36).substr(2, 9)}`,
             name: newProductName,
             category: newProductCategory,
             price: newProductPrice,
-            cost_price: 0,
-            costPrice: newProductPrice,
+            costPrice: newProductFinalCost,
+            cost_price: newProductFinalCost,
             stock: newProductStock,
-            sellingMode: 'simple'
+            sellingMode: newProductSellingMode,
+            measurementUnit: newProductMeasurementUnit,
+            unitsPerPackage: newProductUnitsPerPackage,
+            pricePerUnit: newProductPricePerUnit,
+            remainingUnits: 0,
+            cost_mode: newProductCostMode,
+            cost_bs: newProductCostMode === 'calculated' ? newProductCostBs : 0,
+            cost_date: newProductCostMode === 'calculated' ? newProductCostDate : ''
         };
 
         onAddProduct?.(product);
@@ -227,14 +299,86 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             const newProduct = products.find(p => p.name === newProductName);
             if (newProduct) {
                 addToCart(newProduct);
+            } else {
+                addToCart(product);
             }
         }, 100);
         
         setShowAddProductModal(false);
+        resetNewProductForm();
+    };
+
+    const resetNewProductForm = () => {
         setNewProductName('');
         setNewProductCategory('Bebidas');
         setNewProductStock(1);
         setNewProductPrice(0);
+        setNewProductPriceDisplay('');
+        setNewProductPricePerUnitDisplay('');
+        setNewProductManualCostDisplay('');
+        setNewProductCostBs(0);
+        setNewProductCostDate(new Date().toISOString().split('T')[0]);
+        setNewProductCostMode('calculated');
+        setNewProductManualCost(0);
+        setNewProductSellingMode('simple');
+        setNewProductUnitsPerPackage(0);
+        setNewProductPricePerUnit(0);
+        setNewProductMeasurementUnit('kg');
+        setCalcDisplay('');
+        setCalcResult(0);
+        setCalcAccumulator(0);
+    };
+
+    const handleCalcInput = (value: string) => {
+        if (value === '=') {
+            const result = calculateResult();
+            setCalcResult(result);
+            setCalcDisplay(result.toString());
+        } else if (value === 'C') {
+            setCalcDisplay('');
+            setCalcResult(0);
+            setCalcAccumulator(0);
+        } else if (value === '%') {
+            try {
+                if (calcDisplay.includes('+') || calcDisplay.includes('-') || calcDisplay.includes('*') || calcDisplay.includes('/')) {
+                    const lastOpIndex = Math.max(
+                        calcDisplay.lastIndexOf('+'),
+                        calcDisplay.lastIndexOf('-'),
+                        calcDisplay.lastIndexOf('*'),
+                        calcDisplay.lastIndexOf('/')
+                    );
+                    const baseNum = parseFloat(calcDisplay.substring(0, lastOpIndex));
+                    const percentNum = parseFloat(calcDisplay.substring(lastOpIndex + 1));
+                    if (!isNaN(baseNum) && !isNaN(percentNum)) {
+                        const result = baseNum + (baseNum * percentNum / 100);
+                        setCalcResult(result);
+                        setCalcDisplay(result.toString());
+                    }
+                }
+            } catch {}
+        } else {
+            setCalcDisplay(prev => prev + value);
+        }
+    };
+
+    const calculateResult = (): number => {
+        try {
+            let sanitized = calcDisplay;
+            sanitized = sanitized.replace(/[^0-9+\-*/.]/g, '');
+            if (!sanitized) return 0;
+            const result = Function('"use strict"; return (' + sanitized + ')')();
+            return typeof result === 'number' ? result : 0;
+        } catch {
+            return 0;
+        }
+    };
+
+    const handleCreateCategory = () => {
+        if (newCategoryName.trim()) {
+            setNewProductCategory(newCategoryName.trim());
+            setNewCategoryName('');
+            setShowNewProductCategoryModal(false);
+        }
     };
 
     return (
@@ -494,7 +638,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             <button
                                 disabled={cart.length === 0}
                                 onClick={() => initiatePurchase('Cash')}
@@ -521,6 +665,15 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 <CreditCard className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase">Tarjeta</span>
                             </button>
+
+                            <button
+                                disabled={cart.length === 0}
+                                onClick={() => openCreditDebtModal()}
+                                className="p-3 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-orange-100 active:scale-95"
+                            >
+                                <Clock className="w-5 h-5" />
+                                <span className="text-[10px] font-black uppercase">Crédito</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -542,77 +695,400 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             )}
 
             {showAddProductModal && (
-                <div className="fixed inset-0 bg-white z-[110] flex flex-col animate-fade-in">
-                    <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
-                        <h3 className="text-xl font-black text-gray-900">Nuevo Producto</h3>
-                        <button onClick={() => setShowAddProductModal(false)} className="text-gray-400 text-3xl font-light hover:text-black">
-                            &times;
+                <div className="fixed inset-0 bg-white z-[110] flex flex-col animate-fade-in overflow-hidden">
+                    {showNewProductCategoryModal && (
+                        <div className="absolute inset-0 bg-white z-30 flex flex-col animate-slide-up">
+                            <div className="p-6 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
+                                        <Tag className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-gray-900">Categoría</h3>
+                                        <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">Seleccionar o Crear</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowNewProductCategoryModal(false)} className="bg-white p-2 rounded-full text-emerald-600 shadow-sm">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-2 w-full max-w-2xl mx-auto">
+                                {['Bebidas', 'Panadería', 'Comida', 'Snacks', 'Otros', 'Desayunos', 'Postres', 'Accesorios'].map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => { setNewProductCategory(cat); setShowNewProductCategoryModal(false); }}
+                                        className={`w-full p-3 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-[0.98] ${newProductCategory === cat ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'}`}
+                                    >
+                                        <span className="font-bold text-sm truncate">{cat}</span>
+                                        {newProductCategory === cat && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="p-6 w-full max-w-2xl mx-auto border-t border-gray-100 bg-gray-50">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2">Crear Nueva Categoría</p>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Nombre de nueva categoría..."
+                                        className="flex-1 p-4 bg-white border-2 border-gray-200 rounded-2xl text-sm font-bold text-gray-900 outline-none focus:border-emerald-500 transition-all"
+                                        value={newCategoryName}
+                                        onChange={(e) => setNewCategoryName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory(); } }}
+                                    />
+                                    <button
+                                        onClick={handleCreateCategory}
+                                        disabled={!newCategoryName.trim()}
+                                        className="bg-gray-900 text-white p-4 rounded-2xl shadow-lg disabled:opacity-50 disabled:shadow-none active:scale-95 transition-all"
+                                    >
+                                        <Plus className="w-6 h-6" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showNewProductVariantModal && (
+                        <div className="absolute inset-0 bg-white z-20 flex flex-col animate-slide-up">
+                            <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600">
+                                        <Settings className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-gray-900">Características Especiales</h3>
+                                        <p className="text-xs text-indigo-500 font-bold uppercase tracking-widest">Configuración de Venta</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowNewProductVariantModal(false)} className="bg-white p-2 rounded-full text-indigo-600 shadow-sm">
+                                    <Check className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-6 flex-1 overflow-y-auto w-full max-w-2xl mx-auto">
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewProductSellingMode('simple')}
+                                        className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${newProductSellingMode === 'simple' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                                    >
+                                        <Package className="w-6 h-6" />
+                                        <span className="text-[10px] font-black uppercase">Unidad</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewProductSellingMode('weight')}
+                                        className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${newProductSellingMode === 'weight' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                                    >
+                                        <Scale className="w-6 h-6" />
+                                        <span className="text-[10px] font-black uppercase">Peso</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewProductSellingMode('package')}
+                                        className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${newProductSellingMode === 'package' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
+                                    >
+                                        <Box className="w-6 h-6" />
+                                        <span className="text-[10px] font-black uppercase">Paquete</span>
+                                    </button>
+                                </div>
+                                {newProductSellingMode === 'weight' && (
+                                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                                        <h4 className="font-bold text-gray-900 text-sm">Venta por Peso / Volumen</h4>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Unidad de Medida</label>
+                                            <select
+                                                className="w-full p-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
+                                                value={newProductMeasurementUnit}
+                                                onChange={e => setNewProductMeasurementUnit(e.target.value)}
+                                            >
+                                                <option value="kg">Kilogramos (Kg)</option>
+                                                <option value="g">Gramos (g)</option>
+                                                <option value="l">Litros (L)</option>
+                                                <option value="ml">Mililitros (ml)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                                {newProductSellingMode === 'package' && (
+                                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4">
+                                        <h4 className="font-bold text-gray-900 text-sm">Venta por Paquete</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Unidades / Pack</label>
+                                                <div className="relative">
+                                                    <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                                    <input
+                                                        type="number"
+                                                        placeholder="Ej. 12"
+                                                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
+                                                        value={newProductUnitsPerPackage || ''}
+                                                        onChange={e => setNewProductUnitsPerPackage(parseInt(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-orange-400 uppercase tracking-widest px-1">Costo Unitario</label>
+                                                <div className="w-full p-3 border-2 border-orange-100 bg-orange-50 rounded-xl flex items-center gap-2 h-[46px]">
+                                                    <span className="text-sm font-black text-orange-700">${newProductCostPerUnit.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="p-6 w-full max-w-2xl mx-auto">
+                                <button
+                                    onClick={() => setShowNewProductVariantModal(false)}
+                                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform"
+                                >
+                                    Guardar Configuración
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="p-3 sm:p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                        <h3 className="text-base sm:text-lg font-black text-gray-900">Nuevo Producto</h3>
+                        <button onClick={() => { setShowAddProductModal(false); resetNewProductForm(); }} className="text-gray-400 hover:text-black p-1">
+                            <X className="w-6 h-6" />
                         </button>
                     </div>
-                    
-                    <form onSubmit={(e) => { e.preventDefault(); handleAddProduct(); }} className="p-6 space-y-6 overflow-y-auto flex-1">
+
+                    <form onSubmit={(e) => { e.preventDefault(); handleAddProduct(); }} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto touch-manipulation">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre</label>
-                            <input
-                                type="text"
-                                placeholder="Nombre del producto"
-                                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition-all text-sm font-bold text-gray-900"
-                                value={newProductName}
-                                onChange={(e) => setNewProductName(e.target.value)}
-                                autoFocus
-                            />
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre del Producto</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Ej. Café Molido 1kg"
+                                    className="flex-1 p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
+                                    value={newProductName}
+                                    onChange={(e) => setNewProductName(e.target.value)}
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewProductVariantModal(true)}
+                                    className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${newProductSellingMode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
+                                >
+                                    {newProductSellingMode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : newProductSellingMode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
-                            <select
-                                className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900"
-                                value={newProductCategory}
-                                onChange={(e) => setNewProductCategory(e.target.value)}
-                            >
-                                <option value="Bebidas">Bebidas</option>
-                                <option value="Panadería">Panadería</option>
-                                <option value="Comida">Comida</option>
-                                <option value="Snacks">Snacks</option>
-                                <option value="Otros">Otros</option>
-                            </select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Stock</label>
+                        <div className="flex gap-2">
+                            <div className="flex-1 space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewProductCategoryModal(true)}
+                                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
+                                >
+                                    <span>{newProductCategory}</span>
+                                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                                </button>
+                            </div>
+                            <div className="w-24 space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
+                                    {newProductSellingMode === 'weight' ? `Stock (${newProductMeasurementUnit})` : 'Stock'}
+                                </label>
                                 <input
                                     type="number"
+                                    step={newProductSellingMode === 'weight' ? "0.01" : "1"}
                                     placeholder="0"
-                                    className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
-                                    value={newProductStock}
-                                    onChange={(e) => setNewProductStock(parseInt(e.target.value) || 0)}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Precio $</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    className="w-full p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
-                                    value={newProductPrice || ''}
-                                    onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || 0)}
+                                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
+                                    value={newProductStock || ''}
+                                    onChange={(e) => setNewProductStock(parseFloat(e.target.value) || 0)}
                                 />
                             </div>
                         </div>
 
-                        {newProductPrice > 0 && (
-                            <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Referencia en Bs</p>
-                                <p className="text-xl font-black text-indigo-600">{(newProductPrice * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                            </div>
-                        )}
+                        <div className="pt-2 border-t border-gray-100">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[8px] font-bold ${newProductCostMode === 'calculated' ? 'text-red-500' : 'text-gray-400'}`}>Calculado</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewProductCostMode(newProductCostMode === 'calculated' ? 'manual' : 'calculated')}
+                                                className={`w-10 h-5 rounded-full transition-colors ${newProductCostMode === 'manual' ? 'bg-red-400' : 'bg-gray-300'}`}
+                                            >
+                                                <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${newProductCostMode === 'manual' ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                            </button>
+                                            <span className={`text-[8px] font-bold ${newProductCostMode === 'manual' ? 'text-red-500' : 'text-gray-400'}`}>Manual</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {newProductCostMode === 'calculated' ? (
+                                        <>
+                                            <div className="flex gap-2 items-center">
+                                                <div className="relative flex-1">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                                                        value={newProductCostBs || ''}
+                                                        placeholder="0.00"
+                                                        onChange={e => setNewProductCostBs(parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsCalculatorOpen(true)}
+                                                    className="w-10 h-10 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500 transition-all"
+                                                    title="Calculadora"
+                                                >
+                                                    <Calculator className="w-5 h-5" />
+                                                </button>
+                                                <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                                                    <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
+                                                    <span className="text-sm font-black text-red-700">${newProductCalculatedCostUsd.toFixed(3)}</span>
+                                                </div>
+                                            </div>
 
-                        <div className="pt-4 flex gap-3 mt-auto">
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <input
+                                                        type="date"
+                                                        className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                                                        value={newProductCostDate}
+                                                        onChange={e => setNewProductCostDate(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
+                                                    <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                                                    <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex gap-2 items-center">
+                                            <div className="relative flex-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                                                    value={newProductManualCostDisplay}
+                                                    placeholder="0.00"
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setNewProductManualCostDisplay(val);
+                                                        const normalized = val.replace(',', '.');
+                                                        setNewProductManualCost(parseFloat(normalized) || 0);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                                                <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
+                                                <span className="text-sm font-black text-orange-700">{(newProductManualCost * currentRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+                                    <div className="flex gap-3 items-stretch">
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
+                                            <div className="relative flex-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
+                                                    value={newProductPriceDisplay}
+                                                    placeholder="0.00"
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setNewProductPriceDisplay(val);
+                                                        const normalized = val.replace(',', '.');
+                                                        setNewProductPrice(parseFloat(normalized) || 0);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                                                <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
+                                                <span className="text-sm font-black text-emerald-800">
+                                                    {(newProductPrice * currentRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                                                <span className={`text-sm font-bold ${newProductProfit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                    ${newProductProfit.toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                                                <span className={`text-sm font-bold ${newProductMargin >= 30 ? 'text-emerald-500' : newProductMargin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                                                    {newProductMargin.toFixed(0)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {newProductSellingMode === 'package' && (
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                                    <div className="flex gap-3 items-stretch">
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">VENTA X UNIDAD</label>
+                                            <div className="relative flex-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
+                                                    value={newProductPricePerUnitDisplay}
+                                                    placeholder="0.00"
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setNewProductPricePerUnitDisplay(val);
+                                                        const normalized = val.replace(',', '.');
+                                                        setNewProductPricePerUnit(parseFloat(normalized) || 0);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                                                <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
+                                                <span className="text-sm font-black text-blue-800">
+                                                    {(newProductPricePerUnit * currentRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                                                <span className={`text-sm font-bold ${newProductProfitPerUnit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                    ${newProductProfitPerUnit.toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                                                <span className={`text-sm font-bold ${newProductMarginPerUnit >= 30 ? 'text-emerald-500' : newProductMarginPerUnit > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                                                    {newProductMarginPerUnit.toFixed(0)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="pt-2 flex gap-3">
                             <button
                                 type="button"
-                                onClick={() => setShowAddProductModal(false)}
+                                onClick={() => { setShowAddProductModal(false); resetNewProductForm(); }}
                                 className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all active:scale-95"
                             >
                                 Cancelar
@@ -626,6 +1102,67 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             </button>
                         </div>
                     </form>
+
+                    {/* CALCULADORA POPUP */}
+                    {isCalculatorOpen && (
+                        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsCalculatorOpen(false)}>
+                            <div className="bg-white rounded-2xl p-4 w-72 shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-3">
+                                    <span className="text-xs font-black text-gray-400 uppercase">Calculadora</span>
+                                    <button onClick={() => setIsCalculatorOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                
+                                <div className="bg-gray-900 rounded-xl p-4 mb-3">
+                                    <div className="text-right text-white font-bold text-2xl truncate">{calcDisplay || '0'}</div>
+                                    <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</div>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-3">
+                                    <button onClick={() => handleCalcInput('C')} className="p-4 bg-red-100 rounded-xl font-bold text-red-700 hover:bg-red-200 text-lg">C</button>
+                                    <button onClick={() => handleCalcInput('%')} className="p-4 bg-purple-100 rounded-xl font-bold text-purple-700 hover:bg-purple-200 text-lg">%</button>
+                                    <button onClick={() => handleCalcInput('/')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">/</button>
+                                    <button onClick={() => handleCalcInput('*')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">×</button>
+                                    
+                                    <button onClick={() => handleCalcInput('7')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">7</button>
+                                    <button onClick={() => handleCalcInput('8')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">8</button>
+                                    <button onClick={() => handleCalcInput('9')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">9</button>
+                                    <button onClick={() => handleCalcInput('-')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">-</button>
+                                    
+                                    <button onClick={() => handleCalcInput('4')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">4</button>
+                                    <button onClick={() => handleCalcInput('5')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">5</button>
+                                    <button onClick={() => handleCalcInput('6')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">6</button>
+                                    <button onClick={() => handleCalcInput('+')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">+</button>
+                                    
+                                    <button onClick={() => handleCalcInput('1')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">1</button>
+                                    <button onClick={() => handleCalcInput('2')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">2</button>
+                                    <button onClick={() => handleCalcInput('3')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">3</button>
+                                    <button onClick={() => handleCalcInput('=')} className="p-4 bg-orange-100 rounded-xl font-bold text-orange-700 hover:bg-orange-200 text-lg row-span-2">=</button>
+                                    
+                                    <button onClick={() => handleCalcInput('0')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg col-span-2">0</button>
+                                    <button onClick={() => handleCalcInput('.')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">.</button>
+                                </div>
+
+                                <div className="flex gap-2 mt-3">
+                                    <button 
+                                        onClick={() => { 
+                                            const result = calculateResult();
+                                            const roundedResult = Math.round(result * 100) / 100;
+                                            setNewProductCostBs(roundedResult);
+                                            setIsCalculatorOpen(false);
+                                            setCalcDisplay('');
+                                            setCalcResult(0);
+                                            setCalcAccumulator(0);
+                                        }}
+                                        className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
+                                    >
+                                        Insertar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -762,6 +1299,120 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE DEUDA DE CRÉDITO */}
+            {isCreditDebtModalOpen && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsCreditDebtModalOpen(false)}>
+                    <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-orange-50">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900">Deuda a Crédito</h3>
+                                <p className="text-xs font-bold text-orange-600">Registrar compra pendiente</p>
+                            </div>
+                            <button onClick={() => setIsCreditDebtModalOpen(false)} className="text-gray-400 hover:text-black">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="bg-gray-900 p-4 rounded-2xl">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Total Carrito</span>
+                                    <span className="text-xl font-black text-white">Bs {(calculateTotal() * currentRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Referencia</span>
+                                    <span className="text-sm font-bold text-orange-400">${calculateTotal().toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Título / Nota</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej. Compra de inventario"
+                                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
+                                    value={creditDebtTitle}
+                                    onChange={(e) => setCreditDebtTitle(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Tipo de Deuda</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setCreditDebtCurrencyType('bs'); setCreditDebtAmount(totalBs); setCreditDebtAmountUsd(calculateTotal()); }}
+                                        className={`flex-1 p-4 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${creditDebtCurrencyType === 'bs' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                                    >
+                                        <span className="text-lg font-black">BS</span>
+                                        <span className="text-[10px] font-bold">Bolivares</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setCreditDebtCurrencyType('usd'); setCreditDebtAmountUsd(calculateTotal()); setCreditDebtAmount(calculateTotal() * currentRate); }}
+                                        className={`flex-1 p-4 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${creditDebtCurrencyType === 'usd' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                                    >
+                                        <span className="text-lg font-black">USD</span>
+                                        <span className="text-[10px] font-bold">Dólares</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {creditDebtCurrencyType === 'bs' ? (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Monto en Bolivares</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Bs</span>
+                                        <input
+                                            type="number"
+                                            className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 rounded-2xl bg-gray-50 text-xl font-bold text-gray-900 focus:border-orange-500 outline-none"
+                                            value={creditDebtAmount || ''}
+                                            onChange={(e) => { setCreditDebtAmount(parseFloat(e.target.value) || 0); setCreditDebtAmountUsd(currentRate > 0 ? parseFloat(e.target.value) / currentRate : 0); }}
+                                        />
+                                    </div>
+                                    <p className="text-xs font-bold text-gray-400">Referencia: ${creditDebtAmountUsd.toFixed(2)} USD</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Monto en Dólares</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                                        <input
+                                            type="number"
+                                            className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 rounded-2xl bg-gray-50 text-xl font-bold text-gray-900 focus:border-blue-500 outline-none"
+                                            value={creditDebtAmountUsd || ''}
+                                            onChange={(e) => { setCreditDebtAmountUsd(parseFloat(e.target.value) || 0); setCreditDebtAmount(parseFloat(e.target.value) * currentRate); }}
+                                        />
+                                    </div>
+                                    <p className="text-xs font-bold text-gray-400">Referencia: Bs {creditDebtAmount.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                                </div>
+                            )}
+
+                            <div className="bg-gray-50 p-3 rounded-xl">
+                                <p className="text-xs font-bold text-gray-500">
+                                    {creditDebtCurrencyType === 'bs' 
+                                        ? 'La deuda se mantendrá en Bolivares sin variación.' 
+                                        : 'La deuda en Bolivares subirá automáticamente con la tasa del dólar.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 pt-0 flex gap-3">
+                            <button
+                                onClick={() => setIsCreditDebtModalOpen(false)}
+                                className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreditDebtSubmit}
+                                className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-orange-700 transition-all"
+                            >
+                                Confirmar Deuda
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

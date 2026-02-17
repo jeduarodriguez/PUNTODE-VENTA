@@ -1,13 +1,15 @@
 
 import React, { useState } from 'react';
-import { Customer, Sale, CartItem, Worker } from '../types';
-import { Plus, Trash2, Edit, Search, UserPlus, Wallet, AlertCircle, ChevronDown, ChevronUp, History, ShoppingBag, CheckCircle2, Banknote, Smartphone, CreditCard, X, ArrowRight, Calendar, Briefcase, DollarSign, Users } from '../constants';
+import { Customer, Sale, CartItem, Worker, BusinessDebt, ExchangeRateRecord } from '../types';
+import { Plus, Trash2, Edit, Search, UserPlus, Wallet, AlertCircle, ChevronDown, ChevronUp, History, ShoppingBag, CheckCircle2, Banknote, Smartphone, CreditCard, X, ArrowRight, Calendar, Briefcase, DollarSign, Users, Tag, Clock, Check } from '../constants';
 
 interface CustomersProps {
   customers: Customer[];
   workers: Worker[];
   sales: Sale[];
   exchangeRate: number;
+  businessDebts: BusinessDebt[];
+  rateHistory: ExchangeRateRecord[];
   onAdd: (customer: Customer) => void;
   onUpdate: (customer: Customer) => void;
   onDelete: (id: string) => void;
@@ -16,10 +18,14 @@ interface CustomersProps {
   onUpdateWorker: (worker: Worker) => void;
   onDeleteWorker: (id: string) => void;
   onWorkerDebtPayment: (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => void;
+  onAddBusinessDebt: (debt: BusinessDebt) => void;
+  onPayBusinessDebt: (debtId: string, amount: number, method: 'Cash' | 'Transfer' | 'PagoMovil') => void;
+  onUpdateBusinessDebt: (debt: BusinessDebt) => void;
+  onDeleteBusinessDebt: (id: string) => void;
 }
 
-const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchangeRate, onAdd, onUpdate, onDelete, onDebtPayment, onAddWorker, onUpdateWorker, onDeleteWorker, onWorkerDebtPayment }) => {
-  const [activeTab, setActiveTab] = useState<'customers' | 'workers'>('customers');
+const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchangeRate, businessDebts, rateHistory, onAdd, onUpdate, onDelete, onDebtPayment, onAddWorker, onUpdateWorker, onDeleteWorker, onWorkerDebtPayment, onAddBusinessDebt, onPayBusinessDebt, onUpdateBusinessDebt, onDeleteBusinessDebt }) => {
+  const [activeTab, setActiveTab] = useState<'customers' | 'workers' | 'debts'>('customers');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,6 +65,14 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   const [isPayrollPaymentModalOpen, setIsPayrollPaymentModalOpen] = useState(false);
   const [payrollMethod, setPayrollMethod] = useState<'Cash' | 'Transfer' | 'PagoMovil'>('Cash');
 
+  // Estados para Deudas del Negocio
+  const [debtSearchTerm, setDebtSearchTerm] = useState('');
+  const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
+  const [payingDebt, setPayingDebt] = useState<BusinessDebt | null>(null);
+  const [debtPaymentMethod, setDebtPaymentMethod] = useState<'Cash' | 'Transfer' | 'PagoMovil'>('Cash');
+  const [debtPaymentAmount, setDebtPaymentAmount] = useState(0);
+  const [editingDebt, setEditingDebt] = useState<BusinessDebt | null>(null);
+
   const openPayrollModal = () => {
     setSelectedWorkers([]);
     setIsPayrollModalOpen(true);
@@ -89,7 +103,6 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
         const amountToPay = Math.max(0, worker.salary - worker.balance);
         if (amountToPay > 0) {
           onWorkerDebtPayment(workerId, worker.balance, method);
-          // onPayrollPayment(workerId, amountToPay);
         }
       }
     });
@@ -97,6 +110,53 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
     setIsPayrollPaymentModalOpen(false);
     setSelectedWorkers([]);
   };
+
+  // Funciones para Deudas del Negocio
+  const getRateForDate = (dateStr: string): number => {
+    if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+    const targetDate = new Date(dateStr + 'T00:00:00').getTime();
+    const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+    const exactMatch = sortedRates.find(r => {
+      const rateDate = new Date(r.timestamp);
+      const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
+      return rateDateStr === dateStr;
+    });
+    if (exactMatch) return exactMatch.rate;
+    const closestRate = sortedRates.find(r => r.timestamp < targetDate);
+    if (closestRate) return closestRate.rate;
+    return sortedRates[0]?.rate || exchangeRate;
+  };
+
+  const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {
+    if (debt.currencyType === 'bs') {
+      return debt.amountBs;
+    } else {
+      return debt.amountUsd * exchangeRate;
+    }
+  };
+
+  const openDebtPaymentModal = (debt: BusinessDebt) => {
+    setPayingDebt(debt);
+    setDebtPaymentAmount(getCurrentDebtAmountBs(debt));
+    setIsDebtPaymentModalOpen(true);
+  };
+
+  const handlePayDebt = () => {
+    if (payingDebt && debtPaymentAmount > 0) {
+      onPayBusinessDebt(payingDebt.id, debtPaymentAmount, debtPaymentMethod);
+      setIsDebtPaymentModalOpen(false);
+      setPayingDebt(null);
+      setDebtPaymentAmount(0);
+    }
+  };
+
+  const filteredDebts = businessDebts
+    .filter(d => d.title.toLowerCase().includes(debtSearchTerm.toLowerCase()))
+    .sort((a, b) => b.timestamp - a.timestamp);
+
+  const totalUnpaidDebts = filteredDebts
+    .filter(d => !d.isPaid)
+    .reduce((sum, d) => sum + getCurrentDebtAmountBs(d), 0);
 
   const filteredWorkers = workers
     .filter(w => w.name.toLowerCase().includes(workerSearchTerm.toLowerCase()) || w.position.toLowerCase().includes(workerSearchTerm.toLowerCase()))
@@ -357,7 +417,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Tabs para Clientes y Trabajadores */}
+      {/* Tabs para Clientes, Trabajadores y Deudas */}
       <div className="flex bg-gray-100 p-1 rounded-2xl">
         <button
           onClick={() => setActiveTab('customers')}
@@ -373,13 +433,24 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
           <Briefcase className="w-4 h-4" />
           Trabajadores
         </button>
+        <button
+          onClick={() => setActiveTab('debts')}
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'debts' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+        >
+          <Clock className="w-4 h-4" />
+          Deudas
+        </button>
       </div>
 
       {/* Header y Buscador */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm sticky top-0 z-10">
         <div>
-           <h2 className="text-2xl font-black text-gray-800">{activeTab === 'customers' ? 'Clientes' : 'Trabajadores'}</h2>
-            <p className="text-xs text-gray-400 font-medium">{activeTab === 'customers' ? 'Gestiona clientes' : ''}</p>
+           <h2 className="text-2xl font-black text-gray-800">
+             {activeTab === 'customers' ? 'Clientes' : activeTab === 'workers' ? 'Trabajadores' : 'Deudas del Negocio'}
+           </h2>
+            <p className="text-xs text-gray-400 font-medium">
+              {activeTab === 'customers' ? 'Gestiona clientes' : activeTab === 'workers' ? 'Gestiona trabajadores' : `Total pendiente: Bs ${totalUnpaidDebts.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`}
+            </p>
         </div>
         
         <div className="flex w-full md:w-auto gap-2">
@@ -387,22 +458,80 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder={activeTab === 'customers' ? "Buscar por nombre..." : "Buscar trabajador..."}
+              placeholder={activeTab === 'customers' ? "Buscar por nombre..." : activeTab === 'workers' ? "Buscar trabajador..." : "Buscar deuda..."}
               className="w-full pl-10 pr-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl text-black font-bold text-sm focus:border-indigo-500 outline-none transition-colors"
-              value={activeTab === 'customers' ? searchTerm : workerSearchTerm}
-              onChange={(e) => activeTab === 'customers' ? setSearchTerm(e.target.value) : setWorkerSearchTerm(e.target.value)}
+              value={activeTab === 'customers' ? searchTerm : activeTab === 'workers' ? workerSearchTerm : debtSearchTerm}
+              onChange={(e) => activeTab === 'customers' ? setSearchTerm(e.target.value) : activeTab === 'workers' ? setWorkerSearchTerm(e.target.value) : setDebtSearchTerm(e.target.value)}
             />
           </div>
-          <button
-            onClick={() => activeTab === 'customers' ? openModal() : openPayrollModal()}
-            className="bg-gray-900 text-white px-4 py-2 rounded-2xl text-sm font-black shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : 'Pagar Nómina'}</span>
-          </button>
+          {activeTab !== 'debts' && (
+            <button
+              onClick={() => activeTab === 'customers' ? openModal() : openPayrollModal()}
+              className="bg-gray-900 text-white px-4 py-2 rounded-2xl text-sm font-black shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : 'Pagar Nómina'}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {activeTab === 'customers' ? (
+      {activeTab === 'debts' ? (
+      <>
+        {/* Lista de Deudas del Negocio */}
+        <div className="grid grid-cols-1 gap-3">
+          {filteredDebts.map(debt => {
+            const currentAmountBs = getCurrentDebtAmountBs(debt);
+            const date = new Date(debt.timestamp);
+            const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+
+            return (
+              <div 
+                key={debt.id} 
+                className={`bg-white p-4 rounded-2xl border-2 flex items-center gap-3 ${debt.isPaid ? 'border-gray-100 opacity-60' : 'border-red-100'}`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${debt.isPaid ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-500'}`}>
+                  {debt.isPaid ? <CheckCircle2 className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-gray-900 truncate">{debt.title}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${debt.currencyType === 'usd' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                      {debt.currencyType.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">{dateStr}</p>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <p className="font-black text-lg text-gray-900">
+                    Bs {currentAmountBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                  </p>
+                  {debt.currencyType === 'usd' && (
+                    <p className="text-[10px] font-bold text-gray-400">${debt.amountUsd.toFixed(2)}</p>
+                  )}
+                </div>
+
+                {!debt.isPaid && (
+                  <button
+                    onClick={() => openDebtPaymentModal(debt)}
+                    className="bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg hover:bg-emerald-600 transition-transform active:scale-95 shrink-0"
+                  >
+                    Pagar
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {filteredDebts.length === 0 && (
+            <div className="py-12 text-center flex flex-col items-center justify-center opacity-30 gap-2">
+              <Clock className="w-10 h-10" />
+              <p className="text-xs font-black uppercase tracking-widest">No hay deudas registradas</p>
+            </div>
+          )}
+        </div>
+      </>
+      ) : activeTab === 'customers' ? (
       <>
       {/* Grid de Clientes Compacto */}
       <div className="grid grid-cols-1 gap-3">
@@ -917,6 +1046,89 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                               <span className="font-black text-sm">TARJETA</span>
                           </button>
                       </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL DE PAGO DE DEUDAS */}
+      {isDebtPaymentModalOpen && payingDebt && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsDebtPaymentModalOpen(false)}>
+              <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+                  <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                      <h3 className="text-xl font-black text-gray-900">Pagar Deuda</h3>
+                      <button onClick={() => setIsDebtPaymentModalOpen(false)} className="text-gray-400 hover:text-black">
+                          <X className="w-6 h-6" />
+                      </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                      <div className="bg-red-50 border border-red-100 p-4 rounded-2xl">
+                          <p className="text-xs font-bold text-red-400 uppercase tracking-widest">Deuda</p>
+                          <p className="text-2xl font-black text-gray-900">{payingDebt.title}</p>
+                          <p className="text-lg font-bold text-gray-600 mt-1">
+                              Bs {getCurrentDebtAmountBs(payingDebt).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                          </p>
+                          {payingDebt.currencyType === 'usd' && (
+                              <p className="text-xs font-bold text-gray-400">${payingDebt.amountUsd.toFixed(2)} USD</p>
+                          )}
+                      </div>
+
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Monto a Pagar (Bs)</label>
+                          <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Bs</span>
+                              <input
+                                  type="number"
+                                  className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 rounded-2xl bg-gray-50 text-xl font-bold text-gray-900 focus:border-emerald-500 outline-none"
+                                  value={debtPaymentAmount}
+                                  onChange={(e) => setDebtPaymentAmount(parseFloat(e.target.value) || 0)}
+                              />
+                          </div>
+                      </div>
+
+                      <div className="p-4 bg-gray-50 rounded-2xl">
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Método de Pago</p>
+                          <div className="grid grid-cols-3 gap-2">
+                              <button
+                                  onClick={() => setDebtPaymentMethod('Cash')}
+                                  className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${debtPaymentMethod === 'Cash' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                              >
+                                  <Banknote className="w-5 h-5" />
+                                  <span className="text-[10px] font-bold">Efectivo</span>
+                              </button>
+                              <button
+                                  onClick={() => setDebtPaymentMethod('Transfer')}
+                                  className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${debtPaymentMethod === 'Transfer' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                              >
+                                  <Wallet className="w-5 h-5" />
+                                  <span className="text-[10px] font-bold">Transfer</span>
+                              </button>
+                              <button
+                                  onClick={() => setDebtPaymentMethod('PagoMovil')}
+                                  className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${debtPaymentMethod === 'PagoMovil' ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                              >
+                                  <Smartphone className="w-5 h-5" />
+                                  <span className="text-[10px] font-bold">Pago Móvil</span>
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="p-6 pt-0 flex gap-3">
+                      <button
+                          onClick={() => setIsDebtPaymentModalOpen(false)}
+                          className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all"
+                      >
+                          Cancelar
+                      </button>
+                      <button
+                          onClick={handlePayDebt}
+                          disabled={debtPaymentAmount <= 0}
+                          className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:shadow-none"
+                      >
+                          Confirmar Pago
+                      </button>
                   </div>
               </div>
           </div>

@@ -8,7 +8,7 @@ import Customers from './components/Customers';
 import Settings from './components/Settings';
 import RateModal from './components/RateModal';
 import Dashboard from './components/Dashboard';
-import { Product, Sale, View, Customer, ExchangeRateRecord, CartItem, TreasuryTransaction, Worker } from './types';
+import { Product, Sale, View, Customer, ExchangeRateRecord, CartItem, TreasuryTransaction, Worker, BusinessDebt } from './types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_SALES, INITIAL_RATE_HISTORY, INITIAL_TREASURY, CheckCircle2, Settings as SettingsIcon, Smartphone, Share as ShareIcon, DollarSign, Plus, X, ShoppingCart, Package, Users, Banknote, Landmark, PieChart } from './constants';
 // Cambiamos el servicio a Supabase
 import { syncPath, saveData, deleteData, updateBatch } from './services/supabaseService';
@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [businessDebts, setBusinessDebts] = useState<BusinessDebt[]>([]);
 
   useEffect(() => {
     localStorage.setItem('pointy_last_view', view);
@@ -95,6 +96,10 @@ const App: React.FC = () => {
       setWorkers(data ? Object.values(data).filter(Boolean) as Worker[] : []);
     });
 
+    const unsubBusinessDebts = syncPath('businessDebts', (data) => {
+      setBusinessDebts(data ? Object.values(data).filter(Boolean) as BusinessDebt[] : []);
+    });
+
     const unsubSales = syncPath('sales', (data) => {
       console.log('📥 Sales loaded:', data);
       setSales(data ? Object.values(data).filter(Boolean) as Sale[] : []);
@@ -142,7 +147,7 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
-      unsubProducts(); unsubCustomers(); unsubWorkers(); unsubSales(); unsubTreasury(); unsubRate(); unsubHistory(); unsubCategories();
+      unsubProducts(); unsubCustomers(); unsubWorkers(); unsubBusinessDebts(); unsubSales(); unsubTreasury(); unsubRate(); unsubHistory(); unsubCategories();
     };
   }, []);
 
@@ -337,8 +342,77 @@ const App: React.FC = () => {
     try {
       await updateBatch(updates);
       showNotification('Venta anulada');
-    } catch (error) {
+    } catch (e) {
       showNotification('Error', 'error');
+    }
+  };
+
+  const handleAddBusinessDebt = (debt: BusinessDebt) => {
+    setBusinessDebts(prev => [...prev, debt]);
+    saveData(`businessDebts/${debt.id}`, debt);
+    showNotification('Deuda registrada');
+  };
+
+  const handlePayBusinessDebt = async (debtId: string, amount: number, method: 'Cash' | 'Transfer' | 'PagoMovil') => {
+    const debt = businessDebts.find(d => d.id === debtId);
+    if (!debt) return;
+
+    const updates: any = {};
+    
+    const paidAmount = debt.paidAmount || 0;
+    const newPaidAmount = paidAmount + amount;
+    const isFullyPaid = newPaidAmount >= getCurrentDebtAmountBs(debt);
+    
+    const updatedDebt: BusinessDebt = {
+      ...debt,
+      isPaid: isFullyPaid,
+      paidAt: isFullyPaid ? Date.now() : debt.paidAt,
+      paidAmount: newPaidAmount,
+      paidMethod: method
+    };
+    
+    updates[`businessDebts/${debtId}`] = updatedDebt;
+    setBusinessDebts(prev => prev.map(d => d.id === debtId ? updatedDebt : d));
+
+    if (method === 'Cash') {
+      const treasuryTransaction: TreasuryTransaction = {
+        id: `debt_payment_${debtId}_${Date.now()}`,
+        timestamp: Date.now(),
+        type: 'income',
+        category: 'Cobros',
+        description: `Pago Deuda: ${debt.title}`,
+        amount: amount / exchangeRate,
+        amountBs: amount,
+        exchangeRate,
+        method
+      };
+      updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
+      setTreasuryTransactions(prev => [...prev, treasuryTransaction]);
+    }
+
+    try {
+      await updateBatch(updates);
+      showNotification(isFullyPaid ? 'Deuda pagada completamente' : 'Abono registrado');
+    } catch (e) {
+      showNotification('Error', 'error');
+    }
+  };
+
+  const handleUpdateBusinessDebt = (debt: BusinessDebt) => {
+    setBusinessDebts(prev => prev.map(d => d.id === debt.id ? debt : d));
+    saveData(`businessDebts/${debt.id}`, debt);
+  };
+
+  const handleDeleteBusinessDebt = (id: string) => {
+    setBusinessDebts(prev => prev.filter(d => d.id !== id));
+    deleteData(`businessDebts/${id}`);
+  };
+
+  const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {
+    if (debt.currencyType === 'bs') {
+      return debt.amountBs;
+    } else {
+      return debt.amountUsd * exchangeRate;
     }
   };
 
@@ -614,10 +688,14 @@ const App: React.FC = () => {
     await saveData('settings/categories', newCats);
   };
 
-  const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => {
+  const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
     const now = Date.now();
     const totalUsd = items.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
     const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity), 0);
+
+    if (businessDebt) {
+      handleAddBusinessDebt(businessDebt);
+    }
 
     const transaction: TreasuryTransaction = {
       id: `purchase_${now}`,
@@ -701,7 +779,7 @@ const App: React.FC = () => {
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
           {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
-          {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} />}
+          {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>
 

@@ -90,4 +90,19 @@ export interface TreasuryTransaction {
   method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Zelle/Intl' | 'Card' | 'PointOfSale' | 'Credit';
 }
 
+export interface BusinessDebt {
+  id: string;
+  timestamp: number;
+  title: string; // Nota o título de la deuda
+  amountUsd: number; // Monto en dólares (si es deuda en USD, si es en BS se calcula según tasa)
+  amountBs: number; // Monto en bolívares (si es deuda en BS, si es en USD se recalcula)
+  currencyType: 'usd' | 'bs'; // Tipo de deuda: dólares o bolívares
+  rateAtCreation: number; // Tasa cuando se creó la deuda
+  isPaid: boolean;
+  paidAt?: number;
+  paidAmount?: number;
+  paidMethod?: 'Cash' | 'Transfer' | 'PagoMovil';
+  notes?: string;
+}
+
 export type View = 'pos' | 'inventory' | 'reports' | 'customers' | 'settings' | 'treasury' | 'dashboard';
