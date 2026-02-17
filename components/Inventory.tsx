@@ -1013,7 +1013,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       </div>
                       <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                         <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
-                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
                       </div>
                     </div>
                   )}

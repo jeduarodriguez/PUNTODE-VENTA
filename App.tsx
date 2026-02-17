@@ -102,14 +102,14 @@ const App: React.FC = () => {
         id: d.id,
         timestamp: d.timestamp,
         title: d.title,
-        amountUsd: d.amount_usd,
-        amountBs: d.amount_bs,
-        currencyType: d.currency_type,
-        rateAtCreation: d.rate_at_creation,
-        isPaid: d.is_paid,
-        paidAt: d.paid_at,
-        paidAmount: d.paid_amount,
-        paidMethod: d.paid_method,
+        amountUsd: d.amount_usd ?? d.amountUsd,
+        amountBs: d.amount_bs ?? d.amountBs,
+        currencyType: d.currency_type ?? d.currencyType,
+        rateAtCreation: d.rate_at_creation ?? d.rateAtCreation,
+        isPaid: d.is_paid ?? d.isPaid,
+        paidAt: d.paid_at ?? d.paidAt,
+        paidAmount: d.paid_amount ?? d.paidAmount,
+        paidMethod: d.paid_method ?? d.paidMethod,
         notes: d.notes
       }));
       setBusinessDebts(transformedDebts as BusinessDebt[]);
@@ -390,21 +390,37 @@ const App: React.FC = () => {
     setBusinessDebts(prev => prev.map(d => d.id === debtId ? updatedDebt : d));
 
     const debtRate = debt.rateAtCreation || exchangeRate;
-    if (method === 'Cash') {
-      const treasuryTransaction: TreasuryTransaction = {
-        id: `debt_payment_${debtId}_${Date.now()}`,
-        timestamp: Date.now(),
-        type: 'income',
-        category: 'Cobros',
-        description: `Pago Deuda: ${debt.title} (Tasa: ${debtRate.toFixed(2)} Bs/$)`,
-        amount: (debt.currencyType === 'usd' ? debt.amountUsd : amount / debtRate),
-        amountBs: amount,
-        exchangeRate: debtRate,
-        method
-      };
-      updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
-      setTreasuryTransactions(prev => [...prev, treasuryTransaction]);
-    }
+    const amountUsd = debt.currencyType === 'usd' ? debt.amountUsd : amount / debtRate;
+    
+    // Registrar ingreso por el pago de la deuda
+    const incomeTransaction: TreasuryTransaction = {
+      id: `debt_income_${debtId}_${Date.now()}`,
+      timestamp: Date.now(),
+      type: 'income',
+      category: 'Cobros',
+      description: `Pago Deuda: ${debt.title} (Tasa: ${debtRate.toFixed(2)} Bs/$)`,
+      amount: amountUsd,
+      amountBs: amount,
+      exchangeRate: debtRate,
+      method
+    };
+    updates[`treasury/${incomeTransaction.id}`] = incomeTransaction;
+    setTreasuryTransactions(prev => [...prev, incomeTransaction]);
+
+    // Registrar egreso según método de pago (descuenta de las cuentas)
+    const expenseTransaction: TreasuryTransaction = {
+      id: `debt_expense_${debtId}_${Date.now()}`,
+      timestamp: Date.now(),
+      type: 'expense',
+      category: method === 'Cash' ? 'Egresos Cash' : 'Egresos Transferencia',
+      description: `Pago Deuda: ${debt.title}`,
+      amount: amountUsd,
+      amountBs: amount,
+      exchangeRate: debtRate,
+      method
+    };
+    updates[`treasury/${expenseTransaction.id}`] = expenseTransaction;
+    setTreasuryTransactions(prev => [...prev, expenseTransaction]);
 
     try {
       await updateBatch(updates);
@@ -422,6 +438,17 @@ const App: React.FC = () => {
   const handleDeleteBusinessDebt = (id: string) => {
     setBusinessDebts(prev => prev.filter(d => d.id !== id));
     deleteData(`businessdebts/${id}`);
+    
+    // Eliminar transacciones relacionadas en treasury (las que tienen el ID de la deuda)
+    const relatedTransactions = treasuryTransactions.filter(t => 
+      t.description?.includes(id) || t.id?.includes(id)
+    );
+    relatedTransactions.forEach(t => {
+      deleteData(`treasury/${t.id}`);
+    });
+    setTreasuryTransactions(prev => prev.filter(t => 
+      !t.description?.includes(id) && !t.id?.includes(id)
+    ));
   };
 
   const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {

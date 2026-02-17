@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS treasury (
   method TEXT
 );
 
+-- Business Debts
+CREATE TABLE IF NOT EXISTS businessdebts (
+  id TEXT PRIMARY KEY,
+  timestamp BIGINT,
+  title TEXT,
+  amount_usd NUMERIC DEFAULT 0,
+  amount_bs NUMERIC DEFAULT 0,
+  currency_type TEXT,
+  rate_at_creation NUMERIC DEFAULT 0,
+  is_paid BOOLEAN DEFAULT FALSE,
+  paid_at BIGINT,
+  paid_amount NUMERIC DEFAULT 0,
+  paid_method TEXT,
+  notes TEXT
+);
+
 -- Settings
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY,
@@ -88,3 +104,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE sales;
 ALTER PUBLICATION supabase_realtime ADD TABLE treasury;
 ALTER PUBLICATION supabase_realtime ADD TABLE settings;
 ALTER PUBLICATION supabase_realtime ADD TABLE rate_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE businessdebts;

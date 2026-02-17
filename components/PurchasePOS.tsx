@@ -101,6 +101,13 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         return sortedRates[0]?.rate || exchangeRate;
     };
 
+    const getLatestRate = (): number => {
+        if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+        const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        return sortedRates[0]?.rate || exchangeRate;
+    };
+
+    const latestRate = useMemo(() => getLatestRate(), [rateHistory]);
     const currentRate = useMemo(() => getRateForDate(purchaseDate), [purchaseDate, rateHistory]);
 
     const newProductCalculatedCostUsd = currentRate > 0 ? newProductCostBs / currentRate : 0;
@@ -185,7 +192,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const openEditPriceModal = (item: CartItem) => {
         setEditingPriceItem(item);
-        const costBsValue = item.costPriceBs || item.costPrice * exchangeRate;
+        const costBsValue = item.costPriceBs || item.costPrice * (item.rateAtPurchase || latestRate);
         setEditCostBs(costBsValue);
         setEditCostDate(new Date().toISOString().split('T')[0]);
         setEditPrice(item.product.price || 0);
@@ -223,15 +230,13 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     };
 
     const calculateTotal = () => cart.reduce((sum, item) => {
-        const itemRate = item.rateAtPurchase || exchangeRate;
-        const priceBs = item.costPriceBs || item.costPrice * itemRate;
-        const priceUsd = itemRate > 0 ? priceBs / itemRate : item.costPrice;
+        const priceBs = item.costPriceBs || item.costPrice * latestRate;
+        const priceUsd = latestRate > 0 ? priceBs / latestRate : 0;
         return sum + (priceUsd * item.quantity);
     }, 0);
 
     const totalBs = cart.reduce((sum, item) => {
-        const itemRate = item.rateAtPurchase || exchangeRate;
-        return sum + ((item.costPriceBs || item.costPrice * itemRate) * item.quantity);
+        return sum + ((item.costPriceBs || item.costPrice * latestRate) * item.quantity);
     }, 0);
     const tenderedBs = parseFloat(tenderedAmount) || 0;
     const changeBs = tenderedBs - totalBs;
@@ -244,9 +249,11 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     };
 
     const openCreditDebtModal = () => {
-        const totalUsd = calculateTotal();
-        const totalBsValue = totalUsd * currentRate;
-        setCreditDebtAmount(totalBsValue);
+        const totalBs = cart.reduce((sum, item) => {
+            return sum + ((item.costPriceBs || item.costPrice * latestRate) * item.quantity);
+        }, 0);
+        const totalUsd = latestRate > 0 ? totalBs / latestRate : 0;
+        setCreditDebtAmount(totalBs);
         setCreditDebtAmountUsd(totalUsd);
         setCreditDebtTitle('');
         setCreditDebtCurrencyType('bs');
@@ -434,23 +441,16 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             
                             if (costMode === 'calculated') {
                                 displayCostBs = getCostBs(product);
-                                const savedCostDate = getCostDate(product);
-                                if (savedCostDate) {
-                                    displayDate = savedCostDate;
-                                    displayRate = getRateForDate(savedCostDate);
-                                    displayCostUsd = displayRate > 0 ? displayCostBs / displayRate : 0;
-                                } else {
-                                    const today = new Date();
-                                    displayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                                    displayRate = currentRate;
-                                    displayCostUsd = displayRate > 0 ? displayCostBs / displayRate : 0;
-                                }
-                            } else {
-                                displayCostUsd = getCostPrice(product);
-                                displayCostBs = displayCostUsd * currentRate;
+                                displayRate = latestRate;
+                                displayCostUsd = displayRate > 0 ? displayCostBs / displayRate : 0;
                                 const today = new Date();
                                 displayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                                displayRate = currentRate;
+                            } else {
+                                displayCostUsd = getCostPrice(product);
+                                displayCostBs = displayCostUsd * latestRate;
+                                const today = new Date();
+                                displayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                displayRate = latestRate;
                             }
                             
                             const formatDate = (dateStr: string) => {
@@ -606,7 +606,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
                                         <div className="flex-1 min-w-0">
                                             <h4 className="font-bold text-xs text-gray-900 truncate leading-tight">{item.product.name}</h4>
-                                            <p className="text-[8px] font-bold text-gray-400">Bs {((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                                            <p className="text-[8px] font-bold text-gray-400">Bs {((item.costPriceBs || item.costPrice * latestRate) * item.quantity).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                                         </div>
 
                                         <button 
@@ -632,7 +632,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                         <div className="bg-indigo-600 p-3 rounded-xl shadow-lg">
                             <div className="flex justify-between items-center">
                                 <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Total</span>
-                                <span className="text-xl font-black text-white leading-none">Bs {(calculateTotal() * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                <span className="text-xl font-black text-white leading-none">Bs {totalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
                             </div>
                             <div className="flex justify-between items-center mt-1">
                                 <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Referencia</span>
@@ -692,7 +692,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             {totalItems}
                         </span>
                     </div>
-                    <span className="font-bold">{(calculateTotal() * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</span>
+                    <span className="font-bold">{totalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</span>
                 </button>
             )}
 
@@ -961,7 +961,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                 </div>
                                                 <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
                                                     <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
-                                                    <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                                                    <span className="text-xs font-black text-orange-700">{latestRate.toFixed(2)}</span>
                                                 </div>
                                             </div>
                                         </>
@@ -1244,7 +1244,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                         <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center">
                                             <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
                                             <span className="text-sm font-black text-emerald-800">
-                                                {((editPrice || 0) * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                                {((editPrice || 0) * latestRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
                                             </span>
                                         </div>
                                     </div>
@@ -1269,7 +1269,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center">
                                         <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
                                         <span className="text-sm font-black text-blue-800">
-                                            {((editPricePerUnit || 0) * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                            {((editPricePerUnit || 0) * latestRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
                                         </span>
                                     </div>
                                 </div>

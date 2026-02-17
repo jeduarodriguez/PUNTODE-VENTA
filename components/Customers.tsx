@@ -130,23 +130,26 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   };
 
   const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {
-    if ((debt.currencyType || 'bs') === 'bs') {
-      return debt.amountBs || 0;
-    } else {
-      return (debt.amountUsd || 0) * exchangeRate;
+    if (!debt) return 0;
+    const currentRate = getLatestRate();
+    if (debt.currencyType === 'usd') {
+      return (debt.amountUsd || 0) * currentRate;
     }
+    return debt.amountBs || 0;
   };
 
   const getDebtReferenceUsd = (debt: BusinessDebt): number => {
-    if ((debt.currencyType || 'bs') === 'bs') {
-      return exchangeRate > 0 ? (debt.amountBs || 0) / exchangeRate : 0;
-    } else {
-      return debt.amountUsd || 0;
-    }
+    return debt.amountUsd || 0;
+  };
+
+  const getLatestRate = (): number => {
+    if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+    const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+    return sortedRates[0]?.rate || exchangeRate;
   };
 
   const getDebtRate = (debt: BusinessDebt): number => {
-    return exchangeRate;
+    return getLatestRate();
   };
 
   const openDebtPaymentModal = (debt: BusinessDebt) => {

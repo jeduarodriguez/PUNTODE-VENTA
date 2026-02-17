@@ -52,10 +52,25 @@ CREATE TABLE IF NOT EXISTS public.treasury (
     type TEXT,
     category TEXT,
     amount NUMERIC,
-    "amountBs" NUMERIC,
-    "exchangeRate" NUMERIC,
+    amount_bs NUMERIC,
+    exchange_rate NUMERIC,
     description TEXT,
     method TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.businessdebts (
+    id TEXT PRIMARY KEY,
+    timestamp BIGINT,
+    title TEXT,
+    amount_usd NUMERIC,
+    amount_bs NUMERIC,
+    currency_type TEXT,
+    rate_at_creation NUMERIC,
+    is_paid BOOLEAN DEFAULT FALSE,
+    paid_at BIGINT,
+    paid_amount NUMERIC,
+    paid_method TEXT,
+    notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.rate_history (
@@ -92,6 +107,9 @@ CREATE POLICY "Public Access Settings" ON public.settings FOR ALL USING (true);
 ALTER TABLE public.treasury ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access Treasury" ON public.treasury FOR ALL USING (true);
 
+ALTER TABLE public.businessdebts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access BusinessDebts" ON public.businessdebts FOR ALL USING (true);
+
 ALTER TABLE public.rate_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access Rate History" ON public.rate_history FOR ALL USING (true);
 
@@ -110,4 +128,5 @@ ALTER PUBLICATION supabase_realtime SET TABLE
     public.sales,
     public.settings,
     public.treasury,
-    public.rate_history;
+    public.rate_history,
+    public.businessdebts;
