@@ -81,7 +81,7 @@ export interface Shift {
 export interface TreasuryTransaction {
   id: string;
   timestamp: number;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'debt';
   category: string;
   amount: number; // Amount in USD (base reference)
   amountBs: number; // Amount in Bs at time of transaction

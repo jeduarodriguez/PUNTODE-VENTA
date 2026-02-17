@@ -72,6 +72,8 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   const [debtPaymentMethod, setDebtPaymentMethod] = useState<'Cash' | 'Transfer' | 'PagoMovil'>('Cash');
   const [debtPaymentAmount, setDebtPaymentAmount] = useState(0);
   const [editingDebt, setEditingDebt] = useState<BusinessDebt | null>(null);
+  const [debtToDelete, setDebtToDelete] = useState<BusinessDebt | null>(null);
+  const [deleteProductsToo, setDeleteProductsToo] = useState(false);
 
   const openPayrollModal = () => {
     setSelectedWorkers([]);
@@ -128,11 +130,23 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   };
 
   const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {
-    if (debt.currencyType === 'bs') {
-      return debt.amountBs;
+    if ((debt.currencyType || 'bs') === 'bs') {
+      return debt.amountBs || 0;
     } else {
-      return debt.amountUsd * exchangeRate;
+      return (debt.amountUsd || 0) * exchangeRate;
     }
+  };
+
+  const getDebtReferenceUsd = (debt: BusinessDebt): number => {
+    if ((debt.currencyType || 'bs') === 'bs') {
+      return exchangeRate > 0 ? (debt.amountBs || 0) / exchangeRate : 0;
+    } else {
+      return debt.amountUsd || 0;
+    }
+  };
+
+  const getDebtRate = (debt: BusinessDebt): number => {
+    return exchangeRate;
   };
 
   const openDebtPaymentModal = (debt: BusinessDebt) => {
@@ -150,13 +164,31 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
     }
   };
 
+  const confirmDeleteDebt = () => {
+    if (debtToDelete) {
+      onDeleteBusinessDebt(debtToDelete.id);
+      setDebtToDelete(null);
+      setDeleteProductsToo(false);
+    }
+  };
+
   const filteredDebts = businessDebts
+    .filter(d => d && d.title)
     .filter(d => d.title.toLowerCase().includes(debtSearchTerm.toLowerCase()))
-    .sort((a, b) => b.timestamp - a.timestamp);
+    .filter(d => !d.isPaid)
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   const totalUnpaidDebts = filteredDebts
-    .filter(d => !d.isPaid)
     .reduce((sum, d) => sum + getCurrentDebtAmountBs(d), 0);
+
+  const totalUnpaidDebtsUsd = filteredDebts
+    .reduce((sum, d) => sum + getDebtReferenceUsd(d), 0);
+
+  const totalCustomersDebt = customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+  const totalCustomersDebtBs = totalCustomersDebt * exchangeRate;
+  
+  const totalWorkersDebt = workers.reduce((sum, w) => sum + Math.max(0, w.salary - (w.balance || 0)), 0);
+  const totalWorkersDebtBs = totalWorkersDebt * exchangeRate;
 
   const filteredWorkers = workers
     .filter(w => w.name.toLowerCase().includes(workerSearchTerm.toLowerCase()) || w.position.toLowerCase().includes(workerSearchTerm.toLowerCase()))
@@ -417,6 +449,23 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
   return (
     <div className="space-y-6 pb-24">
+      {/* Resumen de Créditos */}
+      <div className="grid grid-cols-3 gap-3">
+        <button onClick={() => setActiveTab('customers')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'customers' ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
+          <p className="text-xs font-bold opacity-70">Clientes</p>
+          <p className="text-lg font-black mt-1">Bs {(totalCustomersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+        </button>
+        <button onClick={() => setActiveTab('workers')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
+          <p className="text-xs font-bold opacity-70">Empleados</p>
+          <p className="text-lg font-black mt-1">Bs {(totalWorkersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+        </button>
+        <button onClick={() => setActiveTab('debts')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
+          <p className="text-xs font-bold opacity-70">Pendiente</p>
+          <p className="text-lg font-black mt-1">Bs {(totalUnpaidDebts).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+          <p className="text-xs font-bold opacity-70">${totalUnpaidDebtsUsd.toFixed(2)}</p>
+        </button>
+      </div>
+
       {/* Tabs para Clientes, Trabajadores y Deudas */}
       <div className="flex bg-gray-100 p-1 rounded-2xl">
         <button
@@ -480,8 +529,11 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
         {/* Lista de Deudas del Negocio */}
         <div className="grid grid-cols-1 gap-3">
           {filteredDebts.map(debt => {
-            const currentAmountBs = getCurrentDebtAmountBs(debt);
-            const date = new Date(debt.timestamp);
+            const currentAmountBs = getCurrentDebtAmountBs(debt) || 0;
+            const debtUsd = getDebtReferenceUsd(debt);
+            const debtRate = getDebtRate(debt);
+            const isBs = (debt.currencyType || 'bs') === 'bs';
+            const date = debt.timestamp ? new Date(debt.timestamp) : new Date();
             const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
 
             return (
@@ -494,22 +546,22 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                 <div className=" flex items-center gap-2">
                     <h3 className="font-bold text-sm text-gray-900 truncate">{debt.title}</h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${debt.currencyType === 'usd' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                      {debt.currencyType.toUpperCase()}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isBs ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {(debt.currencyType || 'bs').toUpperCase()}
                     </span>
-                  </div>
-                  <p className="text-xs text-gray-400">{dateStr}</p>
+                 </div>
+                  <p className="text-xs text-gray-400">{dateStr} • Tasa: {debtRate.toFixed(2)} Bs/$</p>
                 </div>
 
                 <div className="text-right shrink-0">
                   <p className="font-black text-lg text-gray-900">
                     Bs {currentAmountBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                   </p>
-                  {debt.currencyType === 'usd' && (
-                    <p className="text-[10px] font-bold text-gray-400">${debt.amountUsd.toFixed(2)}</p>
-                  )}
+                  <p className="text-[10px] font-bold text-gray-400">
+                    {isBs ? `$${debtUsd.toFixed(2)} ref` : `$${debt.amountUsd?.toFixed(2)}`}
+                  </p>
                 </div>
 
                 {!debt.isPaid && (
@@ -520,6 +572,13 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                     Pagar
                   </button>
                 )}
+
+                <button
+                  onClick={() => setDebtToDelete(debt)}
+                  className="bg-red-100 text-red-500 p-2 rounded-xl hover:bg-red-200 transition-colors shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             );
           })}
@@ -1069,7 +1128,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                           <p className="text-lg font-bold text-gray-600 mt-1">
                               Bs {getCurrentDebtAmountBs(payingDebt).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                           </p>
-                          {payingDebt.currencyType === 'usd' && (
+                          {(payingDebt.currencyType || 'bs') === 'usd' && (
                               <p className="text-xs font-bold text-gray-400">${payingDebt.amountUsd.toFixed(2)} USD</p>
                           )}
                       </div>
@@ -1128,6 +1187,62 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                           className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:shadow-none"
                       >
                           Confirmar Pago
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODAL DE ELIMINAR DEUDA */}
+      {debtToDelete && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm" onClick={() => setDebtToDelete(null)}>
+              <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+                  <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-red-50">
+                      <div>
+                          <h3 className="text-xl font-black text-red-900">Eliminar Deuda</h3>
+                          <p className="text-xs font-bold text-red-600">Esta acción no se puede deshacer</p>
+                      </div>
+                      <button onClick={() => setDebtToDelete(null)} className="text-gray-400 hover:text-black">
+                          <X className="w-6 h-6" />
+                      </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                      <div className="bg-gray-50 p-4 rounded-2xl">
+                          <p className="text-sm font-bold text-gray-600">Deuda: <span className="text-gray-900">{debtToDelete.title}</span></p>
+                          <p className="text-lg font-black text-gray-900 mt-2">Bs {getCurrentDebtAmountBs(debtToDelete).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                              <input 
+                                  type="checkbox" 
+                                  checked={deleteProductsToo}
+                                  onChange={(e) => setDeleteProductsToo(e.target.checked)}
+                                  className="w-5 h-5 rounded text-amber-600"
+                              />
+                              <span className="text-sm font-bold text-amber-800">
+                                  También eliminar los productos del inventario
+                              </span>
+                          </label>
+                          <p className="text-xs text-amber-600 mt-2">
+                              Si compraste productos con esta deuda, se eliminarán del inventario.
+                          </p>
+                      </div>
+                  </div>
+
+                  <div className="p-6 pt-0 flex gap-3">
+                      <button
+                          onClick={() => setDebtToDelete(null)}
+                          className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all"
+                      >
+                          Cancelar
+                      </button>
+                      <button
+                          onClick={confirmDeleteDebt}
+                          className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-red-700 transition-all"
+                      >
+                          Eliminar
                       </button>
                   </div>
               </div>

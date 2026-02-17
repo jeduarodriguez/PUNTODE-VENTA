@@ -240,6 +240,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         if (cart.length === 0) return;
         onPurchase(cart, method);
         setCart([]);
+        onClose();
     };
 
     const openCreditDebtModal = () => {
@@ -270,6 +271,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         onPurchase(cart, 'Credit', debtData);
         setCart([]);
         setIsCreditDebtModalOpen(false);
+        onClose();
     };
 
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -1303,114 +1305,124 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                 </div>
             )}
 
-            {/* MODAL DE DEUDA DE CRÉDITO */}
+            {/* MODAL DE DEUDA DE CRÉDITO - OPTIMIZADO MÓVIL */}
             {isCreditDebtModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsCreditDebtModalOpen(false)}>
-                    <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-orange-50">
-                            <div>
-                                <h3 className="text-xl font-black text-gray-900">Deuda a Crédito</h3>
-                                <p className="text-xs font-bold text-orange-600">Registrar compra pendiente</p>
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center" onClick={() => setIsCreditDebtModalOpen(false)}>
+                    <div className="bg-white w-full max-w-lg mx-auto rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up h-[92vh] sm:h-auto flex flex-col" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-orange-500 to-orange-600">
+                            <div className="text-white">
+                                <h3 className="text-lg sm:text-xl font-black">Deuda a Crédito</h3>
+                                <p className="text-xs sm:text-sm font-medium opacity-90">Registrar compra pendiente</p>
                             </div>
-                            <button onClick={() => setIsCreditDebtModalOpen(false)} className="text-gray-400 hover:text-black">
+                            <button onClick={() => setIsCreditDebtModalOpen(false)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-4">
-                            <div className="bg-gray-900 p-4 rounded-2xl">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Total Carrito</span>
-                                    <span className="text-xl font-black text-white">Bs {(calculateTotal() * currentRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                            {/* Total Cards */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-gray-900 p-4 rounded-2xl">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Total</span>
+                                    <span className="text-lg sm:text-xl font-black text-white">Bs {totalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
                                 </div>
-                                <div className="flex justify-between items-center mt-1">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Referencia</span>
-                                    <span className="text-sm font-bold text-orange-400">${calculateTotal().toFixed(2)}</span>
+                                <div className="bg-orange-100 p-4 rounded-2xl">
+                                    <span className="text-[10px] font-bold text-orange-600 uppercase block">Referencia</span>
+                                    <span className="text-lg sm:text-xl font-black text-orange-700">${calculateTotal().toFixed(2)}</span>
                                 </div>
                             </div>
 
+                            {/* Nota */}
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Título / Nota</label>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Título / Nota</label>
                                 <input
                                     type="text"
                                     placeholder="Ej. Compra de inventario"
-                                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
+                                    className="w-full p-4 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-orange-500 outline-none text-base font-medium"
                                     value={creditDebtTitle}
                                     onChange={(e) => setCreditDebtTitle(e.target.value)}
                                 />
                             </div>
 
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Tipo de Deuda</label>
-                                <div className="flex gap-2">
+                            {/* Tipo de Deuda */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo de Moneda</label>
+                                <div className="flex gap-3">
                                     <button
                                         onClick={() => { setCreditDebtCurrencyType('bs'); setCreditDebtAmount(totalBs); setCreditDebtAmountUsd(calculateTotal()); }}
-                                        className={`flex-1 p-4 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${creditDebtCurrencyType === 'bs' ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95 ${creditDebtCurrencyType === 'bs' ? 'bg-orange-500 border-orange-600 text-white shadow-lg' : 'bg-white border-gray-200 text-gray-600'}`}
                                     >
-                                        <span className="text-lg font-black">BS</span>
-                                        <span className="text-[10px] font-bold">Bolivares</span>
+                                        <span className="text-2xl font-black">BS</span>
+                                        <span className="text-xs font-medium">Bolivares</span>
                                     </button>
                                     <button
                                         onClick={() => { setCreditDebtCurrencyType('usd'); setCreditDebtAmountUsd(calculateTotal()); setCreditDebtAmount(calculateTotal() * currentRate); }}
-                                        className={`flex-1 p-4 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all ${creditDebtCurrencyType === 'usd' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                                        className={`flex-1 p-5 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95 ${creditDebtCurrencyType === 'usd' ? 'bg-blue-500 border-blue-600 text-white shadow-lg' : 'bg-white border-gray-200 text-gray-600'}`}
                                     >
-                                        <span className="text-lg font-black">USD</span>
-                                        <span className="text-[10px] font-bold">Dólares</span>
+                                        <span className="text-2xl font-black">USD</span>
+                                        <span className="text-xs font-medium">Dólares</span>
                                     </button>
                                 </div>
                             </div>
 
-                            {creditDebtCurrencyType === 'bs' ? (
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Monto en Bolivares</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Bs</span>
-                                        <input
-                                            type="number"
-                                            className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 rounded-2xl bg-gray-50 text-xl font-bold text-gray-900 focus:border-orange-500 outline-none"
-                                            value={creditDebtAmount || ''}
-                                            onChange={(e) => { setCreditDebtAmount(parseFloat(e.target.value) || 0); setCreditDebtAmountUsd(currentRate > 0 ? parseFloat(e.target.value) / currentRate : 0); }}
-                                        />
-                                    </div>
-                                    <p className="text-xs font-bold text-gray-400">Referencia: ${creditDebtAmountUsd.toFixed(2)} USD</p>
+                            {/* Monto */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                    Monto en {creditDebtCurrencyType === 'bs' ? 'Bolivares' : 'Dólares'}
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-xl">
+                                        {creditDebtCurrencyType === 'bs' ? 'Bs' : '$'}
+                                    </span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="w-full pl-14 pr-4 py-5 border-2 border-gray-200 rounded-2xl bg-gray-50 text-2xl font-bold text-gray-900 focus:border-orange-500 outline-none"
+                                        value={creditDebtCurrencyType === 'bs' ? (creditDebtAmount ? creditDebtAmount.toFixed(2) : '') : (creditDebtAmountUsd ? creditDebtAmountUsd.toFixed(2) : '')}
+                                        onChange={(e) => {
+                                            const val = parseFloat(e.target.value) || 0;
+                                            if (creditDebtCurrencyType === 'bs') {
+                                                setCreditDebtAmount(val);
+                                                setCreditDebtAmountUsd(currentRate > 0 ? val / currentRate : 0);
+                                            } else {
+                                                setCreditDebtAmountUsd(val);
+                                                setCreditDebtAmount(val * currentRate);
+                                            }
+                                        }}
+                                    />
                                 </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Monto en Dólares</label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                                        <input
-                                            type="number"
-                                            className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 rounded-2xl bg-gray-50 text-xl font-bold text-gray-900 focus:border-blue-500 outline-none"
-                                            value={creditDebtAmountUsd || ''}
-                                            onChange={(e) => { setCreditDebtAmountUsd(parseFloat(e.target.value) || 0); setCreditDebtAmount(parseFloat(e.target.value) * currentRate); }}
-                                        />
-                                    </div>
-                                    <p className="text-xs font-bold text-gray-400">Referencia: Bs {creditDebtAmount.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                                </div>
-                            )}
-
-                            <div className="bg-gray-50 p-3 rounded-xl">
-                                <p className="text-xs font-bold text-gray-500">
+                                <p className="text-sm font-medium text-gray-500 bg-gray-100 p-3 rounded-xl">
                                     {creditDebtCurrencyType === 'bs' 
-                                        ? 'La deuda se mantendrá en Bolivares sin variación.' 
-                                        : 'La deuda en Bolivares subirá automáticamente con la tasa del dólar.'}
+                                        ? `💡 Referencia: $${creditDebtAmountUsd.toFixed(2)} USD`
+                                        : `💡 Referencia: Bs ${creditDebtAmount.toFixed(2)}`}
+                                </p>
+                            </div>
+
+                            {/* Info */}
+                            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200">
+                                <p className="text-sm font-medium text-amber-800">
+                                    {creditDebtCurrencyType === 'bs' 
+                                        ? '📌 La deuda se mantendrá en Bolivares sin variación.'
+                                        : '📌 La deuda en Bolivares subirá automáticamente con la tasa del dólar.'}
                                 </p>
                             </div>
                         </div>
 
-                        <div className="p-6 pt-0 flex gap-3">
+                        {/* Footer Buttons */}
+                        <div className="p-4 sm:p-6 pt-0 flex gap-3 safe-area-bottom">
                             <button
                                 onClick={() => setIsCreditDebtModalOpen(false)}
-                                className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all"
+                                className="flex-1 py-5 border-2 border-gray-200 rounded-2xl font-bold text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-all text-lg"
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleCreditDebtSubmit}
-                                className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-orange-700 transition-all"
+                                className="flex-1 py-5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-2xl font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-lg"
                             >
-                                Confirmar Deuda
+                                Confirmar
                             </button>
                         </div>
                     </div>

@@ -96,8 +96,23 @@ const App: React.FC = () => {
       setWorkers(data ? Object.values(data).filter(Boolean) as Worker[] : []);
     });
 
-    const unsubBusinessDebts = syncPath('businessDebts', (data) => {
-      setBusinessDebts(data ? Object.values(data).filter(Boolean) as BusinessDebt[] : []);
+    const unsubBusinessDebts = syncPath('businessdebts', (data) => {
+      const debts = data ? Object.values(data).filter(Boolean) : [];
+      const transformedDebts = debts.map((d: any) => ({
+        id: d.id,
+        timestamp: d.timestamp,
+        title: d.title,
+        amountUsd: d.amount_usd,
+        amountBs: d.amount_bs,
+        currencyType: d.currency_type,
+        rateAtCreation: d.rate_at_creation,
+        isPaid: d.is_paid,
+        paidAt: d.paid_at,
+        paidAmount: d.paid_amount,
+        paidMethod: d.paid_method,
+        notes: d.notes
+      }));
+      setBusinessDebts(transformedDebts as BusinessDebt[]);
     });
 
     const unsubSales = syncPath('sales', (data) => {
@@ -349,7 +364,7 @@ const App: React.FC = () => {
 
   const handleAddBusinessDebt = (debt: BusinessDebt) => {
     setBusinessDebts(prev => [...prev, debt]);
-    saveData(`businessDebts/${debt.id}`, debt);
+    saveData(`businessdebts/${debt.id}`, debt);
     showNotification('Deuda registrada');
   };
 
@@ -371,19 +386,20 @@ const App: React.FC = () => {
       paidMethod: method
     };
     
-    updates[`businessDebts/${debtId}`] = updatedDebt;
+    updates[`businessdebts/${debtId}`] = updatedDebt;
     setBusinessDebts(prev => prev.map(d => d.id === debtId ? updatedDebt : d));
 
+    const debtRate = debt.rateAtCreation || exchangeRate;
     if (method === 'Cash') {
       const treasuryTransaction: TreasuryTransaction = {
         id: `debt_payment_${debtId}_${Date.now()}`,
         timestamp: Date.now(),
         type: 'income',
         category: 'Cobros',
-        description: `Pago Deuda: ${debt.title}`,
-        amount: amount / exchangeRate,
+        description: `Pago Deuda: ${debt.title} (Tasa: ${debtRate.toFixed(2)} Bs/$)`,
+        amount: (debt.currencyType === 'usd' ? debt.amountUsd : amount / debtRate),
         amountBs: amount,
-        exchangeRate,
+        exchangeRate: debtRate,
         method
       };
       updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
@@ -400,12 +416,12 @@ const App: React.FC = () => {
 
   const handleUpdateBusinessDebt = (debt: BusinessDebt) => {
     setBusinessDebts(prev => prev.map(d => d.id === debt.id ? debt : d));
-    saveData(`businessDebts/${debt.id}`, debt);
+    saveData(`businessdebts/${debt.id}`, debt);
   };
 
   const handleDeleteBusinessDebt = (id: string) => {
     setBusinessDebts(prev => prev.filter(d => d.id !== id));
-    deleteData(`businessDebts/${id}`);
+    deleteData(`businessdebts/${id}`);
   };
 
   const getCurrentDebtAmountBs = (debt: BusinessDebt): number => {
@@ -693,24 +709,39 @@ const App: React.FC = () => {
     const totalUsd = items.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
     const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity), 0);
 
+    // Si hay deuda de negocio, registrar como pendiente (no descuenta de tesorería aún)
     if (businessDebt) {
       handleAddBusinessDebt(businessDebt);
+      // Registrar en treasury como pendiente para que aparezca en movimientos
+      const debtTransaction: TreasuryTransaction = {
+        id: `debt_${now}`,
+        timestamp: now,
+        type: 'debt',
+        category: 'Deuda Pendiente',
+        description: businessDebt.title || 'Compra a crédito',
+        amount: businessDebt.amountUsd,
+        amountBs: businessDebt.amountBs,
+        exchangeRate: exchangeRate,
+        method: 'Credit'
+      };
+      await handleAddTreasuryTransaction(debtTransaction);
+    } else {
+      // Solo registrar gasto en tesorería si NO hay deuda
+      const transaction: TreasuryTransaction = {
+        id: `purchase_${now}`,
+        timestamp: now,
+        type: 'expense',
+        category: 'Inventario',
+        description: items.map(i => `${i.quantity} ${i.product.name}`).join(', '),
+        amount: totalUsd,
+        amountBs: totalBs,
+        exchangeRate: exchangeRate,
+        method: method
+      };
+      await handleAddTreasuryTransaction(transaction);
     }
 
-    const transaction: TreasuryTransaction = {
-      id: `purchase_${now}`,
-      timestamp: now,
-      type: 'expense',
-      category: 'Inventario',
-      description: items.map(i => `${i.quantity} ${i.product.name}`).join(', '),
-      amount: totalUsd,
-      amountBs: totalBs,
-      exchangeRate: exchangeRate,
-      method: method
-    };
-
-    await handleAddTreasuryTransaction(transaction);
-
+    // Siempre actualizar el inventario
     const updatedProducts = [...products];
     for (const item of items) {
       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);

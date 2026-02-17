@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
-import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List } from '../constants';
+import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List, Clock } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
 
@@ -535,14 +535,14 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                                                 item.type === 'sale' 
                                                     ? (item.data.paymentMethod === 'Cash' ? 'bg-emerald-100 text-emerald-600' : item.data.paymentMethod === 'Credit' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600')
-                                                    : (item.data.type === 'expense' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600')
+                                                    : (item.data.type === 'expense' ? 'bg-red-100 text-red-600' : item.data.type === 'debt' ? 'bg-orange-100 text-orange-600' : 'bg-emerald-100 text-emerald-600')
                                             }`}>
                                                 {item.type === 'sale' ? (
                                                     item.data.paymentMethod === 'Cash' ? <Banknote className="w-4 h-4" /> : 
                                                     item.data.paymentMethod === 'Credit' ? <Wallet className="w-4 h-4" /> : 
                                                     item.data.paymentMethod === 'PagoMovil' ? <Smartphone className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />
                                                 ) : (
-                                                    item.data.type === 'expense' ? <TrendingDown className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />
+                                                    item.data.type === 'expense' ? <TrendingDown className="w-4 h-4" /> : item.data.type === 'debt' ? <Clock className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />
                                                 )}
                                             </div>
                                             <div className="min-w-0 flex-1">
@@ -555,10 +555,10 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 <p className="text-[10px] text-gray-400">{new Date(item.data.timestamp).toLocaleString()}</p>
                                             </div>
                                         </div>
-                                        <span className={`text-xs font-black ${item.type === 'sale' ? 'text-gray-900' : (item.data.type === 'expense' ? 'text-red-600' : 'text-emerald-600')}`}>
+                                        <span className={`text-xs font-black ${item.type === 'sale' ? 'text-gray-900' : (item.data.type === 'expense' ? 'text-red-600' : item.data.type === 'debt' ? 'text-orange-600' : 'text-emerald-600')}`}>
                                             {item.type === 'sale' 
                                                 ? `${(item.data.total * item.data.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs`
-                                                : `${item.data.type === 'expense' ? '-' : '+'}${item.data.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs`
+                                                : `${item.data.type === 'expense' ? '-' : item.data.type === 'debt' ? '⏳' : '+'}${item.data.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs`
                                             }
                                         </span>
                                     </div>
