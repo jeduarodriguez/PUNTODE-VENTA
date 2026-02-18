@@ -162,7 +162,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const latestRate = useMemo(() => getLatestRate(), [rateHistory]);
     const currentRate = useMemo(() => getRateForDate(purchaseDate), [purchaseDate, rateHistory]);
-    const activeRate = useCustomRate ? parseFloat(tempRate) || latestRate : currentRate;
+    // Para el carrito, usar latestRate por defecto, no currentRate
+    const activeRate = useCustomRate ? parseFloat(tempRate) || latestRate : latestRate;
 
     const newProductCalculatedCostUsd = currentRate > 0 ? newProductCostBs / currentRate : 0;
     const newProductFinalCost = newProductCostMode === 'calculated' ? newProductCalculatedCostUsd : newProductManualCost;
@@ -293,15 +294,19 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const calculateTotal = () => cart.reduce((sum, item) => {
         const costMode = getCostMode(item.product);
-        const priceBs = costMode === 'calculated' ? (item.costPriceBs || item.costPrice * activeRate) : (item.costPrice * activeRate);
+        const priceBs = costMode === 'calculated' 
+            ? (item.costPriceBs || 0) 
+            : item.costPrice * activeRate;
         const priceUsd = activeRate > 0 ? priceBs / activeRate : 0;
         return sum + (priceUsd * item.quantity);
     }, 0);
 
     const totalBs = cart.reduce((sum, item) => {
-        // Para productos manuales, siempre recalcular con activeRate
+        // Para productos calculados usar costPriceBs guardado, para manuales recalcular siempre
         const costMode = getCostMode(item.product);
-        const itemCostBs = costMode === 'calculated' ? (item.costPriceBs || item.costPrice * activeRate) : (item.costPrice * activeRate);
+        const itemCostBs = costMode === 'calculated' 
+            ? (item.costPriceBs || 0)
+            : item.costPrice * activeRate;
         return sum + (itemCostBs * item.quantity);
     }, 0);
     const tenderedBs = parseFloat(tenderedAmount) || 0;
@@ -317,7 +322,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const openCreditDebtModal = () => {
         const totalBs = cart.reduce((sum, item) => {
             const costMode = getCostMode(item.product);
-            const itemCostBs = costMode === 'calculated' ? (item.costPriceBs || item.costPrice * activeRate) : (item.costPrice * activeRate);
+            const itemCostBs = costMode === 'calculated' 
+                ? (item.costPriceBs || 0) 
+                : item.costPrice * activeRate;
             return sum + (itemCostBs * item.quantity);
         }, 0);
         const totalUsd = activeRate > 0 ? totalBs / activeRate : 0;
@@ -652,7 +659,18 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 const originalProduct = products.find(p => p.id === item.product.id);
                                 const lastInventoryPrice = originalProduct?.costPrice || item.costPrice;
                                 const isUsingLastPrice = item.costPrice === lastInventoryPrice;
-                                const itemTotalBs = ((item.costPriceBs || item.costPrice * activeRate) * item.quantity);
+                                // Para manuales siempre recalcular con tasa actual
+                                const originalProd = products.find(p => p.id === item.product.id);
+                                const originalCostBs = (originalProd as any)?.cost_bs || 0;
+                                const isManualProduct = !originalCostBs || originalCostBs === 0;
+                                // Si es manual, SIEMPRE recalcular - ignore costPriceBs guardado
+                                let itemCostBsList = 0;
+                                if (isManualProduct) {
+                                    itemCostBsList = item.costPrice * activeRate;
+                                } else {
+                                    itemCostBsList = item.costPriceBs || originalCostBs;
+                                }
+                                const itemTotalBs = itemCostBsList * item.quantity;
                                 return (
                                     <div key={item.product.id} className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
                                         <div className="flex-1 min-w-0">
