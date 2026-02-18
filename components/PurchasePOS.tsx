@@ -13,6 +13,7 @@ interface PurchasePOSProps {
     onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
     onOpenInventory?: () => void;
+    initialCart?: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[];
 }
 
 interface CartItem {
@@ -24,10 +25,23 @@ interface CartItem {
     rateAtPurchase?: number;
 }
 
-const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onClose, onPurchase, onAddProduct, onOpenInventory }) => {
+const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onClose, onPurchase, onAddProduct, onOpenInventory, initialCart }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
+
+    // Cargar initialCart si existe (para edición de compra)
+    useEffect(() => {
+        if (initialCart && initialCart.length > 0) {
+            setCart(initialCart.map(item => ({
+                product: item.product,
+                quantity: item.quantity,
+                costPrice: item.costPrice,
+                costPriceBs: item.costPriceBs,
+                rateAtPurchase: item.rateAtPurchase
+            })));
+        }
+    }, [initialCart]);
     const [tempRate, setTempRate] = useState(exchangeRate.toString());
     const [tenderedAmount, setTenderedAmount] = useState('');
     const [showAddProductModal, setShowAddProductModal] = useState(false);
@@ -144,8 +158,18 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     };
 
     const editRate = useMemo(() => getEditRateForDate(editCostDate), [editCostDate, editCustomRate, rateHistory]);
-    const editCalculatedCostUsd = editRate > 0 ? editCostBs / editRate : 0;
+    const editDisplayRate = editCustomRate !== null ? editCustomRate : editRate;
+    const initialCostUsd = editingPriceItem && editCostMode === 'calculated' 
+        ? (editingPriceItem.costPrice || 0) 
+        : editManualCost;
+    const editCalculatedCostUsd = editDisplayRate > 0 ? editCostBs / editDisplayRate : initialCostUsd;
     const editFinalCostUsd = editCostMode === 'calculated' ? editCalculatedCostUsd : editManualCost;
+    const editProfit = editPrice - editFinalCostUsd;
+    const editMargin = editFinalCostUsd > 0 ? (editProfit / editFinalCostUsd) * 100 : 0;
+    const editUnitsPerPackage = editingPriceItem?.product?.units_per_package ?? (editingPriceItem?.product as any)?.unitsPerPackage ?? 0;
+    const editCostPerUnit = editUnitsPerPackage > 0 ? editFinalCostUsd / editUnitsPerPackage : 0;
+    const editProfitPerUnit = editPricePerUnit - editCostPerUnit;
+    const editMarginPerUnit = editCostPerUnit > 0 ? (editProfitPerUnit / editCostPerUnit) * 100 : 0;
 
     const getRateForDate = (dateStr: string): number => {
         if (!rateHistory || rateHistory.length === 0) return exchangeRate;
@@ -277,12 +301,28 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         setEditingPriceItem(item);
         const productCostMode = getCostMode(item.product);
         setEditCostMode(productCostMode);
-        const costBsValue = item.costPriceBs || item.costPrice * (item.rateAtPurchase || activeRate);
+        
+        let costBsValue = 0;
+        let savedRate = activeRate;
+        
+        if (productCostMode === 'calculated') {
+            costBsValue = item.costPriceBs || getCostBs(item.product);
+            savedRate = item.rateAtPurchase || activeRate;
+        }
         setEditCostBs(costBsValue);
-        setEditCostDate(new Date().toISOString().split('T')[0]);
+        
+        const productCostDate = item.product.cost_date || (item.product as any).costDate || '';
+        setEditCostDate(productCostDate || new Date().toISOString().split('T')[0]);
+        
         setEditPrice(item.product.price || 0);
-        setEditPricePerUnit(item.product.pricePerUnit || 0);
-        setEditCustomRate(null);
+        setEditPricePerUnit(getPricePerUnit(item.product));
+        
+        if (productCostMode === 'calculated' && savedRate) {
+            setEditCustomRate(savedRate);
+        } else {
+            setEditCustomRate(null);
+        }
+        
         setEditManualCost(item.costPrice);
         setEditManualCostDisplay(item.costPrice.toFixed(2));
     };
@@ -303,7 +343,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                     ...cartItem,
                     costPrice: newCostUsd,
                     costPriceBs: newCostBs,
-                    rateAtPurchase: editRate,
+                    rateAtPurchase: editDisplayRate,
                     product: {
                         ...cartItem.product,
                         price: editPrice,
@@ -606,11 +646,13 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                         value={qtyInCart}
                                                         onChange={(e) => {
                                                             e.stopPropagation();
-                                                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
-                                                            if (val <= 0) {
-                                                                removeFromCart(product.id);
+                                                            const rawValue = e.target.value.replace(',', '.');
+                                                            if (rawValue === '' || rawValue === '-') return;
+                                                            const val = parseFloat(rawValue);
+                                                            if (isNaN(val) || val <= 0) {
+                                                                return;
                                                             } else {
-                                                                const sellingMode = product.sellingMode;
+                                                                const sellingMode = getSellingMode(product);
                                                                 if (sellingMode === 'weight') {
                                                                     updateQuantityDirect(product.id, val);
                                                                 } else {
@@ -706,49 +748,58 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 }
                                 const itemTotalBs = itemCostBsList * item.quantity;
                                 return (
-                                    <div key={item.product.id} className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-sm text-gray-900 truncate leading-tight">{item.product.name}</h4>
-                                            <p className="text-xs font-bold text-gray-400">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, -1)}
-                                                className="w-7 h-7 flex items-center justify-center rounded bg-red-50 text-red-500"
-                                            >
-                                                <Minus className="w-3 h-3" />
-                                            </button>
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={item.quantity}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value.replace(',', '.')) || 0;
-                                                    const sellingMode = item.product.sellingMode;
-                                                    if (sellingMode === 'weight') {
-                                                        updateQuantityDirect(item.product.id, val);
-                                                    } else {
-                                                        const intVal = Math.max(0, Math.floor(val));
-                                                        updateQuantityDirect(item.product.id, intVal);
-                                                    }
-                                                }}
-                                                className="w-16 text-center font-black text-sm bg-white border border-gray-200 rounded py-1"
-                                            />
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, 1)}
-                                                className="w-7 h-7 flex items-center justify-center rounded bg-emerald-50 text-emerald-600"
-                                            >
-                                                <Plus className="w-3 h-3" />
-                                            </button>
-                                        </div>
-
+                                    <div key={item.product.id} className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                         <button 
                                             onClick={() => openEditPriceModal(item)}
                                             className="p-2 bg-blue-50 text-blue-400 rounded shrink-0"
                                         >
                                             <Edit className="w-4 h-4" />
                                         </button>
+
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-black text-base text-gray-900 truncate leading-tight">{item.product.name}</h4>
+                                            <p className="text-xs font-bold text-gray-400 mt-0.5">
+                                                ${item.costPrice.toFixed(2)} • {item.product.cost_date || 'Sin fecha'}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                            <span className="text-sm font-black text-gray-900">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button 
+                                                onClick={() => updateQuantity(item.product.id, -1)}
+                                                className="w-8 h-8 flex items-center justify-center rounded bg-red-50 text-red-500"
+                                            >
+                                                <Minus className="w-4 h-4" />
+                                            </button>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={item.quantity}
+                                                onChange={(e) => {
+                                                    const rawValue = e.target.value.replace(',', '.');
+                                                    if (rawValue === '' || rawValue === '-') return;
+                                                    const val = parseFloat(rawValue);
+                                                    if (isNaN(val)) return;
+                                                    const sellingMode = getSellingMode(item.product);
+                                                    if (sellingMode === 'weight') {
+                                                        updateQuantityDirect(item.product.id, val);
+                                                    } else {
+                                                        const intVal = Math.max(1, Math.floor(val));
+                                                        updateQuantityDirect(item.product.id, intVal);
+                                                    }
+                                                }}
+                                                className="w-14 text-center font-black text-sm bg-white border border-gray-200 rounded py-1"
+                                            />
+                                            <button 
+                                                onClick={() => updateQuantity(item.product.id, 1)}
+                                                className="w-8 h-8 flex items-center justify-center rounded bg-emerald-50 text-emerald-600"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })
@@ -1411,26 +1462,45 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 )}
                             </div>
 
-                            {/* PRECIO DE VENTA */}
-                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-2">
-                                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2 block">Venta</label>
-                                <div className="flex gap-3">
-                                    <div className="flex-1 space-y-2">
-                                        <div className="relative">
+                            {/* PRECIO DE VENTA + RENTABILIDAD */}
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+                                <div className="flex gap-3 items-stretch">
+                                    <div className="flex-1 flex flex-col">
+                                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
+                                        <div className="relative flex-1">
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                                             <input
-                                                type="number"
-                                                step="0.01"
-                                                className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400"
+                                                type="text"
+                                                inputMode="decimal"
+                                                className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
                                                 value={editPrice || ''}
                                                 placeholder="0.00"
-                                                onChange={e => setEditPrice(parseFloat(e.target.value) || 0)}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setEditPrice(parseFloat(val.replace(',', '.')) || 0);
+                                                }}
                                             />
                                         </div>
-                                        <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                                        <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
                                             <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
                                             <span className="text-sm font-black text-emerald-800">
                                                 {((editPrice || 0) * latestRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 flex flex-col">
+                                        <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                                            <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                                            <span className={`text-sm font-bold ${editProfit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                ${editProfit.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                                            <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                                            <span className={`text-sm font-bold ${editMargin >= 30 ? 'text-emerald-500' : editMargin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                                                {editMargin.toFixed(0)}%
                                             </span>
                                         </div>
                                     </div>
@@ -1438,25 +1508,48 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             </div>
 
                             {/* PRECIO POR UNIDAD (solo para paquetes) */}
-                            {editingPriceItem.product.sellingMode === 'package' && (
-                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 space-y-2">
-                                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest px-1 mb-2 block">Precio x Unidad</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400"
-                                            value={editPricePerUnit || ''}
-                                            placeholder="0.00"
-                                            onChange={e => setEditPricePerUnit(parseFloat(e.target.value) || 0)}
-                                        />
-                                    </div>
-                                    <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center">
-                                        <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
-                                        <span className="text-sm font-black text-blue-800">
-                                            {((editPricePerUnit || 0) * latestRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
-                                        </span>
+                            {getSellingMode(editingPriceItem.product) === 'package' && (
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                                    <div className="flex gap-3 items-stretch">
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">VENTA X UNIDAD</label>
+                                            <div className="relative flex-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
+                                                    value={editPricePerUnit || ''}
+                                                    placeholder="0.00"
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setEditPricePerUnit(parseFloat(val.replace(',', '.')) || 0);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                                                <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
+                                                <span className="text-sm font-black text-blue-800">
+                                                    {((editPricePerUnit || 0) * latestRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1 flex flex-col">
+                                            <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                                                <span className={`text-sm font-bold ${editProfitPerUnit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                    ${editProfitPerUnit.toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                                                <span className={`text-sm font-bold ${editMarginPerUnit >= 30 ? 'text-emerald-500' : editMarginPerUnit > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                                                    {editMarginPerUnit.toFixed(0)}%
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}

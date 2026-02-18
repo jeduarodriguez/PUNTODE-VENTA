@@ -564,6 +564,12 @@ const App: React.FC = () => {
     await deleteData(`treasury/${id}`);
   };
 
+  const handleUpdateTreasuryTransaction = async (updatedTransaction: TreasuryTransaction) => {
+    // Actualización optimista
+    setTreasuryTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t));
+    await saveData(`treasury/${updatedTransaction.id}`, updatedTransaction);
+  };
+
   const handleUpdateExchangeRate = async (rate: number) => {
     // Actualización optimista: actualizar el estado local inmediatamente
     setExchangeRate(rate);
@@ -781,8 +787,8 @@ const App: React.FC = () => {
           stock: updatedProducts[productIndex].stock + item.quantity,
           costPrice: item.costPrice,
           cost_price: item.costPrice,
-          cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || item.costPrice * exchangeRate) : 0,
-          cost_date: itemCostMode === 'calculated' ? new Date().toISOString().split('T')[0] : '',
+          cost_bs: itemCostMode === 'calculated' ? item.costPriceBs : 0,
+          cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
           cost_mode: itemCostMode
         };
       }
@@ -796,8 +802,8 @@ const App: React.FC = () => {
         stock: item.product.stock + item.quantity,
         costPrice: item.costPrice,
         cost_price: item.costPrice,
-        cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || item.costPrice * exchangeRate) : 0,
-        cost_date: itemCostMode === 'calculated' ? new Date().toISOString().split('T')[0] : '',
+        cost_bs: itemCostMode === 'calculated' ? item.costPriceBs : 0,
+        cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
         cost_mode: itemCostMode
       });
     }
@@ -847,7 +853,7 @@ const App: React.FC = () => {
           </div>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
+          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}

@@ -33,6 +33,7 @@ type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
 const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onOpenWorkers, onGoToInventory }) => {
+    const [editingTransaction, setEditingTransaction] = useState<TreasuryTransaction | null>(null);
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
@@ -74,6 +75,8 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [showEditModal, setShowEditModal] = useState(false);
     const [editDate, setEditDate] = useState<string>('');
     const [editAmount, setEditAmount] = useState<string>('');
+    const [editTransactionAmount, setEditTransactionAmount] = useState<string>('');
+    const [editTransactionDescription, setEditTransactionDescription] = useState<string>('');
     const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('reports_view') as ViewMode) || 'list');
 
     useEffect(() => { localStorage.setItem('reports_view', viewMode); }, [viewMode]);
@@ -259,6 +262,13 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const handleAddExpense = () => {
         const amount = parseFloat(expenseAmount);
         if (!amount || isNaN(amount) || amount <= 0) return;
+        
+        // Si hay una transacción siendo editada, eliminarla primero
+        if (editingTransaction && onDeleteTreasuryTransaction) {
+            onDeleteTreasuryTransaction(editingTransaction.id);
+            setEditingTransaction(null);
+        }
+        
         const now = Date.now();
         const amountInBs = expenseMethodLabel === '$' ? amount * exchangeRate : amount;
         const transaction: TreasuryTransaction = {
@@ -301,6 +311,38 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
         if (window.confirm("Se anulara para corregir. Continuar?")) {
             onEditSale(selectedSale);
             setSelectedSale(null);
+        }
+    };
+
+    const handleOpenTransactionEdit = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!selectedTransaction) return;
+        setEditTransactionAmount(selectedTransaction.amount.toString());
+        setEditTransactionDescription(selectedTransaction.description);
+    };
+
+    const handleSaveTransactionEdit = () => {
+        if (!selectedTransaction || !onUpdateTreasuryTransaction) return;
+        const newAmount = parseFloat(editTransactionAmount.replace(',', '.'));
+        if (isNaN(newAmount) || newAmount <= 0) return;
+        
+        const updatedTransaction: TreasuryTransaction = {
+            ...selectedTransaction,
+            amount: newAmount,
+            amountBs: newAmount * selectedTransaction.exchangeRate,
+            description: editTransactionDescription
+        };
+        
+        onUpdateTreasuryTransaction(updatedTransaction);
+        setSelectedTransaction(null);
+    };
+
+    const handleDeleteTransaction = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!selectedTransaction || !onDeleteTreasuryTransaction) return;
+        if (window.confirm("Eliminar este movimiento?")) {
+            onDeleteTreasuryTransaction(selectedTransaction.id);
+            setSelectedTransaction(null);
         }
     };
 
@@ -529,9 +571,32 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                 setSelectedSale(item.data);
                                                 setShowSearchInput(false);
                                             } else {
-                                                setSelectedTransaction(item.data);
+                                                const t = item.data;
+                                                // Según el tipo de transacción,abrir el flujo completo de edición
+                                                if (t.type === 'expense' && t.category === 'Inventario') {
+                                                    // Es compra de inventario - abrir PurchasePOS
+                                                    setEditingTransaction(t);
+                                                    setShowPurchasePOS(true);
+                                                    setShowSearchInput(false);
+                                                } else if (t.type === 'expense') {
+                                                    // Es gasto - abrir modal de gasto
+                                                    setExpenseAmount(t.amount.toString());
+                                                    setExpenseDescription(t.description);
+                                                    setExpenseCategory(t.category);
+                                                    setExpenseMethod(t.method as any);
+                                                    setShowExpenseModal(true);
+                                                    setShowSearchInput(false);
+                                                } else if (t.type === 'income') {
+                                                    // Es ingreso/venta - abrir POS de ventas
+                                                    onOpenPOS();
+                                                    setShowSearchInput(false);
+                                                } else if (t.type === 'debt') {
+                                                    // Es deuda - abrir flujo de clientes
+                                                    onOpenWorkers?.();
+                                                    setShowSearchInput(false);
+                                                }
                                             }
-                                        }} 
+                                        }}
                                         className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                                     >
                                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -740,8 +805,19 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     categories={categories}
                     onAddCategory={onAddCategory}
                     onDeleteCategory={onDeleteCategory}
-                    onClose={() => setShowPurchasePOS(false)}
-                    onPurchase={onPurchaseProducts}
+                    onClose={() => {
+                        setShowPurchasePOS(false);
+                        setEditingTransaction(null);
+                    }}
+                    onPurchase={(items, method, businessDebt) => {
+                        // Si hay una transacción siendo editada, eliminarla primero
+                        if (editingTransaction && onDeleteTreasuryTransaction) {
+                            onDeleteTreasuryTransaction(editingTransaction.id);
+                            setEditingTransaction(null);
+                        }
+                        onPurchaseProducts(items, method, businessDebt);
+                        setShowPurchasePOS(false);
+                    }}
                     onAddProduct={onAddProduct}
                     onOpenInventory={() => { setShowPurchasePOS(false); onGoToInventory?.(); }}
                 />
@@ -820,6 +896,213 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     </div>
                 </div>
             )}
+
+            {selectedTransaction && (() => {
+                const t = selectedTransaction;
+                const isCompra = t.type === 'expense' && t.category === 'Inventario';
+                const isGasto = t.type === 'expense' && t.category !== 'Inventario';
+                const isVenta = t.type === 'income' && (t.category === 'Ventas' || t.id.startsWith('sale_'));
+                const isCobro = t.type === 'income' && t.category === 'Cobros';
+                const isRecarga = t.type === 'income' && t.category === 'Recargas';
+                const isDeuda = t.type === 'debt';
+                const isNomina = t.type === 'expense' && (t.category === 'Nómina' || t.category === 'Pago Nómina' || t.description?.includes('Nomina') || t.description?.includes('trabajador'));
+                
+                const getTypeLabel = () => {
+                    if (isCompra) return 'COMPRA INVENTARIO';
+                    if (isGasto) return 'GASTO';
+                    if (isVenta) return 'VENTA';
+                    if (isCobro) return 'COBRO';
+                    if (isRecarga) return 'RECARGA';
+                    if (isDeuda) return 'DEUDA PENDIENTE';
+                    if (isNomina) return 'PAGO NÓMINA';
+                    return t.type === 'expense' ? 'GASTO' : t.type === 'debt' ? 'DEUDA' : 'INGRESO';
+                };
+                
+                return (
+                <div onClick={() => setSelectedTransaction(null)} className="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm animate-fade-in">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white w-full sm:max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className={`p-6 text-center ${
+                            isCompra ? 'bg-emerald-600' : 
+                            isVenta || isCobro || isRecarga ? 'bg-blue-600' :
+                            isDeuda || isNomina ? 'bg-orange-500' : 
+                            isGasto ? 'bg-red-500' : 'bg-gray-600'
+                        }`}>
+                            <button onClick={() => setSelectedTransaction(null)} className="absolute top-4 right-4 bg-white/20 p-2 rounded-full text-white">
+                                <X className="w-6 h-6" />
+                            </button>
+                            <p className="text-xs font-bold text-white/80 uppercase tracking-widest">{getTypeLabel()}</p>
+                            <h3 className="text-5xl font-black text-white mt-2">
+                                {isGasto || isCompra || isNomina ? '-' : isDeuda ? '⏳' : '+'}
+                                ${t.amount.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+                            </h3>
+                            <p className="text-2xl font-bold text-white/90 mt-1">
+                                {t.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                            </p>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                            <div className="text-center pb-4 border-b border-gray-100">
+                                <p className="text-base font-bold text-gray-700">
+                                    {new Date(t.timestamp).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                                <p className="text-sm text-gray-400">{new Date(t.timestamp).toLocaleTimeString()}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-gray-100 p-4 rounded-2xl">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Metodo</p>
+                                    <p className="text-base font-bold text-gray-900 mt-1">
+                                        {t.method === 'Cash' ? '💵 Efectivo' : 
+                                         t.method === 'PagoMovil' ? '📱 Pago Móvil' : 
+                                         t.method === 'Card' ? '💳 Tarjeta' :
+                                         t.method === 'PointOfSale' ? '🏦 Punto de Venta' :
+                                         t.method === 'Transfer' ? '🏧 Transferencia' :
+                                         t.method === 'Credit' ? '📋 Crédito' : t.method}
+                                    </p>
+                                </div>
+                                <div className="bg-gray-100 p-4 rounded-2xl">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tasa</p>
+                                    <p className="text-lg font-black text-gray-900 mt-1">{t.exchangeRate.toLocaleString('es-CO', { maximumFractionDigits: 2 })} Bs/$</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50 p-4 rounded-2xl">
+                                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Descripcion</p>
+                                <p className="text-base font-bold text-gray-900 mt-1">{t.description || 'Sin descripción'}</p>
+                            </div>
+
+                            {isCompra && (
+                                <div className="bg-emerald-50 p-4 rounded-2xl space-y-2">
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-emerald-600">Costo USD</p>
+                                        <p className="text-base font-black text-emerald-700">${t.amount.toFixed(2)}</p>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-emerald-600">Costo Bs</p>
+                                        <p className="text-base font-black text-emerald-700">{t.amountBs.toLocaleString('es-CO')} Bs</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {(isVenta || isCobro) && (
+                                <div className="bg-blue-50 p-4 rounded-2xl space-y-2">
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-blue-600">Venta USD</p>
+                                        <p className="text-base font-black text-blue-700">${t.amount.toFixed(2)}</p>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-blue-600">Venta Bs</p>
+                                        <p className="text-base font-black text-blue-700">{t.amountBs.toLocaleString('es-CO')} Bs</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isRecarga && (
+                                <div className="bg-purple-50 p-4 rounded-2xl">
+                                    <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Tipo de Movimiento</p>
+                                    <p className="text-base font-bold text-purple-700 mt-1">Recarga de Teléfono</p>
+                                </div>
+                            )}
+
+                            {isDeuda && (
+                                <div className="bg-orange-50 p-4 rounded-2xl space-y-2">
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-orange-600">Monto USD</p>
+                                        <p className="text-base font-black text-orange-700">${t.amount.toFixed(2)}</p>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <p className="text-xs font-bold text-orange-600">Monto Bs</p>
+                                        <p className="text-base font-black text-orange-700">{t.amountBs.toLocaleString('es-CO')} Bs</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isNomina && (
+                                <div className="bg-orange-50 p-4 rounded-2xl">
+                                    <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Pago de Nómina</p>
+                                    <p className="text-base font-bold text-orange-700 mt-1">Pago a trabajador</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 space-y-3">
+                            {isCompra && (
+                                <button 
+                                    onClick={() => {
+                                        setEditingTransaction(t);
+                                        setSelectedTransaction(null);
+                                        setShowPurchasePOS(true);
+                                    }}
+                                    className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                                >
+                                    <ShoppingCart className="w-5 h-5" />
+                                    Corregir Compra
+                                </button>
+                            )}
+                            {isGasto && (
+                                <button 
+                                    onClick={() => {
+                                        setExpenseAmount(t.amount.toString());
+                                        setExpenseDescription(t.description);
+                                        setExpenseCategory(t.category);
+                                        setExpenseMethod(t.method as any);
+                                        setSelectedTransaction(null);
+                                        setShowExpenseModal(true);
+                                    }}
+                                    className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                                >
+                                    <Wallet className="w-5 h-5" />
+                                    Corregir Gasto
+                                </button>
+                            )}
+                            {(isVenta || isCobro) && (
+                                <button 
+                                    onClick={() => {
+                                        setSelectedTransaction(null);
+                                        onOpenPOS();
+                                    }}
+                                    className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                                >
+                                    <TrendingUp className="w-5 h-5" />
+                                    Corregir Venta
+                                </button>
+                            )}
+                            {isDeuda && (
+                                <button 
+                                    onClick={() => {
+                                        setSelectedTransaction(null);
+                                        onOpenWorkers?.();
+                                    }}
+                                    className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                                >
+                                    <Clock className="w-5 h-5" />
+                                    Ver Detalles Deuda
+                                </button>
+                            )}
+                            {isNomina && (
+                                <button 
+                                    onClick={() => {
+                                        setSelectedTransaction(null);
+                                        onOpenWorkers?.();
+                                    }}
+                                    className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                                >
+                                    <Users className="w-5 h-5" />
+                                    Ver Detalles Nómina
+                                </button>
+                            )}
+                            <button 
+                                onClick={handleDeleteTransaction} 
+                                className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                                Eliminar Movimiento
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                );
+            })()}
 
             {showExpenseTypeModal && (
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -904,36 +1187,29 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             {/* --- MENÚ DE VENTAS --- */}
             {showVentasMenu && (
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl overflow-hidden animate-scale-up p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black text-gray-900">Seleccionar Opción</h3>
-                            <button onClick={() => { setShowVentasMenu(false); setVentasOption(null); }} className="p-2 text-gray-400 hover:text-gray-600">
-                                <X className="w-6 h-6" />
-                            </button>
+                    <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden">
+                        <div className="p-6 pb-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-2xl font-black text-gray-900">Ventas</h3>
+                                <button onClick={() => { setShowVentasMenu(false); setVentasOption(null); }} className="p-2 text-gray-400 hover:text-gray-600">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
                         </div>
                         
                         {!ventasOption ? (
-                            <div className="space-y-4">
-                                <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full p-6 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
-                                    <ShoppingCart className="w-8 h-8" />
-                                    <div className="text-left">
-                                        <p className="font-black text-lg">Ventas del Inventario</p>
-                                        <p className="text-xs text-emerald-100">Sistema POS</p>
-                                    </div>
+                            <div className="px-6 pb-6 space-y-3">
+                                <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                    <ShoppingCart className="w-6 h-6" />
+                                    Ventas del Inventario
                                 </button>
-                                <button onClick={() => setVentasOption('income')} className="w-full p-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
-                                    <TrendingUp className="w-8 h-8" />
-                                    <div className="text-left">
-                                        <p className="font-black text-lg">Otros Ingresos</p>
-                                        <p className="text-xs text-blue-100">Ingresos varios en Bs</p>
-                                    </div>
+                                <button onClick={() => setVentasOption('income')} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                    <TrendingUp className="w-6 h-6" />
+                                    Otros Ingresos
                                 </button>
-                                <button onClick={() => setVentasOption('recharge')} className="w-full p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-[2rem] text-white flex items-center gap-4 shadow-lg active:scale-95 transition-transform">
-                                    <Smartphone className="w-8 h-8" />
-                                    <div className="text-left">
-                                        <p className="font-black text-lg">Vender Recargas</p>
-                                        <p className="text-xs text-purple-100">Recargas de teléfono</p>
-                                    </div>
+                                <button onClick={() => setVentasOption('recharge')} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                    <Smartphone className="w-6 h-6" />
+                                    Vender Recargas
                                 </button>
                             </div>
                         ) : (
