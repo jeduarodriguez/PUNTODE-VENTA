@@ -6,6 +6,9 @@ interface PurchasePOSProps {
     products: Product[];
     exchangeRate: number;
     rateHistory?: ExchangeRateRecord[];
+    categories?: string[];
+    onAddCategory?: (category: string) => void;
+    onDeleteCategory?: (category: string) => void;
     onClose: () => void;
     onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
@@ -21,7 +24,7 @@ interface CartItem {
     rateAtPurchase?: number;
 }
 
-const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], onClose, onPurchase, onAddProduct, onOpenInventory }) => {
+const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onClose, onPurchase, onAddProduct, onOpenInventory }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
@@ -30,7 +33,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [showAddProductModal, setShowAddProductModal] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const [newProductCategory, setNewProductCategory] = useState('Bebidas');
-    const [newProductStock, setNewProductStock] = useState(1);
+    const [newProductStock, setNewProductStock] = useState(0);
     const [newProductPrice, setNewProductPrice] = useState(0);
     const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]);
     const [useCustomDate, setUseCustomDate] = useState(false);
@@ -146,11 +149,23 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const getRateForDate = (dateStr: string): number => {
         if (!rateHistory || rateHistory.length === 0) return exchangeRate;
-        const targetDate = new Date(dateStr).getTime();
-        const dayStart = new Date(dateStr).setHours(0, 0, 0, 0);
+        
+        const targetDate = new Date(dateStr + 'T00:00:00');
+        const targetTime = targetDate.getTime();
+        
         const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
-        const rateOnDate = sortedRates.find(r => r.timestamp <= dayStart);
-        if (rateOnDate) return rateOnDate.rate;
+        
+        const exactMatch = sortedRates.find(r => {
+            const rateDate = new Date(r.timestamp);
+            const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
+            return rateDateStr === dateStr;
+        });
+        
+        if (exactMatch) return exactMatch.rate;
+        
+        const closestRate = sortedRates.find(r => r.timestamp < targetTime);
+        if (closestRate) return closestRate.rate;
+        
         return sortedRates[0]?.rate || exchangeRate;
     };
 
@@ -234,6 +249,19 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             }
             return item;
         }).filter(item => item.quantity > 0));
+    };
+
+    const updateQuantityDirect = (productId: string, newQty: number) => {
+        if (newQty <= 0) {
+            setCart(prev => prev.filter(item => item.product.id !== productId));
+        } else {
+            setCart(prev => prev.map(item => {
+                if (item.product.id === productId) {
+                    return { ...item, quantity: newQty };
+                }
+                return item;
+            }));
+        }
     };
 
     const getProductStock = (product: Product) => {
@@ -395,7 +423,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const resetNewProductForm = () => {
         setNewProductName('');
         setNewProductCategory('Bebidas');
-        setNewProductStock(1);
+        setNewProductStock(0);
         setNewProductPrice(0);
         setNewProductPriceDisplay('');
         setNewProductPricePerUnitDisplay('');
@@ -564,7 +592,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                     −
                                                 </button>
                                                 <div 
-                                                    className="w-10 h-7 rounded flex items-center justify-center font-black text-sm bg-indigo-600 text-white cursor-text"
+                                                    className="w-16 h-7 rounded flex items-center justify-center font-black text-sm bg-indigo-600 text-white cursor-text min-w-[64px]"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         const input = e.currentTarget.querySelector('input');
@@ -572,21 +600,27 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                     }}
                                                 >
                                                     <input
-                                                        type="number"
-                                                        min="0"
+                                                        type="text"
+                                                        inputMode="decimal"
                                                         className="w-full h-full text-center bg-transparent outline-none text-white font-black"
                                                         value={qtyInCart}
                                                         onChange={(e) => {
                                                             e.stopPropagation();
-                                                            const val = parseInt(e.target.value) || 0;
-                                                            if (val === 0) {
+                                                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                            if (val <= 0) {
                                                                 removeFromCart(product.id);
                                                             } else {
-                                                                const diff = val - qtyInCart;
-                                                                if (diff > 0) {
-                                                                    for (let i = 0; i < diff; i++) addToCart(product);
+                                                                const sellingMode = product.sellingMode;
+                                                                if (sellingMode === 'weight') {
+                                                                    updateQuantityDirect(product.id, val);
                                                                 } else {
-                                                                    for (let i = 0; i < Math.abs(diff); i++) updateQuantity(product.id, -1);
+                                                                    const intVal = Math.floor(val);
+                                                                    const diff = intVal - Math.floor(qtyInCart);
+                                                                    if (diff > 0) {
+                                                                        for (let i = 0; i < diff; i++) addToCart(product);
+                                                                    } else if (diff < 0) {
+                                                                        for (let i = 0; i < Math.abs(diff); i++) updateQuantity(product.id, -1);
+                                                                    }
                                                                 }
                                                             }
                                                         }}
@@ -686,19 +720,20 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                 <Minus className="w-3 h-3" />
                                             </button>
                                             <input
-                                                type="number"
-                                                min="1"
+                                                type="text"
+                                                inputMode="decimal"
                                                 value={item.quantity}
                                                 onChange={(e) => {
-                                                    const val = parseInt(e.target.value) || 1;
-                                                    const diff = val - item.quantity;
-                                                    if (diff > 0) {
-                                                        for (let i = 0; i < diff; i++) updateQuantity(item.product.id, 1);
-                                                    } else if (diff < 0) {
-                                                        for (let i = 0; i < Math.abs(diff); i++) updateQuantity(item.product.id, -1);
+                                                    const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                    const sellingMode = item.product.sellingMode;
+                                                    if (sellingMode === 'weight') {
+                                                        updateQuantityDirect(item.product.id, val);
+                                                    } else {
+                                                        const intVal = Math.max(0, Math.floor(val));
+                                                        updateQuantityDirect(item.product.id, intVal);
                                                     }
                                                 }}
-                                                className="w-10 text-center font-black text-sm bg-white border border-gray-200 rounded py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                className="w-16 text-center font-black text-sm bg-white border border-gray-200 rounded py-1"
                                             />
                                             <button 
                                                 onClick={() => updateQuantity(item.product.id, 1)}
@@ -807,14 +842,24 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 </button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-2 w-full max-w-2xl mx-auto">
-                                {['Bebidas', 'Panadería', 'Comida', 'Snacks', 'Otros', 'Desayunos', 'Postres', 'Accesorios'].map(cat => (
+                                {(categories.length > 0 ? categories : ['Bebidas', 'Panadería', 'Comida', 'Snacks', 'Otros', 'Desayunos', 'Postres', 'Accesorios']).map(cat => (
                                     <button
                                         key={cat}
                                         onClick={() => { setNewProductCategory(cat); setShowNewProductCategoryModal(false); }}
                                         className={`w-full p-3 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-[0.98] ${newProductCategory === cat ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'}`}
                                     >
                                         <span className="font-bold text-sm truncate">{cat}</span>
-                                        {newProductCategory === cat && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                        <div className="flex items-center gap-1">
+                                            {newProductCategory === cat && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                            {categories.length > 0 && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDeleteCategory?.(cat); }}
+                                                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </button>
                                 ))}
                             </div>

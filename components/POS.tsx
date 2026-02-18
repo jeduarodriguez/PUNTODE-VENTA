@@ -681,12 +681,14 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                         </div>
                                         <input
                                             autoFocus
-                                            type="number"
-                                            step="0.01"
-                                            min="0.01"
-                                            max={weightProduct.stock}
+                                            type="text"
+                                            inputMode="decimal"
+                                            pattern="[0-9]*[.,]?[0-9]*"
                                             value={weightQuantity}
-                                            onChange={(e) => setWeightQuantity(e.target.value)}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(',', '.');
+                                                setWeightQuantity(val);
+                                            }}
                                             className="w-48 bg-transparent text-7xl font-black text-purple-700 outline-none text-center"
                                             placeholder="0"
                                         />

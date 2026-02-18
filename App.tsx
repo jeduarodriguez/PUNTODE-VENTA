@@ -469,13 +469,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDebtPayment = async (customerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => {
+  const handleDebtPayment = async (customerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil', rate?: number) => {
+    const paymentRate = rate || exchangeRate;
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
       items: [{ id: 'debt_payment', name: 'Abono de Deuda', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
       total: amount,
-      exchangeRate,
+      exchangeRate: paymentRate,
       paymentMethod: method,
       customerId
     };
@@ -492,8 +493,8 @@ const App: React.FC = () => {
       updates[`customers/${customerId}`] = c;
     }
 
-    // Registrar ingreso en treasury por pago de deuda
-    const totalBs = amount * exchangeRate;
+    // Registrar ingreso en treasury por pago de deuda usando la tasa del día
+    const totalBs = amount * paymentRate;
     const treasuryTransaction: TreasuryTransaction = {
       id: `debt_payment_${paymentSale.id}`,
       timestamp: paymentSale.timestamp,
@@ -502,7 +503,7 @@ const App: React.FC = () => {
       description: 'Abono de Deuda',
       amount: amount,
       amountBs: totalBs,
-      exchangeRate,
+      exchangeRate: paymentRate,
       method: method
     };
     updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
@@ -668,13 +669,14 @@ const App: React.FC = () => {
     showNotification('Trabajador eliminado');
   };
 
-  const handleWorkerDebtPayment = async (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => {
+  const handleWorkerDebtPayment = async (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil', rate?: number) => {
+    const paymentRate = rate || exchangeRate;
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
       items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
       total: amount,
-      exchangeRate,
+      exchangeRate: paymentRate,
       paymentMethod: method,
       customerId: workerId
     };
@@ -690,8 +692,8 @@ const App: React.FC = () => {
       updates[`workers/${workerId}`] = w;
     }
 
-    // Registrar ingreso en treasury por pago de deuda de trabajador
-    const totalBs = amount * exchangeRate;
+    // Registrar ingreso en treasury por pago de deuda de trabajador usando la tasa del día
+    const totalBs = amount * paymentRate;
     const treasuryTransaction: TreasuryTransaction = {
       id: `worker_debt_payment_${paymentSale.id}`,
       timestamp: paymentSale.timestamp,
@@ -700,7 +702,7 @@ const App: React.FC = () => {
       description: 'Abono Deuda Trabajador',
       amount: amount,
       amountBs: totalBs,
-      exchangeRate,
+      exchangeRate: paymentRate,
       method: method
     };
     updates[`treasury/${treasuryTransaction.id}`] = treasuryTransaction;
@@ -845,7 +847,7 @@ const App: React.FC = () => {
           </div>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
+          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}

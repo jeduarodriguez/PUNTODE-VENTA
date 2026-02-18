@@ -13,11 +13,11 @@ interface CustomersProps {
   onAdd: (customer: Customer) => void;
   onUpdate: (customer: Customer) => void;
   onDelete: (id: string) => void;
-  onDebtPayment: (customerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => void;
+  onDebtPayment: (customerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil', rate?: number) => void;
   onAddWorker: (worker: Worker) => void;
   onUpdateWorker: (worker: Worker) => void;
   onDeleteWorker: (id: string) => void;
-  onWorkerDebtPayment: (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil') => void;
+  onWorkerDebtPayment: (workerId: string, amount: number, method: 'Cash' | 'Card' | 'PagoMovil', rate?: number) => void;
   onAddBusinessDebt: (debt: BusinessDebt) => void;
   onPayBusinessDebt: (debtId: string, amount: number, method: 'Cash' | 'Transfer' | 'PagoMovil') => void;
   onUpdateBusinessDebt: (debt: BusinessDebt) => void;
@@ -36,6 +36,24 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   // Estados para el Modal de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentCustomer, setPaymentCustomer] = useState<Customer | null>(null);
+  const [paymentAmountUsd, setPaymentAmountUsd] = useState<string>('');
+
+  // Función para obtener la tasa del día o la más reciente
+  const getTodayRate = (): number => {
+    if (!rateHistory || rateHistory.length === 0) return exchangeRate;
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+    const todayRate = sortedRates.find(r => {
+      const rateDate = new Date(r.timestamp);
+      const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
+      return rateDateStart === todayStart;
+    });
+    if (todayRate) return todayRate.rate;
+    return sortedRates[0]?.rate || exchangeRate;
+  };
+
+  const todayRate = getTodayRate();
 
   const [formData, setFormData] = useState<Partial<Customer>>({
     name: '',
@@ -50,6 +68,8 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   const [historyWorker, setHistoryWorker] = useState<Worker | null>(null);
   const [isWorkerPaymentModalOpen, setIsWorkerPaymentModalOpen] = useState(false);
   const [paymentWorker, setPaymentWorker] = useState<Worker | null>(null);
+  const [workerPaymentAmountUsd, setWorkerPaymentAmountUsd] = useState<string>('');
+  const [payrollPaymentAmountUsd, setPayrollPaymentAmountUsd] = useState<string>('');
 
   const [workerFormData, setWorkerFormData] = useState<Partial<Worker>>({
     name: '',
@@ -104,7 +124,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
       if (worker) {
         const amountToPay = Math.max(0, worker.salary - worker.balance);
         if (amountToPay > 0) {
-          onWorkerDebtPayment(workerId, worker.balance, method);
+          onWorkerDebtPayment(workerId, worker.balance, method, todayRate);
         }
       }
     });
@@ -233,14 +253,18 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
     e.stopPropagation();
     if (worker.balance <= 0) return;
     setPaymentWorker(worker);
+    setWorkerPaymentAmountUsd(worker.balance.toFixed(2));
     setIsWorkerPaymentModalOpen(true);
   };
 
   const handleProcessWorkerPayment = (method: 'Cash' | 'Card' | 'PagoMovil') => {
     if (paymentWorker) {
-      onWorkerDebtPayment(paymentWorker.id, paymentWorker.balance, method);
+      const amountUsd = parseFloat(workerPaymentAmountUsd) || 0;
+      if (amountUsd <= 0 || amountUsd > paymentWorker.balance) return;
+      onWorkerDebtPayment(paymentWorker.id, amountUsd, method, todayRate);
       setIsWorkerPaymentModalOpen(false);
       setPaymentWorker(null);
+      setWorkerPaymentAmountUsd('');
     }
   };
 
@@ -288,15 +312,18 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
     e.stopPropagation();
     if (customer.balance <= 0) return;
     setPaymentCustomer(customer);
+    setPaymentAmountUsd(customer.balance.toFixed(2));
     setIsPaymentModalOpen(true);
   };
 
   const handleProcessPayment = (method: 'Cash' | 'Card' | 'PagoMovil') => {
     if (paymentCustomer) {
-        onDebtPayment(paymentCustomer.id, paymentCustomer.balance, method);
+        const amountUsd = parseFloat(paymentAmountUsd) || 0;
+        if (amountUsd <= 0 || amountUsd > paymentCustomer.balance) return;
+        onDebtPayment(paymentCustomer.id, amountUsd, method, todayRate);
         setIsPaymentModalOpen(false);
         setPaymentCustomer(null);
-        // Opcional: Cerrar también el historial si se pagó todo, o dejarlo abierto para ver el registro
+        setPaymentAmountUsd('');
     }
   };
 
@@ -763,7 +790,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                             </div>
                             <div className="w-px h-8 bg-white/20"></div>
                             <button 
-                                onClick={() => { setPaymentWorker(historyWorker); setIsPayrollPaymentModalOpen(true); }}
+                                onClick={() => { setPaymentWorker(historyWorker); setPayrollPaymentAmountUsd(''); setIsPayrollPaymentModalOpen(true); }}
                                 className="bg-orange-600 text-white px-3 py-2 rounded-xl font-bold text-xs uppercase shadow-lg hover:bg-orange-500 active:scale-95 transition-all"
                             >
                                 Pago Nómina
@@ -905,24 +932,76 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                       <h3 className="text-lg font-black mb-1">Pagar Deuda</h3>
                       <p className="text-orange-200 text-xs font-medium uppercase tracking-widest">{paymentWorker.name}</p>
                       
-                      <div className="mt-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                              <span className="text-orange-300">Total Deuda:</span>
-                              <span className="font-bold">${workerDebt.toFixed(2)} Deuda</span>
-                          </div>
-                          <div className="text-3xl font-black">
-                              {(workerDebt * exchangeRate).toLocaleString('es-CO', {maximumFractionDigits: 2}).replace(/\./g, ',')} Bs
-                          </div>
+                      <div className="mt-4 mb-2">
+                          <span className="text-3xl font-black block tracking-tight">
+                              {(paymentWorker.balance * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                          </span>
+                          <span className="text-orange-200/60 font-bold text-sm block mt-1">
+                              Deuda total: ${paymentWorker.balance.toFixed(2)} (Tasa: {todayRate.toFixed(2)} Bs/$)
+                          </span>
                       </div>
                   </div>
                   
-                  <div className="p-6">
-                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Metodo de Pago</p>
+                  <div className="p-6 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Monto a pagar (USD)</label>
+                          <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                              <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max={paymentWorker.balance}
+                                  value={workerPaymentAmountUsd}
+                                  onChange={(e) => setWorkerPaymentAmountUsd(e.target.value)}
+                                  className="w-full pl-8 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-xl font-black text-gray-900 outline-none focus:border-orange-500"
+                                  placeholder="0.00"
+                              />
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                              <button
+                                  onClick={() => setWorkerPaymentAmountUsd((paymentWorker.balance * 0.25).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  25%
+                              </button>
+                              <button
+                                  onClick={() => setWorkerPaymentAmountUsd((paymentWorker.balance * 0.5).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  50%
+                              </button>
+                              <button
+                                  onClick={() => setWorkerPaymentAmountUsd((paymentWorker.balance * 0.75).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  75%
+                              </button>
+                              <button
+                                  onClick={() => setWorkerPaymentAmountUsd(paymentWorker.balance.toFixed(2))}
+                                  className="flex-1 py-2 bg-orange-100 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-200"
+                              >
+                                  100%
+                              </button>
+                          </div>
+                      </div>
+
+                      {(parseFloat(workerPaymentAmountUsd) || 0) > 0 && (
+                          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
+                              <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Monto a pagar</p>
+                              <p className="text-2xl font-black text-emerald-700">
+                                  ${parseFloat(workerPaymentAmountUsd).toFixed(2)} = {(parseFloat(workerPaymentAmountUsd) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                              </p>
+                          </div>
+                      )}
+
+                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Método de Pago</p>
                       
                       <div className="space-y-3">
                           <button 
                             onClick={() => handleProcessWorkerPayment('Cash')}
-                            className="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!workerPaymentAmountUsd || parseFloat(workerPaymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-emerald-200 text-emerald-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <Banknote className="w-5 h-5" />
@@ -932,17 +1011,19 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
                           <button 
                             onClick={() => handleProcessWorkerPayment('PagoMovil')}
-                            className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!workerPaymentAmountUsd || parseFloat(workerPaymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-blue-200 text-blue-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <Smartphone className="w-5 h-5" />
                               </div>
-                              <span className="font-black text-sm">PAGO MOVIL</span>
+                              <span className="font-black text-sm">PAGO MÓVIL</span>
                           </button>
 
                           <button 
                             onClick={() => handleProcessWorkerPayment('Card')}
-                            className="w-full py-4 bg-purple-50 hover:bg-purple-100 border border-purple-100 text-purple-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!workerPaymentAmountUsd || parseFloat(workerPaymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-purple-50 hover:bg-purple-100 border border-purple-100 text-purple-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-purple-200 text-purple-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <ArrowRight className="w-5 h-5" />
@@ -958,45 +1039,166 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
       {isPayrollPaymentModalOpen && paymentWorker && (() => {
         const workerDebt = sales.filter(s => s.customerId === paymentWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0);
+        const maxPayment = Math.min(paymentWorker.salary, workerDebt);
+        const remainingDebt = workerDebt - maxPayment;
+        
         return (
           <>
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[80] backdrop-blur-sm animate-fade-in">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
                   <div className="p-6 bg-gradient-to-br from-gray-900 to-gray-800 text-white text-center relative">
                       <button onClick={() => setIsPayrollPaymentModalOpen(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
-                      <h3 className="text-lg font-black mb-1">Pagar Nomina</h3>
+                      <h3 className="text-lg font-black mb-1">Pagar Nómina</h3>
                       <p className="text-gray-300 text-xs font-medium uppercase tracking-widest">{paymentWorker.name}</p>
-                      <div className="mt-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                              <span className="text-gray-400">Salario:</span>
-                              <span className="font-bold">${paymentWorker.salary.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                              <span className="text-gray-400">Deuda:</span>
-                              <span className="font-bold text-red-300">-${workerDebt.toFixed(2)}</span>
-                          </div>
-                          <div className="border-t border-white/20 pt-2 mt-2">
-                              <div className="flex justify-between text-sm">
-                                  <span className="text-orange-300 font-bold">A Pagar:</span>
-                                  <span className="font-bold">${Math.max(0, paymentWorker.salary - workerDebt).toFixed(2)} USD</span>
-                              </div>
-                          </div>
-                          <div className="text-3xl font-black text-orange-400">
-                              {(Math.max(0, paymentWorker.salary - workerDebt) * exchangeRate).toLocaleString('es-CO', {maximumFractionDigits: 2}).replace(/\./g, ',')} Bs
-                          </div>
+                      
+                      <div className="mt-4 mb-2">
+                          <span className="text-3xl font-black block tracking-tight">
+                              {(paymentWorker.salary * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                          </span>
+                          <span className="text-gray-400 font-bold text-sm block mt-1">
+                              Salario: ${paymentWorker.salary.toFixed(2)} (Tasa: {todayRate.toFixed(2)} Bs/$)
+                          </span>
                       </div>
                   </div>
-                  <div className="p-6 space-y-3">
-                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Metodo de Pago</p>
-                      <button onClick={() => { onWorkerDebtPayment(paymentWorker.id, workerDebt, 'Cash'); setIsPayrollPaymentModalOpen(false); }} classrollPaymentModalOpenName="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3">
-                          <Banknote className="w-5 h-5" /><span className="font-black text-sm">EFECTIVO</span>
-                      </button>
-                      <button onClick={() => { onWorkerDebtPayment(paymentWorker.id, workerDebt, 'PagoMovil'); setIsPayrollPaymentModalOpen(false); }} className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3">
-                          <Smartphone className="w-5 h-5" /><span className="font-black text-sm">PAGO MOVIL</span>
-                      </button>
-                      <button onClick={() => { onWorkerDebtPayment(paymentWorker.id, workerDebt, 'Card'); setIsPayrollPaymentModalOpen(false); }} className="w-full py-4 bg-purple-50 hover:bg-purple-100 border border-purple-100 text-purple-700 rounded-2xl flex items-center justify-center gap-3">
-                          <ArrowRight className="w-5 h-5" /><span className="font-black text-sm">TRANSFERENCIA</span>
-                      </button>
+                  
+                  <div className="p-6 space-y-4">
+                      {workerDebt > paymentWorker.salary && (
+                          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                              <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1">Atención: Deuda mayor al salario</p>
+                              <p className="text-sm text-red-500">
+                                  La deuda (${workerDebt.toFixed(2)}) excede el salario (${paymentWorker.salary.toFixed(2)}). 
+                                  El excedente de <span className="font-black">${(workerDebt - paymentWorker.salary).toFixed(2)}</span> quedará como deuda pendiente.
+                              </p>
+                          </div>
+                      )}
+
+                      <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Deuda actual:</span>
+                              <span className="font-bold text-red-500">${workerDebt.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Monto a deducir:</span>
+                              <span className="font-bold text-orange-600">${payrollPaymentAmountUsd ? parseFloat(payrollPaymentAmountUsd).toFixed(2) : maxPayment.toFixed(2)}</span>
+                          </div>
+                          {remainingDebt > 0 && (
+                              <div className="flex justify-between text-sm border-t pt-2">
+                                  <span className="text-gray-500">Deuda restante:</span>
+                                  <span className="font-bold text-red-400">${remainingDebt.toFixed(2)}</span>
+                              </div>
+                          )}
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Monto a deducir (USD)</label>
+                          <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                              <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max={maxPayment}
+                                  value={payrollPaymentAmountUsd}
+                                  onChange={(e) => setPayrollPaymentAmountUsd(e.target.value)}
+                                  className="w-full pl-8 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-xl font-black text-gray-900 outline-none focus:border-orange-500"
+                                  placeholder="0.00"
+                              />
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                              <button
+                                  onClick={() => setPayrollPaymentAmountUsd((maxPayment * 0.25).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  25%
+                              </button>
+                              <button
+                                  onClick={() => setPayrollPaymentAmountUsd((maxPayment * 0.5).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  50%
+                              </button>
+                              <button
+                                  onClick={() => setPayrollPaymentAmountUsd((maxPayment * 0.75).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  75%
+                              </button>
+                              <button
+                                  onClick={() => setPayrollPaymentAmountUsd(maxPayment.toFixed(2))}
+                                  className="flex-1 py-2 bg-orange-100 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-200"
+                              >
+                                  100%
+                              </button>
+                          </div>
+                      </div>
+
+                      {(parseFloat(payrollPaymentAmountUsd) || maxPayment) > 0 && (
+                          <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-center">
+                              <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-1">A deducir de nómina</p>
+                              <p className="text-2xl font-black text-orange-700">
+                                  ${(parseFloat(payrollPaymentAmountUsd) || maxPayment).toFixed(2)} = {((parseFloat(payrollPaymentAmountUsd) || maxPayment) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                              </p>
+                          </div>
+                      )}
+
+                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Método de Pago</p>
+                      
+                      <div className="space-y-3">
+                          <button 
+                            onClick={() => { 
+                                const amountToPay = parseFloat(payrollPaymentAmountUsd) || maxPayment;
+                                if (amountToPay > 0) {
+                                    onWorkerDebtPayment(paymentWorker.id, amountToPay, 'Cash', todayRate);
+                                    setIsPayrollPaymentModalOpen(false);
+                                    setPayrollPaymentAmountUsd('');
+                                }
+                            }}
+                            disabled={!payrollPaymentAmountUsd && maxPayment <= 0}
+                            className="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                              <Banknote className="w-5 h-5" /><span className="font-black text-sm">EFECTIVO</span>
+                          </button>
+                          <button 
+                            onClick={() => { 
+                                const amountToPay = parseFloat(payrollPaymentAmountUsd) || maxPayment;
+                                if (amountToPay > 0) {
+                                    onWorkerDebtPayment(paymentWorker.id, amountToPay, 'PagoMovil', todayRate);
+                                    setIsPayrollPaymentModalOpen(false);
+                                    setPayrollPaymentAmountUsd('');
+                                }
+                            }}
+                            disabled={!payrollPaymentAmountUsd && maxPayment <= 0}
+                            className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                              <Smartphone className="w-5 h-5" /><span className="font-black text-sm">PAGO MÓVIL</span>
+                          </button>
+                          <button 
+                            onClick={() => { 
+                                const amountToPay = parseFloat(payrollPaymentAmountUsd) || maxPayment;
+                                if (amountToPay > 0) {
+                                    onWorkerDebtPayment(paymentWorker.id, amountToPay, 'Card', todayRate);
+                                    setIsPayrollPaymentModalOpen(false);
+                                    setPayrollPaymentAmountUsd('');
+                                }
+                            }}
+                            disabled={!payrollPaymentAmountUsd && maxPayment <= 0}
+                            className="w-full py-4 bg-purple-50 hover:bg-purple-100 border border-purple-100 text-purple-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                              <ArrowRight className="w-5 h-5" /><span className="font-black text-sm">TRANSFERENCIA</span>
+                          </button>
+                          
+                          <div className="border-t border-gray-200 pt-3 mt-2">
+                              <button 
+                                onClick={() => { 
+                                    setIsPayrollPaymentModalOpen(false);
+                                    setPayrollPaymentAmountUsd('');
+                                }}
+                                className="w-full py-3 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-600 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 group"
+                              >
+                                  <Calendar className="w-4 h-4" /><span className="font-bold text-xs">Pasar para próxima semana</span>
+                              </button>
+                          </div>
+                      </div>
                   </div>
               </div>
           </div>
@@ -1064,23 +1266,76 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                       <h3 className="text-lg font-black mb-1">Cobrar Deuda</h3>
                       <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">{paymentCustomer.name}</p>
                       
-                      <div className="mt-6 mb-2">
-                          <span className="text-4xl font-black block tracking-tight">
-                              {(paymentCustomer.balance * exchangeRate).toFixed(2)} Bs
+                      <div className="mt-4 mb-2">
+                          <span className="text-3xl font-black block tracking-tight">
+                              {(paymentCustomer.balance * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
                           </span>
                           <span className="text-white/60 font-bold text-sm block mt-1">
-                              Ref: ${paymentCustomer.balance.toFixed(2)}
+                              Deuda total: ${paymentCustomer.balance.toFixed(2)} (Tasa: {todayRate.toFixed(2)} Bs/$)
                           </span>
                       </div>
                   </div>
                   
-                  <div className="p-6">
-                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Seleccione Método de Pago</p>
+                  <div className="p-6 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Monto a pagar (USD)</label>
+                          <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                              <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max={paymentCustomer.balance}
+                                  value={paymentAmountUsd}
+                                  onChange={(e) => setPaymentAmountUsd(e.target.value)}
+                                  className="w-full pl-8 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-xl font-black text-gray-900 outline-none focus:border-indigo-500"
+                                  placeholder="0.00"
+                              />
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                              <button
+                                  onClick={() => setPaymentAmountUsd((paymentCustomer.balance * 0.25).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  25%
+                              </button>
+                              <button
+                                  onClick={() => setPaymentAmountUsd((paymentCustomer.balance * 0.5).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  50%
+                              </button>
+                              <button
+                                  onClick={() => setPaymentAmountUsd((paymentCustomer.balance * 0.75).toFixed(2))}
+                                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200"
+                              >
+                                  75%
+                              </button>
+                              <button
+                                  onClick={() => setPaymentAmountUsd(paymentCustomer.balance.toFixed(2))}
+                                  className="flex-1 py-2 bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg hover:bg-indigo-200"
+                              >
+                                  100%
+                              </button>
+                          </div>
+                      </div>
+
+                      {(parseFloat(paymentAmountUsd) || 0) > 0 && (
+                          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
+                              <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Monto a pagar</p>
+                              <p className="text-2xl font-black text-emerald-700">
+                                  ${parseFloat(paymentAmountUsd).toFixed(2)} = {(parseFloat(paymentAmountUsd) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                              </p>
+                          </div>
+                      )}
+
+                      <p className="text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Método de Pago</p>
                       
                       <div className="space-y-3">
                           <button 
                             onClick={() => handleProcessPayment('Cash')}
-                            className="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!paymentAmountUsd || parseFloat(paymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-emerald-200 text-emerald-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <Banknote className="w-5 h-5" />
@@ -1090,7 +1345,8 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
                           <button 
                             onClick={() => handleProcessPayment('PagoMovil')}
-                            className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!paymentAmountUsd || parseFloat(paymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-blue-50 hover:bg-blue-100 border border-blue-100 text-blue-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-blue-200 text-blue-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <Smartphone className="w-5 h-5" />
@@ -1100,7 +1356,8 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
 
                           <button 
                             onClick={() => handleProcessPayment('Card')}
-                            className="w-full py-4 bg-gray-50 hover:bg-gray-100 border border-gray-100 text-gray-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                            disabled={!paymentAmountUsd || parseFloat(paymentAmountUsd) <= 0}
+                            className="w-full py-4 bg-gray-50 hover:bg-gray-100 border border-gray-100 text-gray-700 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               <div className="bg-gray-200 text-gray-700 p-2 rounded-xl group-hover:scale-110 transition-transform">
                                   <CreditCard className="w-5 h-5" />

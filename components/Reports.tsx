@@ -13,6 +13,9 @@ interface ReportsProps {
     exchangeRate: number;
     treasuryTransactions?: TreasuryTransaction[];
     rateHistory?: ExchangeRateRecord[];
+    categories?: string[];
+    onAddCategory?: (category: string) => void;
+    onDeleteCategory?: (category: string) => void;
     onOpenPOS: () => void;
     onVoidSale: (saleId: string) => void;
     onEditSale: (sale: Sale) => void;
@@ -29,7 +32,7 @@ interface ReportsProps {
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onOpenWorkers, onGoToInventory }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onOpenWorkers, onGoToInventory }) => {
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
@@ -734,6 +737,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     products={products}
                     exchangeRate={exchangeRate}
                     rateHistory={rateHistory}
+                    categories={categories}
+                    onAddCategory={onAddCategory}
+                    onDeleteCategory={onDeleteCategory}
                     onClose={() => setShowPurchasePOS(false)}
                     onPurchase={onPurchaseProducts}
                     onAddProduct={onAddProduct}
@@ -870,7 +876,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             </div>
                             <input type="text" placeholder="Descripcion" className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm" value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} />
                             <div className="grid grid-cols-3 gap-2">
-                                {['Inventario', 'Servicios', 'Otros'].map(cat => (
+                                {(categories.length > 0 ? categories : ['Inventario', 'Servicios', 'Otros']).map(cat => (
                                     <button key={cat} onClick={() => setExpenseCategory(cat)} className={`py-2 text-xs font-bold rounded-lg ${expenseCategory === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{cat}</button>
                                 ))}
                             </div>
