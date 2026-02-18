@@ -772,21 +772,31 @@ const App: React.FC = () => {
     const updatedProducts = [...products];
     for (const item of items) {
       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
+      const itemCostMode = (item.product as any).cost_mode || 'calculated';
       if (productIndex >= 0) {
         updatedProducts[productIndex] = {
           ...updatedProducts[productIndex],
           stock: updatedProducts[productIndex].stock + item.quantity,
-          costPrice: item.costPrice
+          costPrice: item.costPrice,
+          cost_price: item.costPrice,
+          cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || item.costPrice * exchangeRate) : 0,
+          cost_date: itemCostMode === 'calculated' ? new Date().toISOString().split('T')[0] : '',
+          cost_mode: itemCostMode
         };
       }
     }
     setProducts(updatedProducts);
 
     for (const item of items) {
+      const itemCostMode = (item.product as any).cost_mode || 'calculated';
       await saveData(`products/${item.product.id}`, {
         ...item.product,
         stock: item.product.stock + item.quantity,
-        costPrice: item.costPrice
+        costPrice: item.costPrice,
+        cost_price: item.costPrice,
+        cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || item.costPrice * exchangeRate) : 0,
+        cost_date: itemCostMode === 'calculated' ? new Date().toISOString().split('T')[0] : '',
+        cost_mode: itemCostMode
       });
     }
   };
