@@ -258,7 +258,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const expensesUsd = treasuryTransactions.filter(t => t.type === 'expense' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
     const incomeBs = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
     const incomeUsd = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
-    const netBalanceUsd = totalSalesUsdFiltered - expensesUsd;
+    const netBalanceUsd = totalSalesUsdFiltered + incomeUsd - expensesUsd;
     const bankTransactions = treasuryTransactions.filter(t => t.method !== 'Cash');
     const bankBalanceFromTxs = bankTransactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amountBs : -t.amountBs), 0);
     
@@ -287,7 +287,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
 
     // Calcular DEUDAS POR COBRAR (clientes + trabajadores)
     const customerDebtTotal = customers?.reduce((sum, c) => sum + (c.balance || 0), 0) || 0;
-    const workerDebtTotal = workers?.reduce((sum, w) => sum + (w.debt || 0), 0) || 0;
+    const workerDebtTotal = workers?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
     const totalPorCobrar = customerDebtTotal + workerDebtTotal;
     const porCobrarBs = totalPorCobrar * exchangeRate;
 
@@ -424,7 +424,11 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
 
     const getDetailSales = () => {
         if (!activeDetail) return [];
-        return currentSales.filter(s => s.paymentMethod === activeDetail);
+        return currentSales.filter(s => 
+            s.paymentMethod === activeDetail && 
+            s.timestamp >= filterStart && 
+            s.timestamp <= filterEnd
+        );
     };
 
     const getMethodInfo = (method: PaymentMethod) => {
@@ -437,7 +441,10 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
 
     const getCustomerName = (customerId?: string) => {
         if (!customerId) return 'Cliente';
-        return customers.find(c => c.id === customerId)?.name || 'Cliente';
+        const customer = customers.find(c => c.id === customerId);
+        if (customer) return customer.name;
+        const worker = workers?.find(w => w.id === customerId);
+        return worker?.name || 'Cliente';
     };
 
     return (
@@ -1398,10 +1405,10 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                     type: 'expense',
                                                     category: 'Recargas',
                                                     description: `Recarga: ${rechargeReference}`,
-                                                    amount: amount / parseFloat(incomeRate || 1),
+                                                    amount: amount / exchangeRate,
                                                     amountBs: amount,
                                                     method: rechargeMethod,
-                                                    exchangeRate: parseFloat(incomeRate || 1),
+                                                    exchangeRate: exchangeRate,
                                                     timestamp
                                                 });
                                                 onAddTreasuryTransaction({
@@ -1409,10 +1416,10 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                                     type: 'income',
                                                     category: 'Recargas',
                                                     description: `Ganancia recarga: ${rechargeReference}`,
-                                                    amount: fee / parseFloat(incomeRate || 1),
+                                                    amount: fee / exchangeRate,
                                                     amountBs: fee,
                                                     method: rechargeMethod,
-                                                    exchangeRate: parseFloat(incomeRate || 1),
+                                                    exchangeRate: exchangeRate,
                                                     timestamp
                                                 });
                                                 setRechargeAmount('');
