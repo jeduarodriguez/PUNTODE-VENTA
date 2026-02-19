@@ -258,7 +258,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const expensesUsd = treasuryTransactions.filter(t => t.type === 'expense' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
     const incomeBs = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
     const incomeUsd = treasuryTransactions.filter(t => t.type === 'income' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
-    const netBalanceUsd = totalSalesUsdFiltered + incomeUsd - expensesUsd;
+    const netBalanceUsd = totalSalesUsdFiltered - expensesUsd;
     const bankTransactions = treasuryTransactions.filter(t => t.method !== 'Cash');
     const bankBalanceFromTxs = bankTransactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amountBs : -t.amountBs), 0);
     
@@ -762,16 +762,16 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-emerald-100 rounded-xl p-2 flex flex-col items-center">
                         <span className="text-[8px] font-black text-emerald-600 uppercase">Ingreso</span>
-                        <p className="text-sm font-black text-emerald-800">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                        <p className="text-[9px] font-bold text-emerald-500">${(totalSalesUsdFiltered + incomeUsd).toFixed(2)}</p>
+                        <p className="text-sm font-black text-emerald-800">+{totalSalesBsFiltered.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                        <p className="text-[9px] font-bold text-emerald-500">${totalSalesUsdFiltered.toFixed(2)}</p>
                     </div>
 
-                    <div className={`rounded-xl p-2 flex flex-col items-center ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
-                        <span className={`text-[8px] font-black uppercase ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>Balance</span>
-                        <p className={`text-sm font-black ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-800' : 'text-orange-800'}`}>
-                            {(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? '+' : ''}{(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                    <div className={`rounded-xl p-2 flex flex-col items-center ${(totalSalesBsFiltered - expensesBs) >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
+                        <span className={`text-[8px] font-black uppercase ${(totalSalesBsFiltered - expensesBs) >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>Balance</span>
+                        <p className={`text-sm font-black ${(totalSalesBsFiltered - expensesBs) >= 0 ? 'text-indigo-800' : 'text-orange-800'}`}>
+                            {(totalSalesBsFiltered - expensesBs) >= 0 ? '+' : ''}{(totalSalesBsFiltered - expensesBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                         </p>
-                        <p className={`text-[9px] font-bold ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>${netBalanceUsd.toFixed(2)}</p>
+                        <p className={`text-[9px] font-bold ${netBalanceUsd >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>${netBalanceUsd.toFixed(2)}</p>
                     </div>
 
                     <div className="bg-red-100 rounded-xl p-2 flex flex-col items-center">
