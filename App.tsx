@@ -347,11 +347,23 @@ const App: React.FC = () => {
       }
     }
 
+    // Revertir saldo de trabajador
+    const updatedWorkers = [...workers];
+    if (sale.paymentMethod === 'Credit' && sale.customerId) {
+      const wIndex = updatedWorkers.findIndex(w => w.id === sale.customerId);
+      if (wIndex !== -1) {
+        const w = { ...updatedWorkers[wIndex], balance: Math.max(0, (updatedWorkers[wIndex].balance || 0) - sale.total) };
+        updatedWorkers[wIndex] = w;
+        updates[`workers/${w.id}`] = w;
+      }
+    }
+
     updates[`sales/${saleId}`] = null;
 
     // --- ACTUALIZACIÓN OPTIMISTA ---
     setProducts(updatedProducts);
     setCustomers(updatedCustomers);
+    setWorkers(updatedWorkers);
     setSales(prev => prev.filter(s => s.id !== saleId));
 
     try {
