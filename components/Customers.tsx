@@ -478,46 +478,38 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
   };
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Resumen de Créditos */}
-      <div className="grid grid-cols-3 gap-3">
-        <button onClick={() => setActiveTab('customers')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'customers' ? 'bg-emerald-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
-          <p className="text-xs font-bold opacity-70">Clientes</p>
-          <p className="text-lg font-black mt-1">Bs {(totalCustomersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-        </button>
-        <button onClick={() => setActiveTab('workers')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
-          <p className="text-xs font-bold opacity-70">Trabajadores</p>
-          <p className="text-lg font-black mt-1">Bs {(totalWorkersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-        </button>
-        <button onClick={() => setActiveTab('debts')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
-          <p className="text-xs font-bold opacity-70">Pendiente</p>
-          <p className="text-lg font-black mt-1">Bs {(totalUnpaidDebts).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-          <p className="text-xs font-bold opacity-70">${totalUnpaidDebtsUsd.toFixed(2)}</p>
-        </button>
-      </div>
-
-      {/* Tabs para Clientes, Trabajadores y Deudas */}
+    <div className="space-y-4 pb-24">
+      {/* Cards de resumen - funcionan como tabs */}
       <div className="flex bg-gray-100 p-1 rounded-2xl">
         <button
           onClick={() => setActiveTab('customers')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'customers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'customers' ? 'bg-emerald-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
           <Users className="w-4 h-4" />
-          Clientes
+          <span>Clientes</span>
+          <span className={`text-xs font-bold ${activeTab === 'customers' ? 'text-white/80' : 'text-gray-400'}`}>
+            Bs {(totalCustomersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab('workers')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'workers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
           <Briefcase className="w-4 h-4" />
-          Trabajadores
+          <span>Trabajadores</span>
+          <span className={`text-xs font-bold ${activeTab === 'workers' ? 'text-white/80' : 'text-gray-400'}`}>
+            Bs {(totalWorkersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab('debts')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'debts' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
           <Clock className="w-4 h-4" />
-          Deudas
+          <span>Deudas</span>
+          <span className={`text-xs font-bold ${activeTab === 'debts' ? 'text-white/80' : 'text-gray-400'}`}>
+            Bs {(totalUnpaidDebts).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+          </span>
         </button>
       </div>
 
