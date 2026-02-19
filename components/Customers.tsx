@@ -486,7 +486,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
           <p className="text-lg font-black mt-1">Bs {(totalCustomersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
         </button>
         <button onClick={() => setActiveTab('workers')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
-          <p className="text-xs font-bold opacity-70">Empleados</p>
+          <p className="text-xs font-bold opacity-70">Trabajadores</p>
           <p className="text-lg font-black mt-1">Bs {(totalWorkersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
         </button>
         <button onClick={() => setActiveTab('debts')} className={`p-4 rounded-2xl text-center transition-all active:scale-95 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'bg-white border-2 border-gray-100'}`}>
