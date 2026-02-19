@@ -11,7 +11,7 @@ import Dashboard from './components/Dashboard';
 import { Product, Sale, View, Customer, ExchangeRateRecord, CartItem, TreasuryTransaction, Worker, BusinessDebt } from './types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS, INITIAL_SALES, INITIAL_RATE_HISTORY, INITIAL_TREASURY, CheckCircle2, Settings as SettingsIcon, Smartphone, Share as ShareIcon, DollarSign, Plus, X, ShoppingCart, Package, Users, Banknote, Landmark, PieChart } from './constants';
 // Cambiamos el servicio a Supabase
-import { syncPath, saveData, deleteData, updateBatch } from './services/supabaseService';
+import { syncPath, saveData, deleteData, updateBatch, clearAllTreasuryTransactions, clearAllSales, clearAllData } from './services/supabaseService';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>(() => {
@@ -564,6 +564,13 @@ const App: React.FC = () => {
     await deleteData(`treasury/${id}`);
   };
 
+  const handleClearAllTreasuryTransactions = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres ELIMINAR TODOS los movimientos (tesorería y ventas)? Esta acción no se puede deshacer.')) return;
+    await clearAllData();
+    setTreasuryTransactions([]);
+    setSales([]);
+  };
+
   const handleUpdateTreasuryTransaction = async (updatedTransaction: TreasuryTransaction) => {
     // Actualización optimista
     setTreasuryTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t));
@@ -853,7 +860,7 @@ const App: React.FC = () => {
           </div>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
+          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} businessDebts={businessDebts} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onClearAllTreasury={handleClearAllTreasuryTransactions} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}

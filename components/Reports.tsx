@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord } from '../types';
+import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord, BusinessDebt, Worker } from '../types';
 import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List, Clock } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
@@ -10,6 +10,8 @@ interface ReportsProps {
     sales: Sale[];
     products: Product[];
     customers?: Customer[];
+    workers?: Worker[];
+    businessDebts?: BusinessDebt[];
     exchangeRate: number;
     treasuryTransactions?: TreasuryTransaction[];
     rateHistory?: ExchangeRateRecord[];
@@ -25,6 +27,7 @@ interface ReportsProps {
     onAddProduct: (product: Product) => void;
     onUpdateTreasuryTransaction?: (t: TreasuryTransaction) => void;
     onDeleteTreasuryTransaction?: (id: string) => void;
+    onClearAllTreasury?: () => void;
     onOpenWorkers?: () => void;
     onGoToInventory?: () => void;
 }
@@ -32,7 +35,7 @@ interface ReportsProps {
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onOpenWorkers, onGoToInventory }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory }) => {
     const [editingTransaction, setEditingTransaction] = useState<TreasuryTransaction | null>(null);
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -121,7 +124,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 endDate: new Date(currentWeekEnd.getFullYear(), currentWeekEnd.getMonth(), currentWeekEnd.getDate()).getTime()
             }];
         } else if (dateFilter === 'month') {
-            const currentMonthDate = new Date(now.getFullYear(), now.getMonth() + (quickNavOffset * 3), 1);
+            const currentMonthDate = new Date(now.getFullYear(), now.getMonth() + quickNavOffset, 1);
             return [{
                 label: fullMonths[currentMonthDate.getMonth()],
                 month: currentMonthDate.getMonth(),
@@ -258,6 +261,54 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const netBalanceUsd = totalSalesUsdFiltered - expensesUsd;
     const bankTransactions = treasuryTransactions.filter(t => t.method !== 'Cash');
     const bankBalanceFromTxs = bankTransactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amountBs : -t.amountBs), 0);
+    
+    // Calcular balances TOTALES acumulados (no solo del filtro)
+    const efectivoIngresosTotal = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'Cash').reduce((sum, t) => sum + t.amountBs, 0);
+    const efectivoGastosTotal = treasuryTransactions.filter(t => t.type === 'expense' && t.method === 'Cash').reduce((sum, t) => sum + t.amountBs, 0);
+    const efectivoBalanceTotal = efectivoIngresosTotal - efectivoGastosTotal;
+    const efectivoUsdTotal = exchangeRate > 0 ? efectivoBalanceTotal / exchangeRate : 0;
+    
+    const bancoIngresosTotal = treasuryTransactions.filter(t => t.type === 'income' && t.method !== 'Cash').reduce((sum, t) => sum + t.amountBs, 0);
+    const bancoGastosTotal = treasuryTransactions.filter(t => t.type === 'expense' && t.method !== 'Cash').reduce((sum, t) => sum + t.amountBs, 0);
+    const bancoBalanceTotal = bancoIngresosTotal - bancoGastosTotal;
+    const bancoUsdTotal = exchangeRate > 0 ? bancoBalanceTotal / exchangeRate : 0;
+    
+    // Calcular balances por método de pago (solo del filtro)
+    const efectivoIngresos = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const efectivoGastos = treasuryTransactions.filter(t => t.type === 'expense' && t.method === 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const efectivoBalance = efectivoIngresos - efectivoGastos;
+    
+    const bancoIngresos = treasuryTransactions.filter(t => t.type === 'income' && t.method !== 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const bancoGastos = treasuryTransactions.filter(t => t.type === 'expense' && t.method !== 'Cash' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amountBs, 0);
+    const bancoBalance = bancoIngresos - bancoGastos;
+
+    // Créditos del período
+    const creditSales = treasuryTransactions.filter(t => t.type === 'income' && t.method === 'Credit' && t.timestamp >= filterStart && t.timestamp <= filterEnd).reduce((sum, t) => sum + t.amount, 0);
+
+    // Calcular DEUDAS POR COBRAR (clientes + trabajadores)
+    const customerDebtTotal = customers?.reduce((sum, c) => sum + (c.balance || 0), 0) || 0;
+    const workerDebtTotal = workers?.reduce((sum, w) => sum + (w.debt || 0), 0) || 0;
+    const totalPorCobrar = customerDebtTotal + workerDebtTotal;
+    const porCobrarBs = totalPorCobrar * exchangeRate;
+
+    // Calcular DEUDAS POR PAGAR (businessDebts + salarios trabajadores)
+    const unpaidBusinessDebts = businessDebts?.filter(d => !d.isPaid) || [];
+    const deudaPorPagarBs = unpaidBusinessDebts.reduce((sum, d) => {
+        if (d.currencyType === 'bs') {
+            // Deuda en Bs - no cambia
+            return sum + d.amountBs;
+        } else {
+            // Deuda en USD - se recalcula con tasa actual
+            return sum + (d.amountUsd * exchangeRate);
+        }
+    }, 0);
+    const deudaPorPagarUsd = unpaidBusinessDebts.reduce((sum, d) => sum + d.amountUsd, 0);
+    
+    // Agregar salarios de trabajadores (en USD, convertir a Bs con tasa actual)
+    const totalSalarios = workers?.reduce((sum, w) => sum + (w.salary || 0), 0) || 0;
+    const totalSalariosBs = totalSalarios * exchangeRate;
+    const deudaPorPagarTotalBs = deudaPorPagarBs + totalSalariosBs;
+    const deudaPorPagarTotalUsd = deudaPorPagarUsd + totalSalarios;
 
     const handleAddExpense = () => {
         const amount = parseFloat(expenseAmount);
@@ -365,7 +416,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
             return `${shortDays[currentWeekStart.getDay()]} ${currentWeekStart.getDate()} - ${shortDays[currentWeekEnd.getDay()]} ${currentWeekEnd.getDate()} ${shortMonths[currentWeekEnd.getMonth()]}`;
         } else if (dateFilter === 'month') {
-            const currentMonthDate = new Date(now.getFullYear(), now.getMonth() + (quickNavOffset * 3), 1);
+            const currentMonthDate = new Date(now.getFullYear(), now.getMonth() + quickNavOffset, 1);
             return fullMonths[currentMonthDate.getMonth()];
         }
         return '';
@@ -472,11 +523,11 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             <span className="text-xs font-bold">BCV</span>
                             <span className="text-xs font-bold">{getDisplayedExchangeRate().toFixed(2)}</span>
                         </button>
-                        <div className="relative flex-1 max-w-[50%]">
-                            <button onClick={() => setShowSearchInput(true)} className="w-full bg-white/10 px-3 py-1.5 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
-                                <Search className="w-4 h-4" />
+                        {onClearAllTreasury && (treasuryTransactions.length > 0 || sales.length > 0) && (
+                            <button onClick={onClearAllTreasury} className="flex items-center gap-1 px-2 py-1.5 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-all shrink-0" title="Limpiar movimientos">
+                                <Trash2 className="w-3 h-3" />
                             </button>
-                        </div>
+                        )}
                         <div className="relative">
                             <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="bg-white/10 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-white/20 transition-colors">
                                 <span className="text-xs font-bold truncate max-w-[60px]">
@@ -657,77 +708,99 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-emerald-100 border-2 border-emerald-200 rounded-xl p-3 flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1">
-                            <TrendingUp className="w-3 h-3 text-emerald-600" />
-                            <span className="text-[8px] font-black text-emerald-600 uppercase tracking-wider">Ingresos</span>
+                {/* BALANCE PRINCIPAL - 4 paneles en grid */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                    {/* EFECTIVO */}
+                    <div className={`p-3 rounded-xl ${efectivoBalanceTotal >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <Banknote className="w-4 h-4 text-white" />
+                            <span className="text-[9px] font-black uppercase text-white">Efectivo</span>
                         </div>
-                        <p className="text-lg font-black text-emerald-800 leading-none">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
+                        <p className="text-lg font-black text-white text-center">{efectivoBalanceTotal >= 0 ? '' : '-'}{Math.abs(efectivoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-xs font-bold text-white/80 text-center">${Math.abs(efectivoUsdTotal).toFixed(2)}</p>
+                    </div>
+                    
+                    {/* BANCO */}
+                    <div className={`p-3 rounded-xl ${bancoBalanceTotal >= 0 ? 'bg-blue-500' : 'bg-red-500'}`}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <CreditCard className="w-4 h-4 text-white" />
+                            <span className="text-[9px] font-black uppercase text-white">Banco</span>
+                        </div>
+                        <p className="text-lg font-black text-white text-center">{bancoBalanceTotal >= 0 ? '' : '-'}{Math.abs(bancoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-xs font-bold text-white/80 text-center">${Math.abs(bancoUsdTotal).toFixed(2)}</p>
+                    </div>
+                    
+                    {/* X COBRAR */}
+                    <div className="p-3 rounded-xl bg-orange-500">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <TrendingUp className="w-4 h-4 text-white" />
+                            <span className="text-[9px] font-black uppercase text-white">X Cobrar</span>
+                        </div>
+                        <p className="text-lg font-black text-white text-center">${totalPorCobrar.toFixed(2)}</p>
+                        <p className="text-xs font-bold text-white/80 text-center">{porCobrarBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                    </div>
+                    
+                    {/* X PAGAR */}
+                    <div className="p-3 rounded-xl bg-red-600">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <TrendingDown className="w-4 h-4 text-white" />
+                            <span className="text-[9px] font-black uppercase text-white">X Pagar</span>
+                        </div>
+                        <p className="text-lg font-black text-white text-center">${deudaPorPagarTotalUsd.toFixed(2)}</p>
+                        <p className="text-xs font-bold text-white/80 text-center">{deudaPorPagarTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                    </div>
+                </div>
+
+                {/* BALANCE DEL DIA/SEMANA/MES */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="bg-emerald-100 rounded-xl p-2 flex flex-col items-center">
+                        <span className="text-[8px] font-black text-emerald-600 uppercase">Ingreso</span>
+                        <p className="text-sm font-black text-emerald-800">+{(totalSalesBsFiltered + incomeBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                         <p className="text-[9px] font-bold text-emerald-500">${(totalSalesUsdFiltered + incomeUsd).toFixed(2)}</p>
                     </div>
 
-                    <div className={`border-2 rounded-xl p-3 flex flex-col items-center ${
-                        (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
-                            ? 'bg-indigo-100 border-indigo-200' 
-                            : 'bg-orange-100 border-orange-200'
-                    }`}>
-                        <div className="flex items-center gap-1 mb-1 justify-center">
-                            <span className={`text-[8px] font-black uppercase tracking-wider ${
-                                (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
-                                    ? 'text-indigo-600' 
-                                    : 'text-orange-600'
-                            }`}>Balance</span>
-                        </div>
-                        <p className={`text-lg font-black leading-none ${
-                            (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
-                                ? 'text-indigo-800' 
-                                : 'text-orange-800'
-                        }`}>
-                            {(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? '+' : ''}
-                            {(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
+                    <div className={`rounded-xl p-2 flex flex-col items-center ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'bg-indigo-100' : 'bg-orange-100'}`}>
+                        <span className={`text-[8px] font-black uppercase ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>Balance</span>
+                        <p className={`text-sm font-black ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-800' : 'text-orange-800'}`}>
+                            {(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? '+' : ''}{(totalSalesBsFiltered + incomeBs - expensesBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                         </p>
-                        <p className={`text-[9px] font-bold text-center ${
-                            (totalSalesBsFiltered + incomeBs - expensesBs) >= 0 
-                                ? 'text-indigo-500' 
-                                : 'text-orange-500'
-                        }`}>
-                            ${netBalanceUsd.toFixed(2)}
-                        </p>
+                        <p className={`text-[9px] font-bold ${(totalSalesBsFiltered + incomeBs - expensesBs) >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>${netBalanceUsd.toFixed(2)}</p>
                     </div>
 
-                    <div className="bg-red-100 border-2 border-red-200 rounded-xl p-3 flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1">
-                            <span className="text-[8px] font-black text-red-600 uppercase tracking-wider">Egresos</span>
-                            <TrendingDown className="w-3 h-3 text-red-600" />
-                        </div>
-                        <p className="text-lg font-black text-red-800 leading-none">-{expensesBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
+                    <div className="bg-red-100 rounded-xl p-2 flex flex-col items-center">
+                        <span className="text-[8px] font-black text-red-600 uppercase">Egreso</span>
+                        <p className="text-sm font-black text-red-800">-{expensesBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                         <p className="text-[9px] font-bold text-red-500">${expensesUsd.toFixed(2)}</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                    <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
-                        <div className="flex items-center gap-1.5 mb-1 text-emerald-100"><Banknote className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Efectivo</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCashBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                        <p className="text-[9px] text-emerald-200">${salesCashUsd.toFixed(2)}</p>
+                {/* METODOS DE PAGO */}
+                <div className="grid grid-cols-2 gap-2">
+                    <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-100 hover:bg-emerald-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
+                        <div className="flex items-center gap-1 mb-1 text-emerald-600"><Banknote className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-emerald-600">Efectivo</span></div>
+                        <p className="text-sm font-black text-emerald-800">{salesCashBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                     </div>
-                    <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-500 hover:bg-purple-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
-                        <div className="flex items-center gap-1.5 mb-1 text-purple-100"><Smartphone className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Pago Movil</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesPagoMovilBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                        <p className="text-[9px] text-purple-200">${salesPagoMovilUsd.toFixed(2)}</p>
+                    <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-100 hover:bg-purple-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
+                        <div className="flex items-center gap-1 mb-1 text-purple-600"><Smartphone className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-purple-600">Pago Móvil</span></div>
+                        <p className="text-sm font-black text-purple-800">{salesPagoMovilBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                     </div>
-                    <div onClick={() => setActiveDetail('Card')} className="bg-blue-500 hover:bg-blue-600 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all">
-                        <div className="flex items-center gap-1.5 mb-1 text-blue-100"><CreditCard className="w-3 h-3" /><span className="text-[8px] font-black uppercase tracking-wider text-white">Punto</span></div>
-                        <p className="text-sm font-black text-white truncate">{salesCardBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                        <p className="text-[9px] text-blue-200">${salesCardUsd.toFixed(2)}</p>
+                    <div onClick={() => setActiveDetail('Card')} className="bg-blue-100 hover:bg-blue-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
+                        <div className="flex items-center gap-1 mb-1 text-blue-600"><CreditCard className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-blue-600">Punto</span></div>
+                        <p className="text-sm font-black text-blue-800">{salesCardBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div onClick={() => setActiveDetail('Credit')} className="bg-orange-100 hover:bg-orange-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
+                        <div className="flex items-center gap-1 mb-1 text-orange-600"><Wallet className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-orange-600">Crédito</span></div>
+                        <p className="text-sm font-black text-orange-800">${creditSales.toFixed(2)}</p>
                     </div>
                 </div>
             </div>
 
             <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-                <div className="mb-4">
+                <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Movimientos</h3>
+                    <button onClick={() => setShowSearchInput(true)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        <Search className="w-4 h-4 text-gray-600" />
+                    </button>
                 </div>
                 <div className="space-y-2">
                     {allMovements.length === 0 ? (

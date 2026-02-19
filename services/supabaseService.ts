@@ -217,3 +217,23 @@ export const updateBatch = async (updates: Record<string, any>) => {
 // Funciones dummy par mantener compatibilidad si algo las llama
 export const saveFirebaseConfig = () => { };
 export const clearFirebaseConfig = () => { };
+
+export const clearAllTreasuryTransactions = async () => {
+    if (!supabase) return;
+    await supabase.from('treasury').delete().neq('id', '');
+};
+
+export const clearAllSales = async () => {
+    if (!supabase) return;
+    await supabase.from('sales').delete().neq('id', '');
+};
+
+export const clearAllData = async () => {
+    if (!supabase) return;
+    await Promise.all([
+        supabase.from('treasury').delete().neq('id', ''),
+        supabase.from('sales').delete().neq('id', ''),
+        supabase.from('products').delete().neq('id', ''),
+        supabase.from('customers').delete().neq('id', ''),
+    ]);
+};
