@@ -119,7 +119,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
           const baseNum = parseFloat(calcDisplay.substring(0, lastOpIndex));
           const percentNum = parseFloat(calcDisplay.substring(lastOpIndex + 1));
           if (!isNaN(baseNum) && !isNaN(percentNum)) {
-            const result = baseNum + (baseNum * percentNum / 100);
+            const result = Math.round((baseNum + (baseNum * percentNum / 100)) * 100) / 100;
             setCalcResult(result);
             setCalcDisplay(result.toString());
           }
@@ -136,7 +136,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       sanitized = sanitized.replace(/[^0-9+\-*/.]/g, '');
       if (!sanitized) return 0;
       const result = Function('"use strict"; return (' + sanitized + ')')();
-      return typeof result === 'number' ? result : 0;
+      return typeof result === 'number' ? Math.round(result * 100) / 100 : 0;
     } catch {
       return 0;
     }
@@ -185,7 +185,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const todayRate = getTodayRate();
 
   const currentRate = useMemo(() => getRateForDate(costDate), [costDate, rateHistory]);
-  const calculatedCostUsd = currentRate > 0 ? costBs / currentRate : 0;
+  const calculatedCostUsd = currentRate > 0 ? Math.round((costBs / currentRate) * 100) / 100 : 0;
 
   const totalCostValue = products.reduce((sum, p) => sum + ((p.cost_price ?? p.costPrice ?? 0) * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
@@ -265,7 +265,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       let finalCost = 0;
       if (costMode === 'calculated') {
         if (costBs > 0 && currentRate > 0) {
-          finalCost = costBs / currentRate;
+          finalCost = Math.round((costBs / currentRate) * 1000) / 1000;
         } else if (formData.costPrice) {
           finalCost = Number(formData.costPrice);
         }
@@ -579,11 +579,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               <div className="w-full h-16 rounded-lg bg-gray-50 flex items-center justify-between px-2">
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Costo</span>
-                  <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(3)}</span>
                 </div>
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Venta</span>
-                  <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(3)}</span>
                 </div>
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Gan.</span>
@@ -632,13 +632,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               {/* 3. COSTO */}
               <div className="text-center min-w-[48px] mr-1">
                 <span className="text-[7px] font-black text-gray-400 uppercase block">Costo</span>
-                <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
+                <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(3)}</span>
               </div>
 
               {/* 4. VENTA */}
               <div className="text-center min-w-[48px] mr-1">
                 <span className="text-[7px] font-black text-gray-400 uppercase block">Venta</span>
-                <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
+                <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(3)}</span>
               </div>
 
               {/* 5. GANANCIA */}
@@ -698,12 +698,12 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     <span className="font-bold text-sm truncate">{cat}</span>
                     <div className="flex items-center gap-1">
                       {formData.category === cat && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
-                      <button
+                      <div
                         onClick={(e) => { e.stopPropagation(); onDeleteCategory(cat); }}
-                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors shrink-0 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -720,7 +720,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     onChange={(e) => setNewCategoryName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory(); } }}
                   />
-      <button
+                  <button
                     onClick={handleCreateCategory}
                     disabled={!newCategoryName.trim()}
                     className="bg-gray-900 text-white p-4 rounded-2xl shadow-lg disabled:opacity-50 disabled:shadow-none active:scale-95 transition-all"
@@ -810,7 +810,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
                     <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 uppercase">Costo Total Paquete (Ref)</span>
-                      <span className="text-sm font-black text-blue-900">${(costMode === 'calculated' ? calculatedCostUsd : manualCostUsd || Number(formData.cost_price) || 0).toFixed(2)}</span>
+                      <span className="text-sm font-black text-blue-900">${(costMode === 'calculated' ? calculatedCostUsd : manualCostUsd || Number(formData.cost_price) || 0).toFixed(3)}</span>
                     </div>
 
                     {/* Reorganización: Unidades y Costo Unitario en la misma fila */}
@@ -837,7 +837,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                           return (
                             <div className="w-full p-3 border-2 border-orange-100 bg-orange-50 rounded-xl flex items-center gap-2 h-[46px]">
                               <Divide className="w-4 h-4 text-orange-400" />
-                              <span className="text-sm font-black text-orange-700">${unitCost.toFixed(2)}</span>
+                              <span className="text-sm font-black text-orange-700">${unitCost.toFixed(3)}</span>
                             </div>
                           );
                         })()}
@@ -961,7 +961,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
                             value={costBs || ''}
                             placeholder="0.00"
-                            onChange={e => setCostBs(parseFloat(e.target.value) || 0)}
+                            onChange={e => setCostBs(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
                           />
                         </div>
                         <button
