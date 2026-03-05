@@ -735,11 +735,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 const originalProduct = products.find(p => p.id === item.product.id);
                                 const lastInventoryPrice = originalProduct?.costPrice || item.costPrice;
                                 const isUsingLastPrice = item.costPrice === lastInventoryPrice;
-                                // Para manuales siempre recalcular con tasa actual
                                 const originalProd = products.find(p => p.id === item.product.id);
                                 const originalCostBs = (originalProd as any)?.cost_bs || 0;
                                 const isManualProduct = !originalCostBs || originalCostBs === 0;
-                                // Si es manual, SIEMPRE recalcular - ignore costPriceBs guardado
                                 let itemCostBsList = 0;
                                 if (isManualProduct) {
                                     itemCostBsList = item.costPrice * activeRate;
@@ -747,58 +745,90 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     itemCostBsList = item.costPriceBs || originalCostBs;
                                 }
                                 const itemTotalBs = itemCostBsList * item.quantity;
+                                const sellingMode = getSellingMode(item.product);
+                                const isPackage = sellingMode === 'package';
+                                const isWeight = sellingMode === 'weight';
+                                const isSimple = sellingMode === 'simple';
                                 return (
-                                    <div key={item.product.id} className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                        <button 
-                                            onClick={() => openEditPriceModal(item)}
-                                            className="p-2 bg-blue-50 text-blue-400 rounded shrink-0"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </button>
-
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-black text-base text-gray-900 truncate leading-tight">{item.product.name}</h4>
-                                            <p className="text-xs font-bold text-gray-400 mt-0.5">
-                                                ${item.costPrice.toFixed(2)} • {item.product.cost_date || 'Sin fecha'}
-                                            </p>
+                                    <div key={item.product.id} className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
+                                        {/* 1. BOTÓN EDITAR + NOMBRE + CATEGORÍA */}
+                                        <div className="flex items-start gap-2">
+                                            <button 
+                                                onClick={() => openEditPriceModal(item)}
+                                                className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg shrink-0 transition-colors"
+                                                title="Editar precio"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-black text-base text-gray-900 truncate leading-tight">{item.product.name}</h4>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-xs font-bold text-gray-400">{item.product.category}</p>
+                                                    {isSimple && (
+                                                        <span className="text-[8px] font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">UND</span>
+                                                    )}
+                                                    {isPackage && (
+                                                        <span className="text-[8px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">PACK</span>
+                                                    )}
+                                                    {isWeight && (
+                                                        <span className="text-[8px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">PESO</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <div className="flex flex-col items-end gap-1 shrink-0">
-                                            <span className="text-sm font-black text-gray-900">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                        {/* 2. COSTO BS + COSTO USD */}
+                                        <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-100">
+                                            <div className="text-center">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase block">Costo Bs</span>
+                                                <span className="text-sm font-black text-red-600">{itemCostBsList.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-gray-200"></div>
+                                            <div className="text-center">
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase block">Costo USD</span>
+                                                <span className="text-sm font-black text-indigo-600">${(activeRate > 0 ? itemCostBsList / activeRate : 0).toFixed(3)}</span>
+                                            </div>
                                         </div>
 
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, -1)}
-                                                className="w-8 h-8 flex items-center justify-center rounded bg-red-50 text-red-500"
-                                            >
-                                                <Minus className="w-4 h-4" />
-                                            </button>
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={item.quantity}
-                                                onChange={(e) => {
-                                                    const rawValue = e.target.value.replace(',', '.');
-                                                    if (rawValue === '' || rawValue === '-') return;
-                                                    const val = parseFloat(rawValue);
-                                                    if (isNaN(val)) return;
-                                                    const sellingMode = getSellingMode(item.product);
-                                                    if (sellingMode === 'weight') {
-                                                        updateQuantityDirect(item.product.id, val);
-                                                    } else {
-                                                        const intVal = Math.max(1, Math.floor(val));
-                                                        updateQuantityDirect(item.product.id, intVal);
-                                                    }
-                                                }}
-                                                className="w-14 text-center font-black text-sm bg-white border border-gray-200 rounded py-1"
-                                            />
-                                            <button 
-                                                onClick={() => updateQuantity(item.product.id, 1)}
-                                                className="w-8 h-8 flex items-center justify-center rounded bg-emerald-50 text-emerald-600"
-                                            >
-                                                <Plus className="w-4 h-4" />
-                                            </button>
+                                        {/* 3. CANTIDAD CON BOTONES ARRIBA Y ABAJO */}
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Cantidad</span>
+                                            <div className="flex items-center gap-1">
+                                                <button 
+                                                    onClick={() => updateQuantity(item.product.id, -1)}
+                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                                                >
+                                                    <Minus className="w-4 h-4" />
+                                                </button>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={item.quantity}
+                                                    onChange={(e) => {
+                                                        const rawValue = e.target.value.replace(',', '.');
+                                                        if (rawValue === '' || rawValue === '-') return;
+                                                        const val = parseFloat(rawValue);
+                                                        if (isNaN(val)) return;
+                                                        if (sellingMode === 'weight') {
+                                                            updateQuantityDirect(item.product.id, val);
+                                                        } else {
+                                                            const intVal = Math.max(1, Math.floor(val));
+                                                            updateQuantityDirect(item.product.id, intVal);
+                                                        }
+                                                    }}
+                                                    className="w-16 text-center font-black text-sm bg-white border-2 border-indigo-200 rounded-lg py-1 text-indigo-700"
+                                                />
+                                                <button 
+                                                    onClick={() => updateQuantity(item.product.id, 1)}
+                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-xs font-bold text-gray-400 uppercase block">Total</span>
+                                                <span className="text-sm font-black text-gray-900">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 );

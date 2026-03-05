@@ -810,7 +810,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
                     <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 uppercase">Costo Total Paquete (Ref)</span>
-                      <span className="text-sm font-black text-blue-900">${(costMode === 'calculated' ? calculatedCostUsd : manualCostUsd || Number(formData.cost_price) || 0).toFixed(3)}</span>
+                      <span className="text-sm font-black text-blue-900">${(Number(formData.cost_price) || 0).toFixed(3)}</span>
                     </div>
 
                     {/* Reorganización: Unidades y Costo Unitario en la misma fila */}
@@ -974,7 +974,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                         </button>
                         <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
                           <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
-                          <span className="text-sm font-black text-red-700">${calculatedCostUsd.toFixed(3)}</span>
+                          <span className="text-sm font-black text-red-700">${(Number(formData.cost_price) || 0).toFixed(3)}</span>
                         </div>
                       </div>
 

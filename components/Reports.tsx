@@ -524,85 +524,6 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
             )}
 
             <div className="space-y-2">
-                <div className="bg-indigo-900 text-white p-3 rounded-xl shadow-xl relative overflow-hidden">
-                    <div className="flex items-center justify-between gap-2 relative z-10">
-                        <button onClick={onOpenRateModal} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg transition-all shrink-0">
-                            <span className="text-xs font-bold">BCV</span>
-                            <span className="text-xs font-bold">{getDisplayedExchangeRate().toFixed(2)}</span>
-                        </button>
-                        {onClearAllTreasury && (treasuryTransactions.length > 0 || sales.length > 0) && (
-                            <button onClick={onClearAllTreasury} className="flex items-center gap-1 px-2 py-1.5 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-all shrink-0" title="Limpiar movimientos">
-                                <Trash2 className="w-3 h-3" />
-                            </button>
-                        )}
-                        <div className="relative">
-                            <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="bg-white/10 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-white/20 transition-colors">
-                                <span className="text-xs font-bold truncate max-w-[60px]">
-                                    {dateFilter === 'today' ? 'Día' : dateFilter === 'week' ? 'Semana' : dateFilter === 'month' ? 'Mes' : 'Personalizado'}
-                                </span>
-                                <ChevronDown className={`w-3 h-3 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
-                            </button>
-                            {showFilterDropdown && (
-                                <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}>
-                                    <div className="absolute top-10 right-0 bg-white rounded-lg shadow-xl z-[70] w-32 p-1" onClick={(e) => e.stopPropagation()}>
-                                        <div className="space-y-1">
-                                            {[
-                                                { value: 'today', label: 'Día' },
-                                                { value: 'week', label: 'Semana' },
-                                                { value: 'month', label: 'Mes' },
-                                                { value: 'custom', label: 'Personalizado' }
-                                            ].map((opt) => (
-                                                <button
-                                                    key={opt.value}
-                                                    onClick={() => {
-                                                        if (opt.value === 'custom') {
-                                                            setShowCustomDatePicker(true);
-                                                            setShowFilterDropdown(false);
-                                                        } else {
-                                                            setDateFilter(opt.value as DateFilter);
-                                                            setQuickNavOffset(0);
-                                                            setShowFilterDropdown(false);
-                                                        }
-                                                    }}
-                                                    className={`w-full px-3 py-2 text-xs font-bold rounded-md text-left transition-colors ${
-                                                        dateFilter === opt.value
-                                                            ? 'bg-indigo-600 text-white'
-                                                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                                                    }`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            {showCustomDatePicker && (
-                                <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCustomDatePicker(false)}>
-                                    <div className="bg-white rounded-xl p-4 w-full max-w-xs shadow-xl" onClick={(e) => e.stopPropagation()}>
-                                        <h3 className="font-bold text-gray-900 mb-3 text-center text-sm">Rango de Fechas</h3>
-                                        <div className="space-y-2">
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Desde</label>
-                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Hasta</label>
-                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2 mt-3">
-                                            <button onClick={() => { setShowCustomDatePicker(false); setDateFilter('today'); setCustomStartDate(''); setCustomEndDate(''); }} className="py-2 bg-gray-100 text-gray-600 rounded-lg font-bold text-xs">Cancelar</button>
-                                            <button onClick={() => { if (customStartDate && customEndDate) { setDateFilter('custom'); setQuickNavOffset(0); } setShowCustomDatePicker(false); }} className="py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs">Aplicar</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500 rounded-full blur-[40px] opacity-20 pointer-events-none"></div>
-                </div>
-
                 {showSearchInput && (
                     <div className="fixed inset-0 z-[60]" onClick={() => setShowSearchInput(false)}>
                         <div className="absolute top-12 left-0 right-0 bg-white shadow-2xl z-[70] flex flex-col max-h-[70vh]" onClick={(e) => e.stopPropagation()}>
@@ -697,25 +618,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     </div>
                 )}
 
-                <div className="flex items-center justify-between gap-2 px-2">
-                    <button onClick={() => setQuickNavOffset(prev => prev - 1)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
-                        <ChevronLeft className="w-4 h-4 text-gray-500" />
-                    </button>
-                    <div className="flex-1 text-center">
-                        {getQuickNavItems().map((item, idx) => (
-                            <span key={idx} className="text-xs font-bold text-gray-700">{item.label}</span>
-                        ))}
-                    </div>
-                    <button 
-                        onClick={() => setQuickNavOffset(prev => prev + 1)} 
-                        disabled={canNavigateForward()}
-                        className={`p-1 rounded-lg transition-colors ${canNavigateForward() ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}
-                    >
-                        <ChevronRight className="w-4 h-4 text-gray-500" />
-                    </button>
-                </div>
-
-                {/* BALANCE PRINCIPAL - 4 paneles en grid */}
+                {/* BALANCE PRINCIPAL - 4 paneles en grid ARRIBA */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
                     {/* EFECTIVO */}
                     <div className={`p-3 rounded-xl ${efectivoBalanceTotal >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
@@ -758,7 +661,106 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     </div>
                 </div>
 
-                {/* BALANCE DEL DIA/SEMANA/MES */}
+                {/* PANEL BCV Y FILTROS */}
+                <div className="bg-indigo-900 text-white p-3 rounded-xl shadow-xl relative overflow-hidden mb-3">
+                    <div className="flex items-center justify-between gap-2 relative z-10">
+                        <button onClick={onOpenRateModal} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg transition-all shrink-0">
+                            <span className="text-xs font-bold">BCV</span>
+                            <span className="text-xs font-bold">{getDisplayedExchangeRate().toFixed(2)}</span>
+                        </button>
+                        {onClearAllTreasury && (treasuryTransactions.length > 0 || sales.length > 0) && (
+                            <button onClick={onClearAllTreasury} className="flex items-center gap-1 px-2 py-1.5 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-all shrink-0" title="Limpiar movimientos">
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        )}
+                        <div className="relative">
+                            <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="bg-white/10 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-white/20 transition-colors">
+                                <span className="text-xs font-bold truncate max-w-[60px]">
+                                    {dateFilter === 'today' ? 'Día' : dateFilter === 'week' ? 'Semana' : dateFilter === 'month' ? 'Mes' : 'Personalizado'}
+                                </span>
+                                <ChevronDown className={`w-3 h-3 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showFilterDropdown && (
+                                <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}>
+                                    <div className="absolute top-10 right-0 bg-white rounded-lg shadow-xl z-[70] w-32 p-1" onClick={(e) => e.stopPropagation()}>
+                                        <div className="space-y-1">
+                                            {[
+                                                { value: 'today', label: 'Día' },
+                                                { value: 'week', label: 'Semana' },
+                                                { value: 'month', label: 'Mes' },
+                                                { value: 'custom', label: 'Personalizado' }
+                                            ].map((opt) => (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => {
+                                                        if (opt.value === 'custom') {
+                                                            setShowCustomDatePicker(true);
+                                                            setShowFilterDropdown(false);
+                                                        } else {
+                                                            setDateFilter(opt.value as DateFilter);
+                                                            setQuickNavOffset(0);
+                                                            setShowFilterDropdown(false);
+                                                        }
+                                                    }}
+                                                    className={`w-full px-3 py-2 text-xs font-bold rounded-md text-left transition-colors ${
+                                                        dateFilter === opt.value
+                                                            ? 'bg-indigo-600 text-white'
+                                                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {showCustomDatePicker && (
+                                <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCustomDatePicker(false)}>
+                                    <div className="bg-white rounded-xl p-4 w-full max-w-xs shadow-xl" onClick={(e) => e.stopPropagation()}>
+                                        <h3 className="font-bold text-gray-900 mb-3 text-center text-sm">Rango de Fechas</h3>
+                                        <div className="space-y-2">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Desde</label>
+                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Hasta</label>
+                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 mt-3">
+                                            <button onClick={() => { setShowCustomDatePicker(false); setDateFilter('today'); setCustomStartDate(''); setCustomEndDate(''); }} className="py-2 bg-gray-100 text-gray-600 rounded-lg font-bold text-xs">Cancelar</button>
+                                            <button onClick={() => { if (customStartDate && customEndDate) { setDateFilter('custom'); setQuickNavOffset(0); } setShowCustomDatePicker(false); }} className="py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs">Aplicar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500 rounded-full blur-[40px] opacity-20 pointer-events-none"></div>
+                </div>
+
+                {/* NAVEGACION DE FECHAS */}
+                <div className="flex items-center justify-between gap-2 px-2 mb-3">
+                    <button onClick={() => setQuickNavOffset(prev => prev - 1)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                        <ChevronLeft className="w-4 h-4 text-gray-500" />
+                    </button>
+                    <div className="flex-1 text-center">
+                        {getQuickNavItems().map((item, idx) => (
+                            <span key={idx} className="text-xs font-bold text-gray-700">{item.label}</span>
+                        ))}
+                    </div>
+                    <button 
+                        onClick={() => setQuickNavOffset(prev => prev + 1)} 
+                        disabled={canNavigateForward()}
+                        className={`p-1 rounded-lg transition-colors ${canNavigateForward() ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                    >
+                        <ChevronRight className="w-4 h-4 text-gray-500" />
+                    </button>
+                </div>
+
+                {/* BALANCE INGRESO/BALANCE/EGRESO */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-emerald-100 rounded-xl p-2 flex flex-col items-center">
                         <span className="text-[8px] font-black text-emerald-600 uppercase">Ingreso</span>
