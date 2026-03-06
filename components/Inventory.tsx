@@ -102,7 +102,6 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     return `${year}-${month}-${day}`;
   });
   const [costMode, setCostMode] = useState<'calculated' | 'manual'>('calculated');
-  const [manualCostUsd, setManualCostUsd] = useState<number>(0);
 
   // Calculadora
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
@@ -197,7 +196,24 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const todayRate = getTodayRate();
 
   const currentRate = useMemo(() => getRateForDate(costDate), [costDate, rateHistory]);
-  const calculatedCostUsd = currentRate > 0 ? Math.round((costBs / currentRate) * 100) / 100 : 0;
+
+  // Calcular el costo unitario para visualización y guardado (solo lectura, no modifica estados)
+  const getBulkCalculation = () => {
+    const bulkQty = Number(formData.units_per_bulk) || 1;
+    if (costMode === 'calculated') {
+      const totalBs = parseFloat(costBsDisplay.replace(',', '.')) || 0;
+      const rate = currentRate > 0 ? currentRate : 1;
+      const unitUsd = (totalBs / bulkQty) / rate;
+      return { totalBs, unitUsd: isNaN(unitUsd) || !isFinite(unitUsd) ? 0 : unitUsd };
+    } else {
+      const unitUsd = parseFloat(manualCostDisplay.replace(',', '.')) || 0;
+      return { totalUsd: unitUsd * bulkQty, unitUsd };
+    }
+  };
+
+  // Para compatibilidad con código existente
+  const calculatedCostUsd = getBulkCalculation().unitUsd;
+  const manualCostUsd = getBulkCalculation().unitUsd;
 
   const totalCostValue = products.reduce((sum, p) => sum + ((p.cost_price ?? p.costPrice ?? 0) * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
@@ -274,15 +290,16 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     e.preventDefault();
 
     try {
+      const bulkQty = Number(formData.units_per_bulk) || 1;
       let finalCost = 0;
       if (costMode === 'calculated') {
-        if (costBs > 0 && currentRate > 0) {
-          finalCost = Math.round((costBs / currentRate) * 1000) / 1000;
-        } else if (formData.costPrice) {
-          finalCost = Number(formData.costPrice);
+        const totalBs = parseFloat(costBsDisplay.replace(',', '.')) || 0;
+        if (totalBs > 0 && currentRate > 0) {
+          finalCost = Math.round(((totalBs / bulkQty) / currentRate) * 1000) / 1000;
         }
       } else {
-        finalCost = manualCostUsd || Number(formData.costPrice) || 0;
+        const unitUsd = parseFloat(manualCostDisplay.replace(',', '.')) || 0;
+        finalCost = unitUsd;
       }
 
       const sanitizedData: Product = {
@@ -297,11 +314,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         sellingMode: formData.selling_mode || 'simple',
         measurementUnit: formData.measurement_unit,
         unitsPerPackage: Number(formData.units_per_package) || 0,
-        unitsPerBulk: Number(formData.units_per_bulk) || 0,
+        unitsPerBulk: bulkQty,
         pricePerUnit: Number(formData.price_per_unit) || 0,
         remainingUnits: getRemainingUnits(editingProduct),
         cost_mode: costMode,
-        cost_bs: costMode === 'calculated' ? costBs : 0,
+        cost_bs: costMode === 'calculated' ? (parseFloat(costBsDisplay.replace(',', '.')) || 0) / bulkQty : 0,
         cost_date: costMode === 'calculated' ? costDate : ''
       };
 
@@ -344,14 +361,20 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       const savedCostMode = getCostMode(product);
       const savedCostBs = getCostBs(product);
       const savedCostDate = getCostDate(product);
-
-      setCostMode(savedCostMode);
-      setManualCostUsd(existingCost);
-      setCostBs(savedCostBs);
-
       const bulkQty = getUnitsPerBulk(product) || 1;
-      setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
-      setManualCostDisplay(existingCost > 0 ? (existingCost * bulkQty).toString() : '');
+
+      setCostMode(savedCostMode || 'calculated');
+      setCostBs(savedCostBs > 0 ? savedCostBs : 0);
+
+      // En modo calculado: reconstruir el costo total del bulto (Bs)
+      // En modo manual: mostrar el costo unitario directamente (USD)
+      if (savedCostMode === 'calculated') {
+        setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
+        setManualCostDisplay('');
+      } else {
+        setCostBsDisplay('');
+        setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
+      }
 
       // Usar fecha guardada o hoy si no existe
       if (savedCostDate) {
@@ -386,7 +409,6 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setCostBsDisplay('');
       setCostMode('calculated');
       setCostBs(0);
-      setManualCostUsd(0);
       const today = new Date();
       const year = today.getFullYear();
       const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -973,142 +995,139 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       </div>
                     </div>
 
-                    {costMode === 'calculated' ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2 items-center">
-                          <div className="relative flex-1 space-y-1">
-                            <label className="text-[8px] font-black text-gray-400 uppercase px-1">Costo Bs {formData.units_per_bulk && formData.units_per_bulk > 1 ? '(Bulto)' : ''}</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                                value={costBsDisplay}
-                                placeholder="0.00"
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setCostBsDisplay(val);
-                                  const normalized = val.replace(',', '.');
-                                  const rawVal = parseFloat(normalized) || 0;
-                                  const bulkQty = formData.units_per_bulk || 1;
-                                  setCostBs(rawVal / bulkQty);
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsCalculatorOpen(true)}
-                            className="w-10 h-10 mt-5 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500 transition-all"
-                            title="Calculadora"
-                          >
-                            <Calculator className="w-5 h-5" />
-                          </button>
-                        </div>
-
-                        <div className="flex gap-2 items-center mt-1">
-                          <div className="flex-1 bg-red-100 border border-red-300 rounded-xl px-3 py-2 flex justify-between items-center">
-                            <span className="text-[8px] font-black text-red-500 uppercase">Costo USD / Paquete</span>
-                            <span className="text-sm font-black text-red-700">${(Number(formData.cost_price) || 0).toFixed(3)}</span>
-                          </div>
-                          {formData.selling_mode === 'package' && (
-                            <div className="flex-1 bg-orange-100 border border-orange-300 rounded-xl px-3 py-2 flex justify-between items-center">
-                              <span className="text-[8px] font-black text-orange-500 uppercase">Costo Bs / Unidad</span>
-                              <span className="text-sm font-black text-orange-700">
-                                {(((costBs || 0) / (formData.units_per_package || 1))).toFixed(2)}
+                    {/* NUEVA ESTRUCTURA DE COSTOS UNIFICADA */}
+                    <div className="flex flex-col gap-3">
+                      {/* FILA 1: CALCULADORA - COSTO BS/$ - CANTIDAD BULTO */}
+                      <div className="flex gap-2 items-start">
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase px-1">
+                            {costMode === 'calculated' ? 'Costo Bs (Bulto Total)' : 'Costo $ (Unitario)'}
+                          </label>
+                          <div className="flex gap-2">
+                            {costMode === 'calculated' && (
+                              <button
+                                type="button"
+                                onClick={() => setIsCalculatorOpen(true)}
+                                className="w-11 h-11 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 transition-all shadow-sm shrink-0"
+                              >
+                                <Calculator className="w-5 h-5" />
+                              </button>
+                            )}
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">
+                                {costMode === 'calculated' ? 'Bs' : '$'}
                               </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2 items-center">
-                          <div className="relative flex-1 space-y-1">
-                            <label className="text-[8px] font-black text-gray-400 uppercase px-1">Costo $ {formData.units_per_bulk && formData.units_per_bulk > 1 ? '(Bulto)' : ''}</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                               <input
                                 type="text"
                                 inputMode="decimal"
                                 className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                                value={manualCostDisplay}
+                                value={costMode === 'calculated' ? costBsDisplay : manualCostDisplay}
                                 placeholder="0.00"
                                 onChange={e => {
-                                  const val = e.target.value;
-                                  setManualCostDisplay(val);
-                                  const normalized = val.replace(',', '.');
-                                  const rawVal = parseFloat(normalized) || 0;
-                                  const bulkQty = formData.units_per_bulk || 1;
-                                  setManualCostUsd(rawVal / bulkQty);
+                                  let val = e.target.value;
+                                  if (val !== '' && !/^[0-9]*[.,]?[0-9]*$/.test(val)) return;
+                                  if (costMode === 'calculated') setCostBsDisplay(val);
+                                  else setManualCostDisplay(val);
                                 }}
                               />
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex gap-2 items-center mt-1">
-                          <div className="flex-1 bg-red-100 border border-red-300 rounded-xl px-3 py-2 flex justify-between items-center">
-                            <span className="text-[8px] font-black text-red-500 uppercase">Costo USD / Paquete</span>
-                            <span className="text-sm font-black text-red-700">${manualCostUsd.toFixed(3)}</span>
-                          </div>
-                          <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2 flex justify-between items-center">
-                            <span className="text-[8px] font-black text-orange-500 uppercase">Ref. Bs</span>
-                            <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Fila única para Bulto - Siempre visible si estamos en la pestaña de costos */}
-                    <div className="pt-2">
-                      <div className="p-2 bg-white/50 rounded-xl border border-red-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Box className="w-4 h-4 text-red-400" />
-                          <span className="text-[10px] font-black text-gray-500 uppercase">Bulto</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-bold text-gray-400 uppercase">Unidades x Bulto:</span>
+                        <div className="w-24 space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase px-1">Und/Bulto</label>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             placeholder="1"
-                            className="w-16 p-1.5 border-2 border-red-100 rounded-lg bg-white outline-none text-xs font-bold text-gray-900 focus:border-red-400 text-center"
+                            className="w-full p-2.5 border-2 border-red-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400 text-center"
                             value={formData.units_per_bulk || ''}
                             onChange={e => {
-                              const bulkQty = parseInt(e.target.value) || 0;
-                              setFormData({ ...formData, units_per_bulk: bulkQty });
-                              const bq = bulkQty || 1;
-                              if (costMode === 'calculated') {
-                                const totalBs = parseFloat(costBsDisplay) || 0;
-                                setCostBs(totalBs / bq);
-                              } else {
-                                const totalUsd = parseFloat(manualCostDisplay) || 0;
-                                setManualCostUsd(totalUsd / bq);
-                              }
+                              const val = e.target.value.replace(/[^0-9]/g, '');
+                              setFormData(prev => ({ ...prev, units_per_bulk: parseInt(val) || 0 }));
                             }}
                           />
                         </div>
                       </div>
-                    </div>
 
-                    {costMode === 'calculated' && (
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <input
-                            type="date"
-                            className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
-                            value={costDate}
-                            onChange={e => setCostDate(e.target.value)}
-                          />
+                      {/* FILA 2: COSTO UNITARIO USD Y BS (LADO A LADO) */}
+                      {Number(formData.units_per_bulk) > 1 && (
+                        <div className="grid grid-cols-2 gap-2 bg-red-100/50 border border-red-200 rounded-xl p-3 animate-fade-in">
+                          <div className="text-center">
+                            <span className="text-[7px] font-black text-red-500 uppercase block">Costo Unit. USD</span>
+                            <span className="text-sm font-black text-red-700">
+                              ${((parseFloat(costMode === 'calculated' ? costBsDisplay.replace(',', '.') : manualCostDisplay.replace(',', '.')) || 0) / (Number(formData.units_per_bulk) || 1)).toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="text-center border-l border-red-200">
+                            <span className="text-[7px] font-black text-red-500 uppercase block">Costo Unit. Bs</span>
+                            <span className="text-sm font-black text-red-700">
+                              {costMode === 'calculated'
+                                ? `${((parseFloat(costBsDisplay.replace(',', '.')) || 0) / (Number(formData.units_per_bulk) || 1)).toFixed(2)} Bs`
+                                : `${((parseFloat(manualCostDisplay.replace(',', '.')) || 0) * currentRate).toFixed(2)} Bs`
+                              }
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
-                          <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
-                          <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                      )}
+
+                      {/* MOSTRAR COSTO TOTAL BULTO EN MODO MANUAL */}
+                      {costMode === 'manual' && Number(formData.units_per_bulk) > 1 && (
+                        <div className="bg-orange-100 border border-orange-200 rounded-xl px-3 py-2 flex justify-between items-center">
+                          <span className="text-[8px] font-black text-orange-600 uppercase">Costo Total Bulto</span>
+                          <span className="text-sm font-black text-orange-800">
+                            ${((parseFloat(manualCostDisplay.replace(',', '.')) || 0) * (Number(formData.units_per_bulk) || 1)).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* RESULTADO FINAL USD (LADO A LADO CON BS) */}
+                      <div className="bg-red-200/30 border-2 border-red-300 rounded-xl p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="text-center">
+                            <span className="text-[8px] font-black text-red-600 uppercase block">Costo Unit. USD</span>
+                            <span className="text-lg font-black text-red-800">
+                              ${getBulkCalculation().unitUsd.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="text-center border-l-2 border-red-300">
+                            <span className="text-[8px] font-black text-red-600 uppercase block">Ref. Bs</span>
+                            <span className="text-lg font-black text-red-800">
+                              {(getBulkCalculation().unitUsd * currentRate).toFixed(2)} Bs
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    )}
+
+                      {/* FILA 3: DATA ADICIONAL (TASA / FECHA / REF) */}
+                      <div className="flex gap-2">
+                        {costMode === 'calculated' ? (
+                          <>
+                            <div className="flex-1">
+                              <input
+                                type="date"
+                                className="w-full p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                                value={costDate}
+                                onChange={e => setCostDate(e.target.value)}
+                              />
+                            </div>
+                            <div className="w-24 bg-orange-50 border border-orange-200 rounded-xl px-2 py-1 flex flex-col items-center justify-center">
+                              <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                              <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="w-full bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex justify-between items-center">
+                            <span className="text-[8px] font-black text-orange-500 uppercase">Ref. Bolivares</span>
+                            <span className="text-xs font-black text-orange-700">
+                              {((getBulkCalculation().unitUsd || 0) * currentRate).toFixed(2)} Bs
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+
                   </div>
 
                   {/* VENTA + RENTABILIDAD UNIFICADO */}
@@ -1292,7 +1311,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                         const result = calculateResult();
                         const roundedResult = Math.round(result * 100) / 100;
                         setCostBsDisplay(roundedResult.toString());
-                        const bulkQty = formData.units_per_bulk || 1;
+                        const bulkQty = Number(formData.units_per_bulk) || 1;
                         setCostBs(roundedResult / bulkQty);
                         setIsCalculatorOpen(false);
                         setCalcDisplay('');
