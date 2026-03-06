@@ -76,6 +76,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const [priceDisplay, setPriceDisplay] = useState('');
   const [pricePerUnitDisplay, setPricePerUnitDisplay] = useState('');
   const [manualCostDisplay, setManualCostDisplay] = useState('');
+  const [costBsDisplay, setCostBsDisplay] = useState('');
 
   // Helpers para compatibilidad con ambos formatos
   const getCostPrice = (p: Product | Partial<Product>) => p.costPrice ?? (p as any).cost_price ?? 0;
@@ -348,6 +349,10 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setManualCostUsd(existingCost);
       setCostBs(savedCostBs);
 
+      const bulkQty = getUnitsPerBulk(product) || 1;
+      setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
+      setManualCostDisplay(existingCost > 0 ? (existingCost * bulkQty).toString() : '');
+
       // Usar fecha guardada o hoy si no existe
       if (savedCostDate) {
         setCostDate(savedCostDate);
@@ -378,6 +383,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setPriceDisplay('');
       setPricePerUnitDisplay('');
       setManualCostDisplay('');
+      setCostBsDisplay('');
       setCostMode('calculated');
       setCostBs(0);
       setManualCostUsd(0);
@@ -982,6 +988,14 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                                 onChange={e => {
                                   const bulkQty = parseInt(e.target.value) || 0;
                                   setFormData({ ...formData, units_per_bulk: bulkQty });
+                                  const bq = bulkQty || 1;
+                                  if (costMode === 'calculated') {
+                                    const totalBs = parseFloat(costBsDisplay) || 0;
+                                    setCostBs(totalBs / bq);
+                                  } else {
+                                    const totalUsd = parseFloat(manualCostDisplay) || 0;
+                                    setManualCostUsd(totalUsd / bq);
+                                  }
                                 }}
                               />
                             </div>
@@ -991,17 +1005,18 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                               <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
                                 <input
-                                  type="number"
-                                  step="0.01"
+                                  type="text"
+                                  inputMode="decimal"
                                   className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                                  value={costBs || ''}
+                                  value={costBsDisplay}
                                   placeholder="0.00"
                                   onChange={e => {
-                                    const rawVal = parseFloat(e.target.value) || 0;
+                                    const val = e.target.value;
+                                    setCostBsDisplay(val);
+                                    const normalized = val.replace(',', '.');
+                                    const rawVal = parseFloat(normalized) || 0;
                                     const bulkQty = formData.units_per_bulk || 1;
-                                    // El precio que guardamos es siempre EL PRECIO POR PAQUETE
-                                    // Si el usuario pone bulto, dividimos el precio ingresado por la cantidad del bulto
-                                    setCostBs(Math.round((rawVal / bulkQty) * 100) / 100);
+                                    setCostBs(rawVal / bulkQty);
                                   }}
                                 />
                               </div>
@@ -1049,26 +1064,58 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                         </div>
                       </>
                     ) : (
-                      <div className="flex gap-2 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                            value={manualCostDisplay}
-                            placeholder="0.00"
-                            onChange={e => {
-                              const val = e.target.value;
-                              setManualCostDisplay(val);
-                              const normalized = val.replace(',', '.');
-                              setManualCostUsd(parseFloat(normalized) || 0);
-                            }}
-                          />
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2 items-center">
+                          {/* Campo Bulto Duplicado para Manual */}
+                          <div className="w-20 space-y-1">
+                            <label className="text-[8px] font-black text-gray-400 uppercase px-1">Cant. Bulto</label>
+                            <input
+                              type="number"
+                              placeholder="1"
+                              className="w-full p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-xs font-bold text-gray-900 focus:border-red-400"
+                              value={formData.units_per_bulk || ''}
+                              onChange={e => {
+                                const bulkQty = parseInt(e.target.value) || 0;
+                                setFormData({ ...formData, units_per_bulk: bulkQty });
+                                const bq = bulkQty || 1;
+                                const totalUsd = parseFloat(manualCostDisplay) || 0;
+                                setManualCostUsd(totalUsd / bq);
+                              }}
+                            />
+                          </div>
+
+                          <div className="relative flex-1 space-y-1">
+                            <label className="text-[8px] font-black text-gray-400 uppercase px-1">Costo $ {formData.units_per_bulk && formData.units_per_bulk > 1 ? '(Bulto)' : ''}</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                                value={manualCostDisplay}
+                                placeholder="0.00"
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setManualCostDisplay(val);
+                                  const normalized = val.replace(',', '.');
+                                  const rawVal = parseFloat(normalized) || 0;
+                                  const bulkQty = formData.units_per_bulk || 1;
+                                  setManualCostUsd(rawVal / bulkQty);
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
-                          <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
-                          <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+
+                        <div className="flex gap-2 items-center mt-1">
+                          <div className="flex-1 bg-red-100 border border-red-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                            <span className="text-[8px] font-black text-red-500 uppercase">Costo USD / Paquete</span>
+                            <span className="text-sm font-black text-red-700">${manualCostUsd.toFixed(3)}</span>
+                          </div>
+                          <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2 flex justify-between items-center">
+                            <span className="text-[8px] font-black text-orange-500 uppercase">Ref. Bs</span>
+                            <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toFixed(2)}</span>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1254,7 +1301,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       onClick={() => {
                         const result = calculateResult();
                         const roundedResult = Math.round(result * 100) / 100;
-                        setCostBs(roundedResult);
+                        setCostBsDisplay(roundedResult.toString());
+                        const bulkQty = formData.units_per_bulk || 1;
+                        setCostBs(roundedResult / bulkQty);
                         setIsCalculatorOpen(false);
                         setCalcDisplay('');
                         setCalcResult(0);
