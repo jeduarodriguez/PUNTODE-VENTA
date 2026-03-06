@@ -1,4 +1,4 @@
-  
+
 export interface Product {
   id: string;
   name: string;
@@ -13,13 +13,15 @@ export interface Product {
   selling_mode?: 'simple' | 'weight' | 'package';
   measurement_unit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
   units_per_package?: number;
+  units_per_bulk?: number;
   price_per_unit?: number;
   remaining_units?: number;
-  
+
   // Aliases para compatibilidad con datos existentes (snake_case)
   sellingMode?: 'simple' | 'weight' | 'package';
   measurementUnit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
   unitsPerPackage?: number;
+  unitsPerBulk?: number;
   pricePerUnit?: number;
   remainingUnits?: number;
 
@@ -27,7 +29,7 @@ export interface Product {
   cost_mode?: 'calculated' | 'manual';
   cost_bs?: number;
   cost_date?: string;
-  
+
   // Alias para compatibilidad
   cost_price?: number;
 }

@@ -47,6 +47,15 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   useEffect(() => { localStorage.setItem('inv_sort', sortBy); }, [sortBy]);
   useEffect(() => { localStorage.setItem('inv_view', viewMode); }, [viewMode]);
 
+  useEffect(() => {
+    if (isModalOpen || isCategoryModalOpen || isVariantConfigOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => { document.body.style.overflow = 'auto'; };
+  }, [isModalOpen, isCategoryModalOpen, isVariantConfigOpen]);
+
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
     category: 'Bebidas',
@@ -59,7 +68,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     units_per_package: 0,
     price_per_unit: 0,
     remaining_units: 0,
-    measurement_unit: 'kg'
+    measurement_unit: 'kg',
+    units_per_bulk: 0
   });
 
   // Estados para manejar valores decimales como strings
@@ -75,6 +85,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? (p as any).sellingMode ?? 'simple';
   const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? (p as any).measurementUnit ?? 'kg';
   const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
+  const getUnitsPerBulk = (p: Product | Partial<Product>) => p.units_per_bulk ?? (p as any).unitsPerBulk ?? 0;
   const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
   const getRemainingUnits = (p: Product | Partial<Product> | null | undefined) => {
     if (!p) return 0;
@@ -124,7 +135,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             setCalcDisplay(result.toString());
           }
         }
-      } catch {}
+      } catch { }
     } else {
       setCalcDisplay(prev => prev + value);
     }
@@ -144,41 +155,41 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
   const getRateForDate = (dateStr: string): number => {
     if (!rateHistory || rateHistory.length === 0) return exchangeRate;
-    
+
     const targetDate = new Date(dateStr + 'T00:00:00');
     const targetTime = targetDate.getTime();
-    
+
     const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
-    
+
     const exactMatch = sortedRates.find(r => {
       const rateDate = new Date(r.timestamp);
       const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
       return rateDateStr === dateStr;
     });
-    
+
     if (exactMatch) return exactMatch.rate;
-    
+
     const closestRate = sortedRates.find(r => r.timestamp < targetTime);
     if (closestRate) return closestRate.rate;
-    
+
     return sortedRates[0]?.rate || exchangeRate;
   };
 
   const getTodayRate = (): number => {
     if (!rateHistory || rateHistory.length === 0) return exchangeRate;
-    
+
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
-    
+
     const todayRate = sortedRates.find(r => {
       const rateDate = new Date(r.timestamp);
       const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
       return rateDateStart === todayStart;
     });
-    
+
     if (todayRate) return todayRate.rate;
-    
+
     return sortedRates[0]?.rate || exchangeRate;
   };
 
@@ -212,7 +223,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         case 'price-low': return a.price - b.price;
         case 'stock-high': return b.stock - a.stock;
         case 'stock-low': return a.stock - b.stock;
-        case 'margin-high': 
+        case 'margin-high':
           const marginA = costA > 0 ? ((a.price - costA) / costA) * 100 : 0;
           const marginB = costB > 0 ? ((b.price - costB) / costB) * 100 : 0;
           return marginB - marginA;
@@ -225,20 +236,20 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   // Generar lista extendida con productos virtuales de paquetes
   const extendedProducts = useMemo(() => {
     const result: Array<Product & { isVirtualUnit?: boolean; parentProduct?: Product }> = [];
-    
+
     filteredProducts.forEach(p => {
       result.push(p);
-      
+
       const unitsPerPkg = p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
       const pricePerU = p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
       const sellingMode = p.selling_mode ?? (p as any).sellingMode ?? 'simple';
-      
+
       if (sellingMode === 'package' && unitsPerPkg > 0 && pricePerU > 0) {
         const unitStock = p.stock * unitsPerPkg + (p.remaining_units ?? (p as any).remainingUnits ?? 0);
         const unitCost = (p.cost_price ?? (p as any).costPrice ?? 0) / unitsPerPkg;
         const unitProfit = pricePerU - unitCost;
         const unitMargin = unitCost > 0 ? (unitProfit / unitCost) * 100 : 0;
-        
+
         const virtualProduct: Product & { isVirtualUnit: true; parentProduct: Product } = {
           ...p,
           id: `${p.id}_virtual`,
@@ -254,13 +265,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         result.push(virtualProduct);
       }
     });
-    
+
     return result;
   }, [filteredProducts]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       let finalCost = 0;
       if (costMode === 'calculated') {
@@ -272,7 +283,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       } else {
         finalCost = manualCostUsd || Number(formData.costPrice) || 0;
       }
-      
+
       const sanitizedData: Product = {
         id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
         name: formData.name || 'Producto sin nombre',
@@ -285,6 +296,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         sellingMode: formData.selling_mode || 'simple',
         measurementUnit: formData.measurement_unit,
         unitsPerPackage: Number(formData.units_per_package) || 0,
+        unitsPerBulk: Number(formData.units_per_bulk) || 0,
         pricePerUnit: Number(formData.price_per_unit) || 0,
         remainingUnits: getRemainingUnits(editingProduct),
         cost_mode: costMode,
@@ -310,31 +322,32 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       const existingCost = getCostPrice(product);
       const productPrice = product.price || 0;
       const productPricePerUnit = getPricePerUnit(product) || 0;
-      
+
       setFormData({
         ...product,
         cost_price: existingCost,
         selling_mode: getSellingMode(product),
         measurement_unit: getMeasurementUnit(product),
         units_per_package: getUnitsPerPackage(product),
+        units_per_bulk: getUnitsPerBulk(product),
         price_per_unit: getPricePerUnit(product),
         remaining_units: getRemainingUnits(product)
       });
-      
+
       // Inicializar display de precios
       setPriceDisplay(productPrice > 0 ? productPrice.toString() : '');
       setPricePerUnitDisplay(productPricePerUnit > 0 ? productPricePerUnit.toString() : '');
       setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
-      
+
       // Cargar modo guardado o determinar si no existe
       const savedCostMode = getCostMode(product);
       const savedCostBs = getCostBs(product);
       const savedCostDate = getCostDate(product);
-      
+
       setCostMode(savedCostMode);
       setManualCostUsd(existingCost);
       setCostBs(savedCostBs);
-      
+
       // Usar fecha guardada o hoy si no existe
       if (savedCostDate) {
         setCostDate(savedCostDate);
@@ -359,7 +372,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         units_per_package: 0,
         price_per_unit: 0,
         remaining_units: 0,
-        measurement_unit: 'kg'
+        measurement_unit: 'kg',
+        units_per_bulk: 0
       });
       setPriceDisplay('');
       setPricePerUnitDisplay('');
@@ -511,9 +525,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             onChange={(e) => setModeFilter(e.target.value as FilterMode)}
           >
             <option value="all">TIPO</option>
-            <option value="simple">UND</option>
+            <option value="simple">SIMPLE</option>
             <option value="weight">PESO</option>
-            <option value="package">PACK</option>
+            <option value="package">UNIDAD</option>
           </select>
 
           <select
@@ -775,8 +789,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     onClick={() => setFormData({ ...formData, selling_mode: 'package' })}
                     className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${formData.selling_mode === 'package' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
                   >
-                    <Box className="w-6 h-6" />
-                    <span className="text-[10px] font-black uppercase">Paquete</span>
+                    <Layers className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">Unidad</span>
                   </button>
                 </div>
 
@@ -806,7 +820,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
                 {formData.selling_mode === 'package' && (
                   <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4 animate-fade-in">
-                    <h4 className="font-bold text-gray-900 text-sm">Venta por Paquete (Multi-precio)</h4>
+                    <h4 className="font-bold text-gray-900 text-sm">Venta por Unidades (Multi-precio)</h4>
 
                     <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
                       <span className="text-[10px] font-bold text-blue-600 uppercase">Costo Total Paquete (Ref)</span>
@@ -816,9 +830,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     {/* Reorganización: Unidades y Costo Unitario en la misma fila */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Unidades / Pack</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Piezas por paquete</label>
                         <div className="relative">
-                          <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <Box className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                           <input
                             type="number"
                             placeholder="Ej. 12"
@@ -857,362 +871,404 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             </div>
           )}
 
-          <div className="p-3 sm:p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
-            <h3 className="text-base sm:text-lg font-black text-gray-900">{editingProduct ? 'Editar' : 'Nuevo'} Producto</h3>
-            <div className="flex items-center gap-2">
-              {editingProduct && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete(editingProduct.id);
-                    closeModal();
-                  }}
-                  className="text-red-400 hover:text-red-600 p-1"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              )}
-              <button onClick={closeModal} className="text-gray-400 hover:text-black p-1">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar overscroll-contain bg-white">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 w-full max-w-2xl mx-auto touch-manipulation">
 
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 w-full max-w-2xl mx-auto touch-manipulation">
-            {/* NOMBRE DEL PRODUCTO */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre del Producto</label>
+              {/* HEADER INTEGRADO EN EL SCROLL */}
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-900 leading-tight">{editingProduct ? 'Editar' : 'Nuevo'}</h3>
+                  <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mt-0.5">Ficha de Producto</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {editingProduct && (
+                    <button
+                      type="button"
+                      onClick={() => { if (confirm('¿Seguro?')) { onDelete(editingProduct.id); closeModal(); } }}
+                      className="bg-red-50 text-red-400 p-3 rounded-2xl hover:bg-red-100 transition-colors"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                  <button onClick={closeModal} type="button" className="bg-gray-100 text-gray-400 p-3 rounded-2xl hover:text-black transition-colors">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              {/* NOMBRE DEL PRODUCTO */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nombre del Producto</label>
+                <div className="flex gap-2">
+                  <input
+                    required
+                    autoFocus={!editingProduct}
+                    placeholder="Ej. Café Molido 1kg"
+                    className="flex-1 p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsVariantConfigOpen(true)}
+                    className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.selling_mode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
+                    title="Cambiar tipo"
+                  >
+                    {formData.selling_mode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : formData.selling_mode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* CATEGORÍA Y STOCK */}
               <div className="flex gap-2">
-                <input
-                  required
-                  autoFocus={!editingProduct}
-                  placeholder="Ej. Café Molido 1kg"
-                  className="flex-1 p-3 sm:p-4 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none text-sm font-bold text-gray-900"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsVariantConfigOpen(true)}
-                  className={`w-12 sm:w-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-95 ${formData.selling_mode !== 'simple' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-400 hover:border-indigo-300 hover:text-indigo-500'}`}
-                  title="Cambiar tipo"
-                >
-                  {formData.selling_mode === 'weight' ? <Scale className="w-5 h-5 sm:w-6 sm:h-6" /> : formData.selling_mode === 'package' ? <Box className="w-5 h-5 sm:w-6 sm:h-6" /> : <Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
-                </button>
+                <div className="flex-1 space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryModalOpen(true)}
+                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
+                  >
+                    <span>{formData.category}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
+                  </button>
+                </div>
+                <div className="w-24 space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
+                    {formData.selling_mode === 'weight' ? `Stock (${formData.measurement_unit})` : 'Stock'}
+                  </label>
+                  <input
+                    type="number"
+                    step={formData.selling_mode === 'weight' ? "0.01" : "1"}
+                    placeholder="0"
+                    className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
+                    value={formData.stock || ''}
+                    onChange={e => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* CATEGORÍA Y STOCK */}
-            <div className="flex gap-2">
-              <div className="flex-1 space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Categoría</label>
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all text-left flex items-center justify-between group active:scale-[0.98]"
-                >
-                  <span>{formData.category}</span>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
-                </button>
-              </div>
-              <div className="w-24 space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-                  {formData.selling_mode === 'weight' ? `Stock (${formData.measurement_unit})` : 'Stock'}
-                </label>
-                <input
-                  type="number"
-                  step={formData.selling_mode === 'weight' ? "0.01" : "1"}
-                  placeholder="0"
-                  className="w-full p-3 border-2 border-gray-100 rounded-2xl bg-gray-50 focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-indigo-500 transition-all"
-                  value={formData.stock || ''}
-                  onChange={e => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
-
-            {/* PRECIOS */}
-            <div className="pt-2 border-t border-gray-100">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* COSTO */}
-                <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[8px] font-bold ${costMode === 'calculated' ? 'text-red-500' : 'text-gray-400'}`}>Calculado</span>
-                      <button
-                        type="button"
-                        onClick={() => setCostMode(costMode === 'calculated' ? 'manual' : 'calculated')}
-                        className={`w-10 h-5 rounded-full transition-colors ${costMode === 'manual' ? 'bg-red-400' : 'bg-gray-300'}`}
-                      >
-                        <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${costMode === 'manual' ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      </button>
-                      <span className={`text-[8px] font-bold ${costMode === 'manual' ? 'text-red-500' : 'text-gray-400'}`}>Manual</span>
-                    </div>
-                  </div>
-                  
-                  {costMode === 'calculated' ? (
-                    <>
-                      <div className="flex gap-2 items-center">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                            value={costBs || ''}
-                            placeholder="0.00"
-                            onChange={e => setCostBs(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
-                          />
-                        </div>
+              {/* PRECIOS */}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* COSTO */}
+                  <div className="bg-red-50 border border-red-100 rounded-2xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-red-400 uppercase tracking-widest px-1">Costo</label>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[8px] font-bold ${costMode === 'calculated' ? 'text-red-500' : 'text-gray-400'}`}>Calculado</span>
                         <button
                           type="button"
-                          onClick={() => setIsCalculatorOpen(true)}
-                          className="w-10 h-10 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500 transition-all"
-                          title="Calculadora"
+                          onClick={() => setCostMode(costMode === 'calculated' ? 'manual' : 'calculated')}
+                          className={`w-10 h-5 rounded-full transition-colors ${costMode === 'manual' ? 'bg-red-400' : 'bg-gray-300'}`}
                         >
-                          <Calculator className="w-5 h-5" />
+                          <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${costMode === 'manual' ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
-                        <div className="w-24 bg-red-100 border border-red-300 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
-                          <span className="text-[7px] font-bold text-red-500 uppercase">USD</span>
-                          <span className="text-sm font-black text-red-700">${(Number(formData.cost_price) || 0).toFixed(3)}</span>
-                        </div>
+                        <span className={`text-[8px] font-bold ${costMode === 'manual' ? 'text-red-500' : 'text-gray-400'}`}>Manual</span>
                       </div>
+                    </div>
 
-                      <div className="flex gap-2">
-                        <div className="flex-1">
+                    {costMode === 'calculated' ? (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-2 items-center">
+                            {/* Campo Bulto */}
+                            <div className="w-20 space-y-1">
+                              <label className="text-[8px] font-black text-gray-400 uppercase px-1">Cant. Bulto</label>
+                              <input
+                                type="number"
+                                placeholder="1"
+                                className="w-full p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-xs font-bold text-gray-900 focus:border-red-400"
+                                value={formData.units_per_bulk || ''}
+                                onChange={e => {
+                                  const bulkQty = parseInt(e.target.value) || 0;
+                                  setFormData({ ...formData, units_per_bulk: bulkQty });
+                                }}
+                              />
+                            </div>
+
+                            <div className="relative flex-1 space-y-1">
+                              <label className="text-[8px] font-black text-gray-400 uppercase px-1">Costo Bs {formData.units_per_bulk && formData.units_per_bulk > 1 ? '(Bulto)' : ''}</label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Bs</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                                  value={costBs || ''}
+                                  placeholder="0.00"
+                                  onChange={e => {
+                                    const rawVal = parseFloat(e.target.value) || 0;
+                                    const bulkQty = formData.units_per_bulk || 1;
+                                    // El precio que guardamos es siempre EL PRECIO POR PAQUETE
+                                    // Si el usuario pone bulto, dividimos el precio ingresado por la cantidad del bulto
+                                    setCostBs(Math.round((rawVal / bulkQty) * 100) / 100);
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setIsCalculatorOpen(true)}
+                              className="w-10 h-10 mt-5 bg-white border-2 border-red-200 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-300 hover:text-red-500 transition-all"
+                              title="Calculadora"
+                            >
+                              <Calculator className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          <div className="flex gap-2 items-center mt-1">
+                            <div className="flex-1 bg-red-100 border border-red-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                              <span className="text-[8px] font-black text-red-500 uppercase">Costo USD / Paquete</span>
+                              <span className="text-sm font-black text-red-700">${(Number(formData.cost_price) || 0).toFixed(3)}</span>
+                            </div>
+                            {formData.selling_mode === 'package' && (
+                              <div className="flex-1 bg-orange-100 border border-orange-300 rounded-xl px-3 py-2 flex justify-between items-center">
+                                <span className="text-[8px] font-black text-orange-500 uppercase">Costo Bs / Unidad</span>
+                                <span className="text-sm font-black text-orange-700">
+                                  {(((costBs || 0) / (formData.units_per_package || 1))).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 mt-2">
+                          <div className="flex-1">
+                            <input
+                              type="date"
+                              className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                              value={costDate}
+                              onChange={e => setCostDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
+                            <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
+                            <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
                           <input
-                            type="date"
-                            className="w-full px-2 py-2 border-2 border-red-200 rounded-lg bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
-                            value={costDate}
-                            onChange={e => setCostDate(e.target.value)}
+                            type="text"
+                            inputMode="decimal"
+                            className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
+                            value={manualCostDisplay}
+                            placeholder="0.00"
+                            onChange={e => {
+                              const val = e.target.value;
+                              setManualCostDisplay(val);
+                              const normalized = val.replace(',', '.');
+                              setManualCostUsd(parseFloat(normalized) || 0);
+                            }}
                           />
                         </div>
-                        <div className="flex-1 bg-orange-100 border border-orange-200 rounded-lg px-2 py-2 flex flex-col items-center justify-center">
-                          <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
-                          <span className="text-xs font-black text-orange-700">{currentRate.toFixed(2)}</span>
+                        <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
+                          <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
+                          <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
                         </div>
                       </div>
-                    </>
-                  ) : (
-                    <div className="flex gap-2 items-center">
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className="w-full pl-10 pr-3 py-2.5 border-2 border-red-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-red-400"
-                          value={manualCostDisplay}
-                          placeholder="0.00"
-                          onChange={e => {
-                            const val = e.target.value;
-                            setManualCostDisplay(val);
-                            const normalized = val.replace(',', '.');
-                            setManualCostUsd(parseFloat(normalized) || 0);
-                          }}
-                        />
-                      </div>
-                      <div className="w-28 bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center">
-                        <span className="text-[7px] font-bold text-orange-500 uppercase">Ref. Bs</span>
-                        <span className="text-sm font-black text-orange-700">{(manualCostUsd * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
 
-                {/* VENTA + RENTABILIDAD UNIFICADO */}
-                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
-                  <div className="flex gap-3 items-stretch">
-                    {/* LADO IZQUIERDO: PRECIO */}
-                    <div className="flex-1 flex flex-col">
-                      <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
-                      {/* $ */}
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
-                          value={priceDisplay}
-                          placeholder="0.00"
-                          onChange={e => {
-                            const val = e.target.value;
-                            setPriceDisplay(val);
-                            const normalized = val.replace(',', '.');
-                            setFormData({ ...formData, price: parseFloat(normalized) || 0 });
-                          }}
-                        />
-                      </div>
-                      
-                      {/* Bs calculado */}
-                      <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
-                        <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
-                        <span className="text-sm font-black text-emerald-800">
-                          {((formData.price || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
-                        </span>
-                      </div>
-                    </div>
+                  {/* VENTA + RENTABILIDAD UNIFICADO */}
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+                    <div className="flex gap-3 items-stretch">
+                      {/* LADO IZQUIERDO: PRECIO */}
+                      <div className="flex-1 flex flex-col">
+                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
+                        {/* $ */}
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="w-full pl-10 pr-3 py-2.5 border-2 border-emerald-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-emerald-400 h-full"
+                            value={priceDisplay}
+                            placeholder="0.00"
+                            onChange={e => {
+                              const val = e.target.value;
+                              setPriceDisplay(val);
+                              const normalized = val.replace(',', '.');
+                              setFormData({ ...formData, price: parseFloat(normalized) || 0 });
+                            }}
+                          />
+                        </div>
 
-                    {/* LADO DERECHO: RENTABILIDAD */}
-                    <div className="flex-1 flex flex-col">
-                      <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
-                      
-                      {/* Ganancia */}
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
-                        <span className={`text-sm font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                          ${profit.toFixed(2)}
-                        </span>
+                        {/* Bs calculado */}
+                        <div className="bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                          <span className="text-[8px] font-bold text-emerald-600 uppercase">Bolivares</span>
+                          <span className="text-sm font-black text-emerald-800">
+                            {((formData.price || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                          </span>
+                        </div>
                       </div>
-                      
-                      {/* Margen */}
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
-                        <span className={`text-sm font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
-                          {margin.toFixed(0)}%
-                        </span>
+
+                      {/* LADO DERECHO: RENTABILIDAD */}
+                      <div className="flex-1 flex flex-col">
+                        <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+
+                        {/* Ganancia */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                          <span className={`text-sm font-black ${profit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                            ${profit.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Margen */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                          <span className={`text-sm font-black ${margin >= 30 ? 'text-emerald-500' : margin > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                            {margin.toFixed(0)}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* PRECIO POR UNIDAD (solo para paquetes) */}
-              {formData.selling_mode === 'package' && (
-                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
-                  <div className="flex gap-3 items-stretch">
-                    {/* LADO IZQUIERDO: PRECIO POR UNIDAD */}
-                    <div className="flex-1 flex flex-col">
-                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">VENTA X UNIDAD</label>
-                      {/* $ */}
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
-                          value={pricePerUnitDisplay}
-                          placeholder="0.00"
-                          onChange={e => {
-                            const val = e.target.value;
-                            setPricePerUnitDisplay(val);
-                            const normalized = val.replace(',', '.');
-                            setFormData({ ...formData, price_per_unit: parseFloat(normalized) || 0 });
-                          }}
-                        />
-                      </div>
-                      
-                      {/* Bs calculado */}
-                      <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
-                        <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
-                        <span className="text-sm font-black text-blue-800">
-                          {((formData.price_per_unit || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
-                        </span>
-                      </div>
-                    </div>
+                {/* PRECIO POR UNIDAD (solo para paquetes) */}
+                {formData.selling_mode === 'package' && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+                    <div className="flex gap-3 items-stretch">
+                      {/* LADO IZQUIERDO: PRECIO POR UNIDAD */}
+                      <div className="flex-1 flex flex-col">
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1 mb-2">VENTA X UNIDAD</label>
+                        {/* $ */}
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="w-full pl-10 pr-3 py-2.5 border-2 border-blue-200 rounded-xl bg-white focus:bg-white outline-none text-sm font-bold text-gray-900 focus:border-blue-400 h-full"
+                            value={pricePerUnitDisplay}
+                            placeholder="0.00"
+                            onChange={e => {
+                              const val = e.target.value;
+                              setPricePerUnitDisplay(val);
+                              const normalized = val.replace(',', '.');
+                              setFormData({ ...formData, price_per_unit: parseFloat(normalized) || 0 });
+                            }}
+                          />
+                        </div>
 
-                    {/* LADO DERECHO: RENTABILIDAD */}
-                    <div className="flex-1 flex flex-col">
-                      <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
-                      
-                      {/* Ganancia */}
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
-                        <span className={`text-sm font-black ${profitPerUnit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                          ${profitPerUnit.toFixed(2)}
-                        </span>
+                        {/* Bs calculado */}
+                        <div className="bg-blue-100 border border-blue-300 rounded-xl px-3 py-2 flex justify-between items-center mt-2">
+                          <span className="text-[8px] font-bold text-blue-600 uppercase">Bolivares</span>
+                          <span className="text-sm font-black text-blue-800">
+                            {((formData.price_per_unit || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                          </span>
+                        </div>
                       </div>
-                      
-                      {/* Margen */}
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
-                        <span className={`text-sm font-black ${marginPerUnit >= 30 ? 'text-emerald-500' : marginPerUnit > 0 ? 'text-orange-400' : 'text-red-400'}`}>
-                          {marginPerUnit.toFixed(0)}%
-                        </span>
+
+                      {/* LADO DERECHO: RENTABILIDAD */}
+                      <div className="flex-1 flex flex-col">
+                        <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-1 mb-2">Rentabilidad</label>
+
+                        {/* Ganancia */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center flex-1">
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">Ganancia</span>
+                          <span className={`text-sm font-black ${profitPerUnit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                            ${profitPerUnit.toFixed(2)}
+                          </span>
+                        </div>
+
+                        {/* Margen */}
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex justify-between items-center mt-2 flex-1">
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">Margen</span>
+                          <span className={`text-sm font-black ${marginPerUnit >= 30 ? 'text-emerald-500' : marginPerUnit > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                            {marginPerUnit.toFixed(0)}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            {/* BOTONES DE ACCIÓN */}
-            <div className="pt-2 flex gap-3">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all active:scale-95"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
-              >
-                {editingProduct ? 'Actualizar' : 'Guardar'}
-              </button>
-            </div>
-          </form>
+              {/* BOTONES DE ACCIÓN */}
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="flex-1 py-4 border-2 border-gray-100 rounded-2xl font-bold text-gray-400 hover:bg-gray-50 transition-all active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all"
+                >
+                  {editingProduct ? 'Actualizar' : 'Guardar'}
+                </button>
+              </div>
+            </form>
 
-          {/* CALCULADORA POPUP */}
-          {isCalculatorOpen && (
-            <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsCalculatorOpen(false)}>
-              <div className="bg-white rounded-2xl p-4 w-72 shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-black text-gray-400 uppercase">Calculadora</span>
-                  <button onClick={() => setIsCalculatorOpen(false)} className="text-gray-400 hover:text-gray-600">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <div className="bg-gray-900 rounded-xl p-4 mb-3">
-                  <div className="text-right text-white font-bold text-2xl truncate">{calcDisplay || '0'}</div>
-                  <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</div>
-                </div>
+            {/* CALCULADORA POPUP */}
+            {isCalculatorOpen && (
+              <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsCalculatorOpen(false)}>
+                <div className="bg-white rounded-2xl p-4 w-72 shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-black text-gray-400 uppercase">Calculadora</span>
+                    <button onClick={() => setIsCalculatorOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
 
-                <div className="grid grid-cols-4 gap-3">
-                  <button onClick={() => handleCalcInput('C')} className="p-4 bg-red-100 rounded-xl font-bold text-red-700 hover:bg-red-200 text-lg">C</button>
-                  <button onClick={() => handleCalcInput('%')} className="p-4 bg-purple-100 rounded-xl font-bold text-purple-700 hover:bg-purple-200 text-lg">%</button>
-                  <button onClick={() => handleCalcInput('/')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">/</button>
-                  <button onClick={() => handleCalcInput('*')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">×</button>
-                  
-                  <button onClick={() => handleCalcInput('7')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">7</button>
-                  <button onClick={() => handleCalcInput('8')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">8</button>
-                  <button onClick={() => handleCalcInput('9')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">9</button>
-                  <button onClick={() => handleCalcInput('-')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">-</button>
-                  
-                  <button onClick={() => handleCalcInput('4')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">4</button>
-                  <button onClick={() => handleCalcInput('5')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">5</button>
-                  <button onClick={() => handleCalcInput('6')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">6</button>
-                  <button onClick={() => handleCalcInput('+')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">+</button>
-                  
-                  <button onClick={() => handleCalcInput('1')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">1</button>
-                  <button onClick={() => handleCalcInput('2')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">2</button>
-                  <button onClick={() => handleCalcInput('3')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">3</button>
-                  <button onClick={() => handleCalcInput('=')} className="p-4 bg-orange-100 rounded-xl font-bold text-orange-700 hover:bg-orange-200 text-lg row-span-2">=</button>
-                  
-                  <button onClick={() => handleCalcInput('0')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg col-span-2">0</button>
-                  <button onClick={() => handleCalcInput('.')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">.</button>
-                </div>
+                  <div className="bg-gray-900 rounded-xl p-4 mb-3">
+                    <div className="text-right text-white font-bold text-2xl truncate">{calcDisplay || '0'}</div>
+                    <div className="text-right text-emerald-400 font-black text-xl">= {calcResult.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</div>
+                  </div>
 
-                <div className="flex gap-2 mt-3">
-                  <button 
-                    onClick={() => { 
-                      const result = calculateResult();
-                      const roundedResult = Math.round(result * 100) / 100;
-                      setCostBs(roundedResult);
-                      setIsCalculatorOpen(false);
-                      setCalcDisplay('');
-                      setCalcResult(0);
-                      setCalcAccumulator(0);
-                    }}
-                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
-                  >
-                    Insertar
-                  </button>
+                  <div className="grid grid-cols-4 gap-3">
+                    <button onClick={() => handleCalcInput('C')} className="p-4 bg-red-100 rounded-xl font-bold text-red-700 hover:bg-red-200 text-lg">C</button>
+                    <button onClick={() => handleCalcInput('%')} className="p-4 bg-purple-100 rounded-xl font-bold text-purple-700 hover:bg-purple-200 text-lg">%</button>
+                    <button onClick={() => handleCalcInput('/')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">/</button>
+                    <button onClick={() => handleCalcInput('*')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">×</button>
+
+                    <button onClick={() => handleCalcInput('7')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">7</button>
+                    <button onClick={() => handleCalcInput('8')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">8</button>
+                    <button onClick={() => handleCalcInput('9')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">9</button>
+                    <button onClick={() => handleCalcInput('-')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">-</button>
+
+                    <button onClick={() => handleCalcInput('4')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">4</button>
+                    <button onClick={() => handleCalcInput('5')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">5</button>
+                    <button onClick={() => handleCalcInput('6')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">6</button>
+                    <button onClick={() => handleCalcInput('+')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">+</button>
+
+                    <button onClick={() => handleCalcInput('1')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">1</button>
+                    <button onClick={() => handleCalcInput('2')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">2</button>
+                    <button onClick={() => handleCalcInput('3')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">3</button>
+                    <button onClick={() => handleCalcInput('=')} className="p-4 bg-orange-100 rounded-xl font-bold text-orange-700 hover:bg-orange-200 text-lg row-span-2">=</button>
+
+                    <button onClick={() => handleCalcInput('0')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg col-span-2">0</button>
+                    <button onClick={() => handleCalcInput('.')} className="p-4 bg-gray-100 rounded-xl font-bold text-gray-700 hover:bg-gray-200 text-lg">.</button>
+                  </div>
+
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => {
+                        const result = calculateResult();
+                        const roundedResult = Math.round(result * 100) / 100;
+                        setCostBs(roundedResult);
+                        setIsCalculatorOpen(false);
+                        setCalcDisplay('');
+                        setCalcResult(0);
+                        setCalcAccumulator(0);
+                      }}
+                      className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700"
+                    >
+                      Insertar
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 

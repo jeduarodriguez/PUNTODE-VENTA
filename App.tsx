@@ -133,18 +133,18 @@ const App: React.FC = () => {
     const unsubHistory = syncPath('rate_history', (data) => {
       const history = data ? Object.values(data).filter(Boolean) as ExchangeRateRecord[] : [];
       setRateHistory(history);
-      
+
       if (history.length > 0) {
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         const sortedRates = [...history].sort((a, b) => b.timestamp - a.timestamp);
-        
+
         const todayRate = sortedRates.find(r => {
           const rateDate = new Date(r.timestamp);
           const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
           return rateDateStart === todayStart;
         });
-        
+
         if (todayRate) {
           setExchangeRate(todayRate.rate);
         } else {
@@ -196,17 +196,17 @@ const App: React.FC = () => {
       const isUnitSale = item.id && item.id.endsWith('-unit');
       const productId = isUnitSale ? item.id.replace('-unit', '') : item.id;
       const pIndex = updatedProducts.findIndex(prod => prod.id === productId);
-      
+
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
         const { sellingMode, unitsPerPackage, remainingUnits } = getProductProps(product);
-        
+
         if (sellingMode === 'package' && isUnitSale) {
           // Venta por unidad de producto paquete
           let qtyNeeded = item.quantity;
           let newRemainingUnits = remainingUnits;
           let newStock = product.stock;
-          
+
           // Primero usar las unidades sueltas
           if (newRemainingUnits >= qtyNeeded) {
             newRemainingUnits -= qtyNeeded;
@@ -215,7 +215,7 @@ const App: React.FC = () => {
             qtyNeeded -= newRemainingUnits;
             newRemainingUnits = 0;
           }
-          
+
           // Si necesita más, abrir paquetes
           if (qtyNeeded > 0 && newStock > 0) {
             const packagesToOpen = Math.min(Math.ceil(qtyNeeded / (unitsPerPackage || 1)), newStock);
@@ -224,9 +224,9 @@ const App: React.FC = () => {
             newRemainingUnits += unitsFromPackages;
             qtyNeeded -= unitsFromPackages;
           }
-          
-          const p = { 
-            ...product, 
+
+          const p = {
+            ...product,
             stock: Math.max(0, newStock),
             remaining_units: Math.max(0, newRemainingUnits)
           };
@@ -234,8 +234,8 @@ const App: React.FC = () => {
           updates[`products/${productId}`] = p;
         } else {
           // Venta normal (simple o peso)
-          const p = { 
-            ...product, 
+          const p = {
+            ...product,
             stock: Math.max(0, product.stock - item.quantity)
           };
           updatedProducts[pIndex] = p;
@@ -248,7 +248,7 @@ const App: React.FC = () => {
     const updatedCustomers = [...customers];
     if (sale.paymentMethod === 'Credit' && sale.customerId) {
       console.log('💳 Processing credit sale for customerId:', sale.customerId);
-      
+
       const cIndex = updatedCustomers.findIndex(cust => cust.id === sale.customerId);
       if (cIndex !== -1) {
         const c = { ...updatedCustomers[cIndex], balance: (updatedCustomers[cIndex].balance || 0) + sale.total };
@@ -312,14 +312,14 @@ const App: React.FC = () => {
     const updatedProducts = [...products];
     sale.items.forEach(item => {
       if (item.id === 'debt_payment' || item.id === 'worker_debt_payment') return;
-      
+
       const isUnitSale = item.id && item.id.endsWith('-unit');
       const productId = isUnitSale ? item.id.replace('-unit', '') : item.id;
       const pIndex = updatedProducts.findIndex(prod => prod.id === productId);
-      
+
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
-        
+
         if (product.sellingMode === 'package' && isUnitSale) {
           // Anular venta por unidad - reintegrar a remainingUnits
           const qtyToReturn = item.quantity;
@@ -336,39 +336,73 @@ const App: React.FC = () => {
       }
     });
 
-    // Revertir saldo de cliente
+    // Revertir saldo de cliente o trabajador
     const updatedCustomers = [...customers];
+    const updatedWorkers = [...workers];
+
+    // Si la venta FUE a crédito, la anulación restaura el saldo restando la deuda
     if (sale.paymentMethod === 'Credit' && sale.customerId) {
       const cIndex = updatedCustomers.findIndex(cust => cust.id === sale.customerId);
       if (cIndex !== -1) {
         const c = { ...updatedCustomers[cIndex], balance: Math.max(0, (updatedCustomers[cIndex].balance || 0) - sale.total) };
         updatedCustomers[cIndex] = c;
         updates[`customers/${c.id}`] = c;
+      } else {
+        const wIndex = updatedWorkers.findIndex(w => w.id === sale.customerId);
+        if (wIndex !== -1) {
+          const w = { ...updatedWorkers[wIndex], balance: Math.max(0, (updatedWorkers[wIndex].balance || 0) - sale.total) };
+          updatedWorkers[wIndex] = w;
+          updates[`workers/${w.id}`] = w;
+        }
       }
     }
 
-    // Revertir saldo de trabajador
-    const updatedWorkers = [...workers];
-    if (sale.paymentMethod === 'Credit' && sale.customerId) {
-      const wIndex = updatedWorkers.findIndex(w => w.id === sale.customerId);
-      if (wIndex !== -1) {
-        const w = { ...updatedWorkers[wIndex], balance: Math.max(0, (updatedWorkers[wIndex].balance || 0) - sale.total) };
-        updatedWorkers[wIndex] = w;
-        updates[`workers/${w.id}`] = w;
+    // Si la venta ERA EL PAGO DE UNA DEUDA, la anulación restaura el saldo SUMANDO la deuda
+    const isDebtPayment = sale.items.some(i => i.id === 'debt_payment');
+    const isWorkerDebtPayment = sale.items.some(i => i.id === 'worker_debt_payment');
+
+    if ((isDebtPayment || isWorkerDebtPayment) && sale.customerId) {
+      if (isDebtPayment) {
+        const cIndex = updatedCustomers.findIndex(cust => cust.id === sale.customerId);
+        if (cIndex !== -1) {
+          const c = { ...updatedCustomers[cIndex], balance: (updatedCustomers[cIndex].balance || 0) + sale.total };
+          updatedCustomers[cIndex] = c;
+          updates[`customers/${c.id}`] = c;
+        }
+      } else if (isWorkerDebtPayment) {
+        const wIndex = updatedWorkers.findIndex(w => w.id === sale.customerId);
+        if (wIndex !== -1) {
+          const w = { ...updatedWorkers[wIndex], balance: (updatedWorkers[wIndex].balance || 0) + sale.total };
+          updatedWorkers[wIndex] = w;
+          updates[`workers/${w.id}`] = w;
+        }
       }
     }
 
+    // Eliminar la venta
     updates[`sales/${saleId}`] = null;
+
+    // Eliminar cualquier transacción de tesorería asociada a esta venta
+    const transactionsToDelete = treasuryTransactions.filter(t =>
+      t.id === `sale_${saleId}` ||
+      t.id === `debt_payment_${saleId}` ||
+      t.id === `worker_debt_payment_${saleId}`
+    );
+
+    transactionsToDelete.forEach(t => {
+      updates[`treasury/${t.id}`] = null;
+    });
 
     // --- ACTUALIZACIÓN OPTIMISTA ---
     setProducts(updatedProducts);
     setCustomers(updatedCustomers);
     setWorkers(updatedWorkers);
     setSales(prev => prev.filter(s => s.id !== saleId));
+    setTreasuryTransactions(prev => prev.filter(t => !transactionsToDelete.includes(t)));
 
     try {
       await updateBatch(updates);
-      showNotification('Venta anulada');
+      showNotification('Venta anulada correctamente');
     } catch (e) {
       showNotification('Error', 'error');
     }
@@ -385,11 +419,11 @@ const App: React.FC = () => {
     if (!debt) return;
 
     const updates: any = {};
-    
+
     const paidAmount = debt.paidAmount || 0;
     const newPaidAmount = paidAmount + amount;
     const isFullyPaid = newPaidAmount >= getCurrentDebtAmountBs(debt);
-    
+
     const updatedDebt: BusinessDebt = {
       ...debt,
       isPaid: isFullyPaid,
@@ -397,27 +431,12 @@ const App: React.FC = () => {
       paidAmount: newPaidAmount,
       paidMethod: method
     };
-    
+
     updates[`businessdebts/${debtId}`] = updatedDebt;
     setBusinessDebts(prev => prev.map(d => d.id === debtId ? updatedDebt : d));
 
     const debtRate = debt.rateAtCreation || exchangeRate;
     const amountUsd = debt.currencyType === 'usd' ? debt.amountUsd : amount / debtRate;
-    
-    // Registrar ingreso por el pago de la deuda
-    const incomeTransaction: TreasuryTransaction = {
-      id: `debt_income_${debtId}_${Date.now()}`,
-      timestamp: Date.now(),
-      type: 'income',
-      category: 'Cobros',
-      description: `Pago Deuda: ${debt.title} (Tasa: ${debtRate.toFixed(2)} Bs/$)`,
-      amount: amountUsd,
-      amountBs: amount,
-      exchangeRate: debtRate,
-      method
-    };
-    updates[`treasury/${incomeTransaction.id}`] = incomeTransaction;
-    setTreasuryTransactions(prev => [...prev, incomeTransaction]);
 
     // Registrar egreso según método de pago (descuenta de las cuentas)
     const expenseTransaction: TreasuryTransaction = {
@@ -450,15 +469,15 @@ const App: React.FC = () => {
   const handleDeleteBusinessDebt = (id: string) => {
     setBusinessDebts(prev => prev.filter(d => d.id !== id));
     deleteData(`businessdebts/${id}`);
-    
+
     // Eliminar transacciones relacionadas en treasury (las que tienen el ID de la deuda)
-    const relatedTransactions = treasuryTransactions.filter(t => 
+    const relatedTransactions = treasuryTransactions.filter(t =>
       t.description?.includes(id) || t.id?.includes(id)
     );
     relatedTransactions.forEach(t => {
       deleteData(`treasury/${t.id}`);
     });
-    setTreasuryTransactions(prev => prev.filter(t => 
+    setTreasuryTransactions(prev => prev.filter(t =>
       !t.description?.includes(id) && !t.id?.includes(id)
     ));
   };
@@ -744,6 +763,75 @@ const App: React.FC = () => {
     }
   };
 
+  const handleProcessPayroll = async (workerId: string, amountToHandOver: number, amountToDeductDebt: number, method: 'Cash' | 'Card' | 'PagoMovil' | 'Transfer', rate?: number) => {
+    const paymentRate = rate || exchangeRate;
+    const updates: any = {};
+    const updatedWorkers = [...workers];
+    const wIndex = updatedWorkers.findIndex(w => w.id === workerId);
+    if (wIndex === -1) return;
+
+    const worker = updatedWorkers[wIndex];
+
+    // 1. Registrar PAGO DE DEUDA (si hay)
+    if (amountToDeductDebt > 0) {
+      const paymentSale: Sale = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        items: [{ id: 'worker_debt_payment', name: 'Abono Deuda por Nómina', category: 'Pagos', price: amountToDeductDebt, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
+        total: amountToDeductDebt,
+        exchangeRate: paymentRate,
+        paymentMethod: method as any,
+        customerId: workerId
+      };
+      updates[`sales/${paymentSale.id}`] = paymentSale;
+
+      worker.balance = Math.max(0, worker.balance - amountToDeductDebt);
+
+      const incomeTransaction: TreasuryTransaction = {
+        id: `worker_debt_payment_${paymentSale.id}`,
+        timestamp: paymentSale.timestamp,
+        type: 'income',
+        category: 'Cobros',
+        description: `Abono Deuda Nómina - ${worker.name}`,
+        amount: amountToDeductDebt,
+        amountBs: amountToDeductDebt * paymentRate,
+        exchangeRate: paymentRate,
+        method: method === 'Transfer' ? 'Transfer' : method as any
+      };
+      updates[`treasury/${incomeTransaction.id}`] = incomeTransaction;
+      setTreasuryTransactions(prev => [...prev, incomeTransaction]);
+      setSales(prev => [...prev, paymentSale]);
+    }
+
+    // 2. Registrar EGRESO por Pago de Nómina (Dinero en Mano)
+    if (amountToHandOver > 0) {
+      const expenseTransaction: TreasuryTransaction = {
+        id: `payroll_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        timestamp: Date.now(),
+        type: 'expense',
+        category: 'Nómina',
+        description: `Pago Nómina - ${worker.name}`,
+        amount: amountToHandOver,
+        amountBs: amountToHandOver * paymentRate,
+        exchangeRate: paymentRate,
+        method: method === 'Transfer' ? 'Transfer' : method as any
+      };
+      updates[`treasury/${expenseTransaction.id}`] = expenseTransaction;
+      setTreasuryTransactions(prev => [...prev, expenseTransaction]);
+    }
+
+    updatedWorkers[wIndex] = worker;
+    updates[`workers/${workerId}`] = worker;
+    setWorkers(updatedWorkers);
+
+    try {
+      await updateBatch(updates);
+      showNotification(`Nómina procesada: ${worker.name}`);
+    } catch (e) {
+      showNotification('Error al procesar nómina', 'error');
+    }
+  };
+
   const handleAddCategory = async (cat: string) => {
     if (!categories.includes(cat)) {
       const newCats = [...categories, cat];
@@ -874,7 +962,7 @@ const App: React.FC = () => {
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
           {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} businessDebts={businessDebts} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onClearAllTreasury={handleClearAllTreasuryTransactions} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
-          {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
+          {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onProcessPayroll={handleProcessPayroll} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>
 
