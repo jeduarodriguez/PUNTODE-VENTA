@@ -195,19 +195,10 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const getTodayRate = (): number => {
         if (!rateHistory || rateHistory.length === 0) return exchangeRate;
         
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        
+        // Ordenar por timestamp descendente y devolver la tasa más reciente
         const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
         
-        const todayRate = sortedRates.find(r => {
-            const rateDate = new Date(r.timestamp);
-            const rateDateStr = `${rateDate.getFullYear()}-${String(rateDate.getMonth() + 1).padStart(2, '0')}-${String(rateDate.getDate()).padStart(2, '0')}`;
-            return rateDateStr === todayStr;
-        });
-        
-        if (todayRate) return todayRate.rate;
-        
+        // Devolver siempre la tasa más reciente registrada
         return sortedRates[0]?.rate || exchangeRate;
     };
 

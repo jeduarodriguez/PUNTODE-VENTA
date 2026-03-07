@@ -1044,24 +1044,31 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             value={formData.units_per_bulk || ''}
                             onChange={e => {
                               const val = e.target.value.replace(/[^0-9]/g, '');
-                              setFormData(prev => ({ ...prev, units_per_bulk: parseInt(val) || 0 }));
+                              const newBulkQty = parseInt(val) || 0;
+                              const oldBulkQty = formData.units_per_bulk || 1;
+                              setFormData(prev => ({ ...prev, units_per_bulk: newBulkQty }));
+                              
+                              if (costMode === 'calculated') {
+                                if (costBs > 0 && newBulkQty > 0) {
+                                  setCostBsDisplay((costBs * newBulkQty).toString());
+                                } else if (costBsDisplay && oldBulkQty > 0 && newBulkQty > 0 && oldBulkQty !== newBulkQty) {
+                                  const currentTotalBs = parseFloat(costBsDisplay.replace(',', '.')) || 0;
+                                  const newTotalBs = (currentTotalBs / oldBulkQty) * newBulkQty;
+                                  setCostBsDisplay(newTotalBs.toString());
+                                }
+                              }
                             }}
                           />
                         </div>
                       </div>
 
-                      {/* FILA 2: COSTO UNITARIO USD Y BS (LADO A LADO) */}
-                      {Number(formData.units_per_bulk) > 1 && (
-                        <div className="grid grid-cols-2 gap-2 bg-red-100/50 border border-red-200 rounded-xl p-3 animate-fade-in">
+                      {/* FILA 2: COSTO UNITARIO BS Y USD LADO A LADO */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* PANEL 1: COSTO UNITARIO EN BS */}
+                        <div className="bg-red-100/50 border border-red-200 rounded-xl p-3">
                           <div className="text-center">
-                            <span className="text-[7px] font-black text-red-500 uppercase block">Costo Unit. USD</span>
-                            <span className="text-sm font-black text-red-700">
-                              ${((parseFloat(costMode === 'calculated' ? costBsDisplay.replace(',', '.') : manualCostDisplay.replace(',', '.')) || 0) / (Number(formData.units_per_bulk) || 1)).toFixed(3)}
-                            </span>
-                          </div>
-                          <div className="text-center border-l border-red-200">
-                            <span className="text-[7px] font-black text-red-500 uppercase block">Costo Unit. Bs</span>
-                            <span className="text-sm font-black text-red-700">
+                            <span className="text-[8px] font-black text-red-500 uppercase block">Und Bs</span>
+                            <span className="text-lg font-black text-red-700">
                               {costMode === 'calculated'
                                 ? `${((parseFloat(costBsDisplay.replace(',', '.')) || 0) / (Number(formData.units_per_bulk) || 1)).toFixed(2)} Bs`
                                 : `${((parseFloat(manualCostDisplay.replace(',', '.')) || 0) * currentRate).toFixed(2)} Bs`
@@ -1069,31 +1076,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             </span>
                           </div>
                         </div>
-                      )}
 
-                      {/* MOSTRAR COSTO TOTAL BULTO EN MODO MANUAL */}
-                      {costMode === 'manual' && Number(formData.units_per_bulk) > 1 && (
-                        <div className="bg-orange-100 border border-orange-200 rounded-xl px-3 py-2 flex justify-between items-center">
-                          <span className="text-[8px] font-black text-orange-600 uppercase">Costo Total Bulto</span>
-                          <span className="text-sm font-black text-orange-800">
-                            ${((parseFloat(manualCostDisplay.replace(',', '.')) || 0) * (Number(formData.units_per_bulk) || 1)).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* RESULTADO FINAL USD (LADO A LADO CON BS) */}
-                      <div className="bg-red-200/30 border-2 border-red-300 rounded-xl p-3">
-                        <div className="grid grid-cols-2 gap-2">
+                        {/* PANEL 2: COSTO POR PAQUETE EN USD */}
+                        <div className="bg-red-200/30 border-2 border-red-300 rounded-xl p-3">
                           <div className="text-center">
-                            <span className="text-[8px] font-black text-red-600 uppercase block">Costo Unit. USD</span>
+                            <span className="text-[8px] font-black text-red-600 uppercase block">Costo por paquete USD</span>
                             <span className="text-lg font-black text-red-800">
                               ${getBulkCalculation().unitUsd.toFixed(3)}
-                            </span>
-                          </div>
-                          <div className="text-center border-l-2 border-red-300">
-                            <span className="text-[8px] font-black text-red-600 uppercase block">Ref. Bs</span>
-                            <span className="text-lg font-black text-red-800">
-                              {(getBulkCalculation().unitUsd * currentRate).toFixed(2)} Bs
                             </span>
                           </div>
                         </div>
