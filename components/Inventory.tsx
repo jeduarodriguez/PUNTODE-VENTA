@@ -1114,7 +1114,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     <div className="flex gap-3 items-stretch">
                       {/* LADO IZQUIERDO: PRECIO */}
                       <div className="flex-1 flex flex-col">
-                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta</label>
+                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta x Paquete</label>
                         {/* $ */}
                         <div className="relative flex-1">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>

@@ -640,33 +640,27 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     onClick={() => addToCart(product)}
                                     className="flex items-center gap-2 p-2 rounded-lg border transition-all active:scale-[0.98] bg-white border-gray-100 cursor-pointer"
                                 >
-                                    <div className={`w-8 h-8 rounded flex items-center justify-center font-black text-xs ${qtyInCart > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
-                                        {newStock}
-                                    </div>
-
+                                    {/* LEFT: Name and Category/Date */}
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-bold text-base text-gray-900 truncate">{product.name}</h3>
-                                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            <p className="text-sm font-bold text-gray-800">
-                                                Bs {displayCostBsBulk.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
-                                                {hasBulkDisplay && <span className="text-[9px] text-gray-400 ml-1">/{unitsPerBulk}u</span>}
+                                        <h3 className="font-bold text-base text-gray-900 truncate">
+                                            {product.name}
+                                            {unitsPerBulk > 1 && <span className="text-indigo-600 ml-1">x{unitsPerBulk}</span>}
+                                        </h3>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-xs font-bold text-gray-400 uppercase truncate">{product.category}</p>
+                                            <span className="text-gray-200">|</span>
+                                            <p className={`text-xs font-bold ${costMode === 'manual' ? 'text-red-500' : 'text-indigo-400'}`}>
+                                                {costMode === 'manual' ? `HOY ${new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' })}` : (displayDate ? formatDate(displayDate) : '')}
                                             </p>
-                                            {displayDate && <p className="text-sm font-bold text-indigo-400">{formatDate(displayDate)}</p>}
-                                            <p className="text-sm font-bold text-gray-400">${displayCostUsd.toFixed(3)}</p>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        {qtyInCart > 0 && (
+                                    {/* CENTER: Quantity Controls */}
+                                    <div className="flex flex-col items-center gap-0.5 shrink-0 mx-1">
+                                        {qtyInCart > 0 ? (
                                             <>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); updateQuantity(product.id, -1); }}
-                                                    className="w-7 h-7 flex items-center justify-center rounded font-black text-lg bg-red-100 text-red-500"
-                                                >
-                                                    −
-                                                </button>
                                                 <div
-                                                    className="w-16 h-7 rounded flex items-center justify-center font-black text-sm bg-indigo-600 text-white cursor-text min-w-[64px]"
+                                                    className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm bg-indigo-600 text-white cursor-text"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         const input = e.currentTarget.querySelector('input');
@@ -676,7 +670,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
-                                                        className="w-full h-full text-center bg-transparent outline-none text-white font-black"
+                                                        className="w-full h-full text-center bg-transparent outline-none text-white font-black text-xs"
                                                         value={qtyInCart}
                                                         onChange={(e) => {
                                                             e.stopPropagation();
@@ -703,8 +697,29 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                         onClick={(e) => e.stopPropagation()}
                                                     />
                                                 </div>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); updateQuantity(product.id, -1); }}
+                                                    className="w-7 h-7 rounded-full flex items-center justify-center font-black text-xs bg-red-100 text-red-500"
+                                                >
+                                                    −
+                                                </button>
                                             </>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); addToCart(product); }}
+                                                className="w-8 h-8 rounded-full flex items-center justify-center font-black text-lg bg-indigo-100 text-indigo-600"
+                                            >
+                                                +
+                                            </button>
                                         )}
+                                    </div>
+
+                                    {/* RIGHT: Costs */}
+                                    <div className="flex flex-col items-end shrink-0 min-w-[80px]">
+                                        <p className="text-base font-bold text-gray-800">
+                                            Bs {displayCostBsBulk.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                        </p>
+                                        <p className="text-sm font-bold text-gray-400">${displayCostUsd.toFixed(2)}</p>
                                     </div>
                                 </div>
                             );

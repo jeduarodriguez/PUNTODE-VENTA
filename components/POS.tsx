@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product, CartItem, Sale, Customer, Worker, ExchangeRateRecord } from '../types';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase } from '../constants';
-import NetworkStatus from './NetworkStatus';
 
 interface POSProps {
     products: Product[];
@@ -284,7 +283,6 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                         </button>
 
                         <div className="ml-1">
-                            <NetworkStatus />
                         </div>
                     </div>
                 </div>
@@ -301,6 +299,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                             let isOutOfStock = false;
 
                             const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
+                            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
                             const isUnitSale = product.id && product.id.endsWith('-unit');
                             const displayVariant = (product as any).displayVariant;
 
@@ -364,7 +363,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                         }`}
                                 >
                                     <div className="flex-1 text-left min-w-0">
-                                        <h3 className="font-bold text-gray-900 leading-tight truncate">{product.name}</h3>
+                                        <h3 className="font-bold text-gray-900 leading-tight truncate">
+                                            {product.name}
+                                            {sellingMode === 'package' && unitsPerPackage > 0 && <span className="text-indigo-600 ml-1">x{unitsPerPackage}</span>}
+                                        </h3>
                                         <p className="text-[10px] font-bold text-gray-400 uppercase">
                                             {product.category}
                                             {(product as any).displayVariant && <span className="text-indigo-500 ml-1">({(product as any).displayVariant})</span>}

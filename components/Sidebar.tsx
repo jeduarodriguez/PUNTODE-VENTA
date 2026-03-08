@@ -2,6 +2,7 @@
 import React from 'react';
 import { ShoppingCart, Package, Users, Banknote, Settings, Landmark, PieChart } from '../constants';
 import { View } from '../types';
+import NetworkStatus from './NetworkStatus';
 
 interface SidebarProps {
   activeView: View;
@@ -40,6 +41,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
           </button>
         ))}
       </nav>
+      <div className="p-4 border-t border-gray-100 flex justify-center">
+        <NetworkStatus />
+      </div>
       <div className="p-6 border-t border-gray-100">
         <p className="text-[10px] text-gray-300 text-center">v1.5.0 &copy; 2024 Pointy POS</p>
       </div>

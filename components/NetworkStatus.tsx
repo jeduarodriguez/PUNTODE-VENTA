@@ -99,6 +99,13 @@ const NetworkStatus: React.FC<NetworkStatusProps> = ({ onSyncComplete }) => {
         return date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
     };
 
+    // Solo mostrar cuando está offline o hay pendientes sincronizando
+    const shouldShow = !isOnline || pendingCount > 0 || isSyncing;
+
+    if (!shouldShow) {
+        return null;
+    }
+
     return (
         <div style={{ position: 'relative', display: 'inline-block' }}>
             {/* Chip principal */}
