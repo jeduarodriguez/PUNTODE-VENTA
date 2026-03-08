@@ -1045,18 +1045,8 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                             onChange={e => {
                               const val = e.target.value.replace(/[^0-9]/g, '');
                               const newBulkQty = parseInt(val) || 0;
-                              const oldBulkQty = formData.units_per_bulk || 1;
+                              // Solo actualizar la cantidad - el costo Bs total del bulto NO cambia
                               setFormData(prev => ({ ...prev, units_per_bulk: newBulkQty }));
-                              
-                              if (costMode === 'calculated') {
-                                if (costBs > 0 && newBulkQty > 0) {
-                                  setCostBsDisplay((costBs * newBulkQty).toString());
-                                } else if (costBsDisplay && oldBulkQty > 0 && newBulkQty > 0 && oldBulkQty !== newBulkQty) {
-                                  const currentTotalBs = parseFloat(costBsDisplay.replace(',', '.')) || 0;
-                                  const newTotalBs = (currentTotalBs / oldBulkQty) * newBulkQty;
-                                  setCostBsDisplay(newTotalBs.toString());
-                                }
-                              }
                             }}
                           />
                         </div>

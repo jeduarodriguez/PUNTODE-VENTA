@@ -888,13 +888,22 @@ const App: React.FC = () => {
     for (const item of items) {
       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
       const itemCostMode = (item.product as any).cost_mode || 'calculated';
+      const itemUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
+      const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
+
+      // El costPrice en el carrito es SIEMPRE el costo por bulto completo.
+      // Para guardar en el inventario necesitamos el costo UNITARIO.
+      const unitCostUsd = item.costPrice / bulkQty;
+
       if (productIndex >= 0) {
         updatedProducts[productIndex] = {
           ...updatedProducts[productIndex],
           stock: updatedProducts[productIndex].stock + item.quantity,
-          costPrice: item.costPrice,
-          cost_price: item.costPrice,
-          cost_bs: itemCostMode === 'calculated' ? item.costPriceBs : 0,
+          costPrice: unitCostUsd,
+          cost_price: unitCostUsd,
+          // En modo calculado: cost_bs es el costo unitario en Bs (item.costPriceBs ya es unitario)
+          // En modo manual: no usamos cost_bs
+          cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
           cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
           cost_mode: itemCostMode
         };
@@ -904,12 +913,16 @@ const App: React.FC = () => {
 
     for (const item of items) {
       const itemCostMode = (item.product as any).cost_mode || 'calculated';
+      const itemUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
+      const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
+      const unitCostUsd = item.costPrice / bulkQty;
+
       await saveData(`products/${item.product.id}`, {
         ...item.product,
         stock: item.product.stock + item.quantity,
-        costPrice: item.costPrice,
-        cost_price: item.costPrice,
-        cost_bs: itemCostMode === 'calculated' ? item.costPriceBs : 0,
+        costPrice: unitCostUsd,
+        cost_price: unitCostUsd,
+        cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
         cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
         cost_mode: itemCostMode
       });
