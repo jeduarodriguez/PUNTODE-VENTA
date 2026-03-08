@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import { enqueueOp, processOfflineQueue, getPendingCount } from './offlineSync';
 
 // --- CONFIGURACIÓN ---
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -15,7 +16,7 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
 
 export const isCloudEnabled = !!supabase;
 
-// Helper: Convertir Array a Objeto Map (para compatibilidad con la app refinada)
+// Helper: Convertir Array a Objeto Map
 const arrayToMap = (data: any[]) => {
     if (!data || !Array.isArray(data)) return {};
     return data.reduce((acc: any, item: any) => {
@@ -24,9 +25,47 @@ const arrayToMap = (data: any[]) => {
     }, {});
 };
 
-// --- API COMPATIBLE CON FIREBASE SERVICE (REFINADA) ---
+// Convertir camelCase a snake_case
+const toSnakeCase = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(toSnakeCase);
+    if (obj !== null && typeof obj === 'object') {
+        return Object.keys(obj).reduce((result, key) => {
+            const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+            result[snakeKey] = toSnakeCase(obj[key]);
+            return result;
+        }, {} as any);
+    }
+    return obj;
+};
+
+// Convertir snake_case a camelCase
+const toCamelCase = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(toCamelCase);
+    if (obj !== null && typeof obj === 'object') {
+        return Object.keys(obj).reduce((result, key) => {
+            const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+            result[camelKey] = toCamelCase(obj[key]);
+            return result;
+        }, {} as any);
+    }
+    return obj;
+};
+
+// --- API COMPATIBLE ---
+
+const CACHE_PREFIX = 'pointy_cache_';
 
 export const syncPath = (path: string, callback: (data: any) => void) => {
+    // Intentar cargar desde caché local primero para respuesta inmediata (offline load)
+    const cached = localStorage.getItem(CACHE_PREFIX + path);
+    if (cached) {
+        try {
+            callback(JSON.parse(cached));
+        } catch (e) {
+            console.warn(`⚠️ Error parseando caché de ${path}`, e);
+        }
+    }
+
     if (!supabase) {
         console.warn("⚠️ Supabase no configurado. Operando en modo Local únicamente.");
         return () => { };
@@ -34,36 +73,43 @@ export const syncPath = (path: string, callback: (data: any) => void) => {
 
     const parts = path.split('/');
     const table = parts[0];
-    const docId = parts[1]; // Si existe, es un documento específico
+    const docId = parts[1];
 
-    // CASO 1: Documento único (ej: settings/exchangeRate)
+    // Helper para emitir y cachear
+    const emit = (val: any) => {
+        if (val !== undefined) {
+            localStorage.setItem(CACHE_PREFIX + path, JSON.stringify(val));
+            callback(val);
+        }
+    };
+
+    // CASO 1: Documento único
     if (docId) {
-        // Carga inicial
         supabase.from(table).select('*').eq('id', docId).single()
             .then(({ data }) => {
                 if (data && 'value' in data && table === 'settings') {
-                    // Caso especial para settings: devolver el valor directo
-                    callback(data.value);
+                    emit(data.value);
                 } else if (data) {
-                    callback(data);
+                    emit(toCamelCase(data));
                 } else {
-                    callback(null);
+                    emit(null);
                 }
             });
 
-        // Suscripción a cambios
         const channel = supabase.channel(`doc:${table}:${docId}`)
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: table, filter: `id=eq.${docId}` },
                 (payload) => {
                     if (payload.eventType === 'DELETE') {
-                        callback(null);
+                        emit(null);
                     } else {
                         let val = payload.new;
                         if (val && 'value' in val && table === 'settings') {
                             val = val.value;
+                        } else {
+                            val = toCamelCase(val);
                         }
-                        callback(val);
+                        emit(val);
                     }
                 }
             )
@@ -72,49 +118,26 @@ export const syncPath = (path: string, callback: (data: any) => void) => {
         return () => { supabase.removeChannel(channel); };
     }
 
-    // CASO 2: Colección completa (ej: products, customers, sales)
+    // CASO 2: Colección completa
     else {
-        // Convertir snake_case a camelCase
-        const toCamelCase = (obj: any): any => {
-            if (Array.isArray(obj)) return obj.map(toCamelCase);
-            if (obj !== null && typeof obj === 'object') {
-                return Object.keys(obj).reduce((result, key) => {
-                    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-                    result[camelKey] = toCamelCase(obj[key]);
-                    return result;
-                }, {} as any);
-            }
-            return obj;
+        const fetchAll = () => {
+            supabase.from(table).select('*')
+                .then(({ data, error }) => {
+                    if (error) console.warn(`⚠️ Error cargando ${table}:`, error);
+                    const mapped = arrayToMap(data || []);
+                    const converted = Object.fromEntries(
+                        Object.entries(mapped).map(([k, v]) => [k, toCamelCase(v)])
+                    );
+                    emit(converted);
+                });
         };
-        
-        // Carga inicial
-        supabase.from(table).select('*')
-            .then(({ data, error }) => {
-                console.log(`📥 Cargando ${table}:`, data, error);
-                const mapped = arrayToMap(data || []);
-                const converted = Object.fromEntries(
-                    Object.entries(mapped).map(([k, v]) => [k, toCamelCase(v)])
-                );
-                callback(converted);
-            });
 
-        // Suscripción de toda la tabla
-        // NOTA: Esto no es lo más eficiente para bases de datos enormes, pero para un POS pyme está perfecto.
+        fetchAll();
+
         const channel = supabase.channel(`col:${table}`)
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: table },
-                () => {
-                    // Al haber cualquier cambio, recargamos todo el mapa para simplificar la sincronización
-                    // (Supabase realtime envía solo el registro cambiado, pero la app espera el objeto completo del estado actual)
-                    supabase.from(table).select('*')
-                        .then(({ data }) => {
-                            const mapped = arrayToMap(data || []);
-                            const converted = Object.fromEntries(
-                                Object.entries(mapped).map(([k, v]) => [k, toCamelCase(v)])
-                            );
-                            callback(converted);
-                        });
-                }
+                () => fetchAll()
             )
             .subscribe();
 
@@ -122,10 +145,11 @@ export const syncPath = (path: string, callback: (data: any) => void) => {
     }
 };
 
-export const saveData = async (path: string, data: any) => {
+export const saveData = async (path: string, data: any): Promise<boolean> => {
     if (!supabase) {
-        console.warn('⚠️ Supabase no configurado - no se puede guardar:', path);
-        return;
+        console.warn('⚠️ Supabase no configurado - encolando para offline:', path);
+        enqueueOp('save', path, data);
+        return true; // Optimista: se guardará cuando haya internet
     }
 
     const parts = path.split('/');
@@ -134,23 +158,9 @@ export const saveData = async (path: string, data: any) => {
 
     if (!docId) {
         console.error("❌ saveData requiere un ID en el path:", path);
-        return;
+        return false;
     }
 
-    // Convertir camelCase a snake_case para Supabase
-    const toSnakeCase = (obj: any): any => {
-        if (Array.isArray(obj)) return obj.map(toSnakeCase);
-        if (obj !== null && typeof obj === 'object') {
-            return Object.keys(obj).reduce((result, key) => {
-                const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-                result[snakeKey] = toSnakeCase(obj[key]);
-                return result;
-            }, {} as any);
-        }
-        return obj;
-    };
-
-    // Caso especial para settings: estructurar como { id, value }
     let payload: any;
     if (table === 'settings') {
         payload = { id: docId, value: data };
@@ -158,51 +168,53 @@ export const saveData = async (path: string, data: any) => {
         payload = toSnakeCase({ id: docId, ...data });
     }
 
-    console.log(`📝 Guardando en ${table}/${docId}:`, data);
-    console.log(`📝 Payload convertido:`, payload);
-
-    const { data: result, error } = await supabase.from(table).upsert(payload);
-
-    if (error) {
-        console.error(`❌ Error guardando en ${path}:`, error);
-        console.error(`❌ Error details:`, JSON.stringify(error));
-        
-        // Mostrar alert con el error específico
-        alert(`Error al guardar: ${error.message}`);
-        
-        // Mostrar error más detallado
-        if (error.message && error.message.includes('relation')) {
-            console.error(`⚠️ La tabla '${table}' no existe en Supabase. Debes crearla en el panel de Supabase.`);
-            alert(`Error: La tabla '${table}' no existe. Por favor, créala en Supabase SQL Editor:\n\nCREATE TABLE workers (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  position TEXT,\n  salary NUMERIC DEFAULT 0,\n  pay_day TEXT,\n  balance NUMERIC DEFAULT 0,\n  created_at BIGINT\n);`);
+    try {
+        const { error } = await supabase.from(table).upsert(payload);
+        if (error) {
+            // Error de red → encolar para sync posterior
+            if (isNetworkError(error)) {
+                console.warn(`📦 Sin conexión — encolando: ${path}`);
+                enqueueOp('save', path, data);
+                return true; // La app continúa normalmente
+            }
+            console.error(`❌ Error guardando en ${path}:`, error.message);
+            return false;
         }
-        
-        return false;
-    } else {
-        console.log(`✅ Guardado exitoso en ${path}:`, result);
         return true;
+    } catch (err: any) {
+        // Error de red/fetch → encolar
+        console.warn(`📦 Error de red — encolando: ${path}`);
+        enqueueOp('save', path, data);
+        return true; // La app continúa normalmente
     }
 };
 
-export const deleteData = async (path: string) => {
-    if (!supabase) return;
+export const deleteData = async (path: string): Promise<void> => {
+    if (!supabase) {
+        enqueueOp('delete', path);
+        return;
+    }
 
     const parts = path.split('/');
     const table = parts[0];
     const docId = parts[1];
 
-    if (docId) {
-        // Borrar el documento específico
-        await supabase.from(table).delete().eq('id', docId);
-    } else {
+    if (!docId) {
         console.error("deleteData requiere un ID específico");
+        return;
+    }
+
+    try {
+        const { error } = await supabase.from(table).delete().eq('id', docId);
+        if (error && isNetworkError(error)) {
+            enqueueOp('delete', path);
+        }
+    } catch {
+        enqueueOp('delete', path);
     }
 };
 
-export const updateBatch = async (updates: Record<string, any>) => {
-    if (!supabase) return;
-
-    // Supabase no tiene un "multi-path batch" atómico simple desde cliente JS como Firebase.
-    // Procesaremos las actualizaciones en paralelo.
+export const updateBatch = async (updates: Record<string, any>): Promise<void> => {
     const promises = Object.entries(updates).map(async ([path, value]) => {
         if (value === null) {
             return deleteData(path);
@@ -210,11 +222,57 @@ export const updateBatch = async (updates: Record<string, any>) => {
             return saveData(path, value);
         }
     });
-
     await Promise.all(promises);
 };
 
-// Funciones dummy par mantener compatibilidad si algo las llama
+// ── Sincronizar cola pendiente ───────────────────────────────
+export const syncOfflineQueue = async (): Promise<{ synced: number; failed: number }> => {
+    if (!supabase || !navigator.onLine) return { synced: 0, failed: 0 };
+
+    // Pasamos las funciones de BD directas (sin encolar de nuevo en errores para evitar loop)
+    const directSave = async (path: string, data: any) => {
+        const parts = path.split('/');
+        const table = parts[0];
+        const docId = parts[1];
+        if (!docId) return false;
+        let payload: any;
+        if (table === 'settings') {
+            payload = { id: docId, value: data };
+        } else {
+            payload = toSnakeCase({ id: docId, ...data });
+        }
+        const { error } = await supabase!.from(table).upsert(payload);
+        if (error) throw new Error(error.message);
+        return true;
+    };
+
+    const directDelete = async (path: string) => {
+        const parts = path.split('/');
+        const table = parts[0];
+        const docId = parts[1];
+        if (!docId) return;
+        const { error } = await supabase!.from(table).delete().eq('id', docId);
+        if (error) throw new Error(error.message);
+    };
+
+    return processOfflineQueue(directSave, directDelete);
+};
+
+// ── Detectar errores de red ──────────────────────────────────
+function isNetworkError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    return (
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        msg.includes('failed') ||
+        msg.includes('timeout') ||
+        error.code === 'PGRST' ||
+        !navigator.onLine
+    );
+}
+
+// ── Funciones de compatibilidad ──────────────────────────────
 export const saveFirebaseConfig = () => { };
 export const clearFirebaseConfig = () => { };
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product, CartItem, Sale, Customer, Worker, ExchangeRateRecord } from '../types';
 import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase } from '../constants';
+import NetworkStatus from './NetworkStatus';
 
 interface POSProps {
     products: Product[];
@@ -20,7 +21,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
-    
+
     // Weight modal state
     const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
     const [weightProduct, setWeightProduct] = useState<Product | null>(null);
@@ -58,19 +59,19 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     // Función para obtener la tasa del día
     const getTodayRate = (): number => {
         if (!rateHistory || rateHistory.length === 0) return exchangeRate;
-        
+
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         const sortedRates = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
-        
+
         const todayRate = sortedRates.find(r => {
             const rateDate = new Date(r.timestamp);
             const rateDateStart = new Date(rateDate.getFullYear(), rateDate.getMonth(), rateDate.getDate()).getTime();
             return rateDateStart === todayStart;
         });
-        
+
         if (todayRate) return todayRate.rate;
-        
+
         return sortedRates[0]?.rate || exchangeRate;
     };
 
@@ -85,7 +86,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
             const pricePerUnit = product.price_per_unit ?? (product as any).pricePerUnit ?? 0;
             const measurementUnit = product.measurement_unit ?? (product as any).measurementUnit ?? 'kg';
-            
+
             if (sellingMode === 'weight' && measurementUnit) {
                 const unitLabel = measurementUnit === 'kg' ? 'Kg' : measurementUnit;
                 result.push({ ...product, name: `${product.name} (${unitLabel})` });
@@ -94,10 +95,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 result.push({ ...product, displayVariant: 'Paq' });
                 const totalUnits = (product.stock * unitsPerPackage) + remainingUnits;
                 // Producto virtual para venta por unidad
-                result.push({ 
-                    ...product, 
-                    id: `${product.id}-unit`, 
-                    price: pricePerUnit, 
+                result.push({
+                    ...product,
+                    id: `${product.id}-unit`,
+                    price: pricePerUnit,
                     selling_mode: 'simple',
                     stock: totalUnits,
                     displayVariant: 'Und'
@@ -117,7 +118,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const filteredClients = customers.filter(c =>
         (c.type === 'client' || !c.type) &&
         (c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-        c.phone.includes(customerSearchTerm))
+            c.phone.includes(customerSearchTerm))
     );
 
     const filteredWorkers = workers.filter(w =>
@@ -127,7 +128,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
     const addToCart = (product: Product) => {
         const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
-        
+
         // Open weight modal for weight products
         if (sellingMode === 'weight') {
             setWeightProduct(product);
@@ -152,7 +153,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
     const addWeightToCart = () => {
         if (!weightProduct) return;
-        
+
         const qty = parseFloat(weightQuantity) || 0;
         if (qty <= 0 || qty > weightProduct.stock) return;
 
@@ -281,6 +282,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                         >
                             <X className="w-6 h-6" />
                         </button>
+
+                        <div className="ml-1">
+                            <NetworkStatus />
+                        </div>
                     </div>
                 </div>
 
@@ -289,16 +294,16 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                     <div className="flex flex-col gap-2">
                         {filteredProducts.map(product => {
                             const qtyInCart = cart.find(i => i.id === product.id)?.quantity || 0;
-                            
+
                             // Calcular stock disponible considerando el carrito
                             let currentStock = product.stock;
                             let displayStock = '';
                             let isOutOfStock = false;
-                            
+
                             const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
                             const isUnitSale = product.id && product.id.endsWith('-unit');
                             const displayVariant = (product as any).displayVariant;
-                            
+
                             // Para productos paquete vendidos por unidad
                             if (sellingMode === 'package' && isUnitSale) {
                                 const productId = product.id.replace('-unit', '');
@@ -306,11 +311,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 const unitsPerPkg = (originalProduct?.units_per_package ?? (originalProduct as any)?.unitsPerPackage ?? 0);
                                 const remainingUnits = originalProduct?.remaining_units ?? (originalProduct as any)?.remainingUnits ?? 0;
                                 const pkgStock = originalProduct?.stock ?? 0;
-                                
+
                                 // Calcular unidades totales disponibles
                                 const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnits;
                                 const unitsAfterCart = totalUnitsAvailable - qtyInCart;
-                                
+
                                 if (unitsAfterCart <= 0) {
                                     isOutOfStock = true;
                                     displayStock = 'Agotado';
@@ -324,12 +329,12 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 const unitsInCart = cart.find(i => i.id === `${product.id}-unit`)?.quantity || 0;
                                 const unitsPerPkg = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
                                 const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
-                                
+
                                 // Calcular unidades totales disponibles considerando both package and unit sales
                                 const totalUnitsAvailable = (product.stock * unitsPerPkg) + remainingUnits;
                                 const totalUnitsInCart = (qtyInCart * unitsPerPkg) + unitsInCart;
                                 const unitsAfterCart = totalUnitsAvailable - totalUnitsInCart;
-                                
+
                                 if (unitsAfterCart <= 0) {
                                     isOutOfStock = true;
                                     displayStock = 'Agotado';
@@ -400,7 +405,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                             <Plus className="w-3 h-3" />
                                         </button>
                                     </div>
- 
+
                                     {/* Price Layout */}
                                     <div className="text-right flex flex-col items-end w-16 shrink-0">
                                         <p className="font-black text-gray-900 text-sm leading-none">{(product.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
