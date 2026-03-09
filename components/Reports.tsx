@@ -25,6 +25,7 @@ interface ReportsProps {
     onOpenRateModal?: () => void;
     onPurchaseProducts: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
     onAddProduct: (product: Product) => void;
+    onUpdateProduct?: (product: Product) => void;
     onUpdateTreasuryTransaction?: (t: TreasuryTransaction) => void;
     onDeleteTreasuryTransaction?: (id: string) => void;
     onClearAllTreasury?: () => void;
@@ -35,7 +36,7 @@ interface ReportsProps {
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory }) => {
     const [editingTransaction, setEditingTransaction] = useState<TreasuryTransaction | null>(null);
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -80,6 +81,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [editAmount, setEditAmount] = useState<string>('');
     const [editTransactionAmount, setEditTransactionAmount] = useState<string>('');
     const [editTransactionDescription, setEditTransactionDescription] = useState<string>('');
+    const [editTransactionDate, setEditTransactionDate] = useState<string>('');
+    const [editTransactionRate, setEditTransactionRate] = useState<string>('');
+    const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('reports_view') as ViewMode) || 'list');
 
     useEffect(() => { localStorage.setItem('reports_view', viewMode); }, [viewMode]);
@@ -209,8 +213,12 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const currentSales = sales.filter(s => s.timestamp >= filterStart && s.timestamp <= filterEnd).sort((a, b) => b.timestamp - a.timestamp);
     const currentTransactions = treasuryTransactions.filter(t => t.timestamp >= filterStart && t.timestamp <= filterEnd).sort((a, b) => b.timestamp - a.timestamp);
     
+    // Filtrar ventas que ya tienen transacción de tesorería (evitar duplicación)
+    const salesWithTreasury = new Set(currentTransactions.filter(t => t.id.startsWith('sale_')).map(t => t.id.replace('sale_', '')));
+    const salesOnly = currentSales.filter(s => !salesWithTreasury.has(s.id));
+    
     const allMovements = [
-        ...currentSales.map(s => ({ type: 'sale' as const, data: s })),
+        ...salesOnly.map(s => ({ type: 'sale' as const, data: s })),
         ...currentTransactions.map(t => ({ type: 'transaction' as const, data: t }))
     ].sort((a, b) => {
         const aTime = a.type === 'sale' ? a.data.timestamp : a.data.timestamp;
@@ -284,22 +292,33 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
 
     // Calcular DEUDAS POR PAGAR (businessDebts + salarios trabajadores)
     const unpaidBusinessDebts = businessDebts?.filter(d => !d.isPaid) || [];
-    const deudaPorPagarBs = unpaidBusinessDebts.reduce((sum, d) => {
-        if (d.currencyType === 'bs') {
-            // Deuda en Bs - no cambia
-            return sum + d.amountBs;
-        } else {
-            // Deuda en USD - se recalcula con tasa actual
-            return sum + (d.amountUsd * exchangeRate);
-        }
-    }, 0);
-    const deudaPorPagarUsd = unpaidBusinessDebts.reduce((sum, d) => sum + d.amountUsd, 0);
+    
+    // Deuda en Bs (se mantiene fija en Bs)
+    const deudaBsEnBs = unpaidBusinessDebts
+        .filter(d => d.currencyType === 'bs')
+        .reduce((sum, d) => sum + d.amountBs, 0);
+    
+    // Deuda en USD (se convierte a Bs con tasa actual)
+    const deudaUsdEnBs = unpaidBusinessDebts
+        .filter(d => d.currencyType === 'usd')
+        .reduce((sum, d) => sum + (d.amountUsd * exchangeRate), 0);
+    
+    // Total deuda negocio en Bs
+    const deudaNegocioBs = deudaBsEnBs + deudaUsdEnBs;
+    
+    // Total deuda negocio en USD (ambas convertidas a USD con tasa actual para referencia)
+    const deudaBsEnUsd = exchangeRate > 0 ? deudaBsEnBs / exchangeRate : 0;
+    const deudaUsdEnUsd = unpaidBusinessDebts
+        .filter(d => d.currencyType === 'usd')
+        .reduce((sum, d) => sum + d.amountUsd, 0);
+    const deudaNegocioUsd = deudaBsEnUsd + deudaUsdEnUsd;
     
     // Agregar salarios de trabajadores (en USD, convertir a Bs con tasa actual)
     const totalSalarios = workers?.reduce((sum, w) => sum + (w.salary || 0), 0) || 0;
     const totalSalariosBs = totalSalarios * exchangeRate;
-    const deudaPorPagarTotalBs = deudaPorPagarBs + totalSalariosBs;
-    const deudaPorPagarTotalUsd = deudaPorPagarUsd + totalSalarios;
+    
+    const deudaPorPagarTotalBs = deudaNegocioBs + totalSalariosBs;
+    const deudaPorPagarTotalUsd = deudaNegocioUsd + totalSalarios;
 
     const handleAddExpense = () => {
         const amount = parseFloat(expenseAmount);
@@ -359,24 +378,48 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const handleOpenTransactionEdit = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!selectedTransaction) return;
+        setEditingTransactionId(selectedTransaction.id);
         setEditTransactionAmount(selectedTransaction.amount.toString());
         setEditTransactionDescription(selectedTransaction.description);
+        // Cargar fecha y tasa guardadas
+        const transDate = new Date(selectedTransaction.timestamp);
+        setEditTransactionDate(transDate.toISOString().split('T')[0]);
+        setEditTransactionRate(selectedTransaction.exchangeRate.toString());
+        // Cerrar modal de visualización y abrir el de edición
+        setSelectedTransaction(null);
     };
 
     const handleSaveTransactionEdit = () => {
-        if (!selectedTransaction || !onUpdateTreasuryTransaction) return;
-        const newAmount = parseFloat(editTransactionAmount.replace(',', '.'));
-        if (isNaN(newAmount) || newAmount <= 0) return;
+        if (!editTransactionDate || !editingTransactionId || !onUpdateTreasuryTransaction) return;
         
+        // Buscar la transacción original en treasuryTransactions
+        const originalTransaction = treasuryTransactions.find(t => t.id === editingTransactionId);
+        if (!originalTransaction) return;
+        
+        const newAmount = parseFloat(editTransactionAmount.replace(',', '.'));
+        const newRate = parseFloat(editTransactionRate.replace(',', '.'));
+        if (isNaN(newAmount) || newAmount <= 0 || isNaN(newRate) || newRate <= 0) return;
+        
+        const newTimestamp = new Date(editTransactionDate).getTime();
+        
+        // Crear transacción con los valores editados
         const updatedTransaction: TreasuryTransaction = {
-            ...selectedTransaction,
+            ...originalTransaction,
+            timestamp: newTimestamp,
             amount: newAmount,
-            amountBs: newAmount * selectedTransaction.exchangeRate,
+            exchangeRate: newRate,
+            amountBs: newAmount * newRate,
             description: editTransactionDescription
         };
         
         onUpdateTreasuryTransaction(updatedTransaction);
-        setSelectedTransaction(null);
+        
+        // Limpiar estados
+        setEditingTransactionId(null);
+        setEditTransactionDate('');
+        setEditTransactionAmount('');
+        setEditTransactionDescription('');
+        setEditTransactionRate('');
     };
 
     const handleDeleteTransaction = (e: React.MouseEvent) => {
@@ -649,6 +692,11 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                         </div>
                         <p className="text-lg font-black text-white text-center">${deudaPorPagarTotalUsd.toFixed(2)}</p>
                         <p className="text-xs font-bold text-white/80 text-center">{deudaPorPagarTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                        {deudaBsEnBs > 0 && (
+                            <p className="text-[8px] font-bold text-white/60 text-center mt-0.5">
+                                (Fija: Bs {deudaBsEnBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })})
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -892,6 +940,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                         setShowPurchasePOS(false);
                     }}
                     onAddProduct={onAddProduct}
+                    onUpdateProduct={onUpdateProduct}
                     onOpenInventory={() => { setShowPurchasePOS(false); onGoToInventory?.(); }}
                 />
             )}
@@ -1152,18 +1201,16 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                     Ver Detalles Deuda
                                 </button>
                             )}
-                            {isNomina && (
-                                <button 
-                                    onClick={() => {
-                                        setSelectedTransaction(null);
-                                        onOpenWorkers?.();
-                                    }}
-                                    className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
-                                >
-                                    <Users className="w-5 h-5" />
-                                    Ver Detalles Nómina
-                                </button>
-                            )}
+                            {/* Botón único para corregir cualquier movimiento (fecha, tasa, monto, descripción) */}
+                            <button 
+                                onClick={handleOpenTransactionEdit} 
+                                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
+                            >
+                                <Edit className="w-5 h-5" />
+                                Corregir Movimiento
+                            </button>
+                            
+                            {/* Botón para eliminar y revertir */}
                             <button 
                                 onClick={handleDeleteTransaction} 
                                 className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-2"
@@ -1212,6 +1259,87 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm"
                             >
                                 Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {editingTransactionId && editTransactionDate && (
+                <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
+                        <div className="text-center mb-4">
+                            <h3 className="text-xl font-black text-gray-900">Editar Movimiento</h3>
+                            <p className="text-xs text-gray-400 mt-1">Cambia fecha, tasa o monto</p>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            {/* Fecha */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold mt-1"
+                                    value={editTransactionDate}
+                                    onChange={(e) => setEditTransactionDate(e.target.value)}
+                                />
+                            </div>
+                            
+                            {/* Tasa */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Tasa BCV (Bs/$)</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold mt-1"
+                                    value={editTransactionRate}
+                                    onChange={(e) => setEditTransactionRate(e.target.value)}
+                                />
+                            </div>
+                            
+                            {/* Monto USD */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto (USD)</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold mt-1"
+                                    value={editTransactionAmount}
+                                    onChange={(e) => setEditTransactionAmount(e.target.value)}
+                                />
+                                <p className="text-xs text-gray-400 mt-1 text-right">
+                                    = Bs {(parseFloat(editTransactionAmount || '0') * parseFloat(editTransactionRate || '0')).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
+                            
+                            {/* Descripción */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold mt-1"
+                                    value={editTransactionDescription}
+                                    onChange={(e) => setEditTransactionDescription(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-3 mt-6">
+                            <button 
+                                onClick={() => {
+                                    setEditingTransactionId(null);
+                                    setEditTransactionDate('');
+                                    setEditTransactionAmount('');
+                                    setEditTransactionDescription('');
+                                    setEditTransactionRate('');
+                                }} 
+                                className="flex-1 py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleSaveTransactionEdit} 
+                                className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl"
+                            >
+                                Guardar
                             </button>
                         </div>
                     </div>

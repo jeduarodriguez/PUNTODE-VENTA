@@ -12,6 +12,7 @@ interface PurchasePOSProps {
     onClose: () => void;
     onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
+    onUpdateProduct?: (product: Product) => void; // Actualiza producto en inventario directamente
     onOpenInventory?: () => void;
     initialCart?: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[];
 }
@@ -203,8 +204,50 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const latestRate = useMemo(() => getLatestRate(), [rateHistory]);
     const currentRate = useMemo(() => getRateForDate(purchaseDate), [purchaseDate, rateHistory]);
-    // Para el carrito, usar latestRate por defecto, no currentRate
-    const activeRate = useCustomRate ? parseFloat(tempRate) || latestRate : latestRate;
+    // Para el carrito: si usa tasa manual, usar esa; si no, usar la tasa de la fecha seleccionada
+    const activeRate = useCustomRate 
+        ? parseFloat(tempRate) || currentRate 
+        : currentRate;
+
+    // useEffect para recalcular costos del carrito cuando cambia la fecha
+    useEffect(() => {
+        if (cart.length === 0) return;
+        
+        // Solo recalcular si NO se está usando tasa manual (porque el usuario está cambiando manualmente)
+        if (useCustomRate) return;
+        
+        // Recalcular costos de productos en el carrito con la nueva tasa
+        setCart(prevCart => prevCart.map(cartItem => {
+            const product = cartItem.product;
+            const costMode = getCostMode(product);
+            const unitsPerBulk = product.units_per_bulk ?? (product as any).unitsPerBulk ?? 0;
+            const bulkQty = unitsPerBulk > 0 ? unitsPerBulk : 1;
+            
+            if (costMode === 'calculated') {
+                // Productos con costo en Bs: recalcular con la nueva tasa
+                const costBs = getCostBs(product); // costo unitario en Bs
+                const newCostUsd = activeRate > 0 ? costBs / activeRate : 0;
+                const newCostBs = costBs;
+                
+                return {
+                    ...cartItem,
+                    costPrice: newCostUsd * bulkQty,
+                    costPriceBs: newCostBs * bulkQty,
+                    rateAtPurchase: activeRate
+                };
+            } else {
+                // Productos con costo manual en $: mantener igual, solo actualizar el display en Bs
+                const currentCostUsd = cartItem.costPrice / bulkQty;
+                const newCostBs = currentCostUsd * activeRate;
+                
+                return {
+                    ...cartItem,
+                    costPriceBs: newCostBs * bulkQty,
+                    rateAtPurchase: activeRate
+                };
+            }
+        }));
+    }, [purchaseDate, rateHistory, useCustomRate]);
 
     const newProductCalculatedCostUsd = currentRate > 0 ? newProductCostBs / currentRate : 0;
     const newProductFinalCost = newProductCostMode === 'calculated' ? newProductCalculatedCostUsd : newProductManualCost;
@@ -228,9 +271,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         };
     }, []);
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredProducts = products
+        .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
     const addToCart = (product: Product, e?: React.MouseEvent) => {
         if (e) {
@@ -353,31 +396,37 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         if (!editingPriceItem) return;
 
         const bulkQty = editUnitsPerBulk || 1;
-        // El costo unitario que se muestra en el modal
         const unitCostUsd = editFinalCostUsd;
-        // El costo por bulto completo (para guardar en el inventario)
         const bulkCostUsd = unitCostUsd * bulkQty;
-
         const bulkCostBs = editCostMode === 'calculated' ? editCostBs : editManualCost * activeRate * bulkQty;
 
+        // Producto actualizado con los nuevos valores
+        const updatedProduct: Product = {
+            ...editingPriceItem.product,
+            price: editPrice,
+            pricePerUnit: editPricePerUnit,
+            units_per_bulk: editUnitsPerBulk,
+            cost_price: unitCostUsd,
+            costPrice: unitCostUsd,
+            cost_mode: editCostMode,
+            cost_bs: editCostMode === 'calculated' ? (editCostBs / bulkQty) : 0,
+            cost_date: editCostMode === 'calculated' ? editCostDate : ''
+        };
+
+        // Actualizar en el inventario directamente
+        if (onUpdateProduct) {
+            onUpdateProduct(updatedProduct);
+        }
+
+        // Actualizar en el carrito
         setCart(prev => prev.map(cartItem => {
             if (cartItem.product.id === editingPriceItem.product.id) {
                 return {
                     ...cartItem,
-                    // En el carrito guardamos el costo por bulto completo
                     costPrice: bulkCostUsd,
                     costPriceBs: bulkCostBs,
                     rateAtPurchase: editDisplayRate,
-                    product: {
-                        ...cartItem.product,
-                        price: editPrice,
-                        pricePerUnit: editPricePerUnit,
-                        units_per_bulk: editUnitsPerBulk,
-                        cost_mode: editCostMode,
-                        // Guardamos el costo unitario (no el bulto)
-                        cost_bs: editCostMode === 'calculated' ? (editCostBs / bulkQty) : 0,
-                        cost_date: editCostMode === 'calculated' ? editCostDate : ''
-                    }
+                    product: updatedProduct
                 };
             }
             return cartItem;
@@ -573,13 +622,20 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
                             <input
                                 type="text"
-                                placeholder="Buscar..."
+                                inputMode="search"
+                                placeholder="Buscar productos..."
                                 className="w-full pl-10 pr-10 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-bold text-gray-900 outline-none focus:border-indigo-500 transition-all placeholder:text-gray-300"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                onBlur={() => {
+                                    // Solo cerrar si hay término de búsqueda
+                                    if (searchTerm) {
+                                        // Mantener el teclado abierto si hay búsqueda
+                                    }
+                                }}
                             />
                             {searchTerm && (
                                 <button onClick={() => setSearchTerm('')} className="absolute right-10 top-1/2 -translate-y-1/2 text-gray-400 p-1">
@@ -637,7 +693,10 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             return (
                                 <div
                                     key={product.id}
-                                    onClick={() => addToCart(product)}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        addToCart(product);
+                                    }}
                                     className="flex items-center gap-2 p-2 rounded-lg border transition-all active:scale-[0.98] bg-white border-gray-100 cursor-pointer"
                                 >
                                     {/* LEFT: Name and Category/Date */}
@@ -760,7 +819,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             <div className="flex items-center gap-1 bg-gray-100 px-3 py-2 rounded-lg border border-gray-200 flex-1">
                                 <span className="text-[10px] font-bold text-gray-400">BCV</span>
                                 <input
-                                    className="w-16 bg-transparent text-sm font-black text-gray-900 outline-none text-right p-0 border-none"
+                                    className="w-20 bg-transparent text-sm font-black text-gray-900 outline-none text-right p-0 border-none"
                                     type="number"
                                     value={tempRate}
                                     onChange={(e) => {
@@ -768,7 +827,6 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                         setUseCustomRate(true);
                                     }}
                                 />
-                                <span className="text-[10px] font-bold text-gray-400">Bs</span>
                             </div>
                         </div>
                     </div>
@@ -781,114 +839,94 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             </div>
                         ) : (
                             cart.map(item => {
-                                const originalProduct = products.find(p => p.id === item.product.id);
                                 const unitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
                                 const hasBulk = unitsPerBulk > 1;
-                                // El costo ya es por bulto completo
                                 const itemCostBsList = item.costPriceBs || 0;
                                 const itemTotalBs = itemCostBsList * item.quantity;
                                 const sellingMode = getSellingMode(item.product);
-                                const isPackage = sellingMode === 'package';
                                 const isWeight = sellingMode === 'weight';
-                                const isSimple = sellingMode === 'simple';
+                                
                                 return (
-                                    <div key={item.product.id} className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
-                                        {/* 1. BOTÓN EDITAR + NOMBRE + CATEGORÍA */}
-                                        <div className="flex items-start gap-2">
-                                            <button
-                                                onClick={() => openEditPriceModal(item)}
-                                                className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg shrink-0 transition-colors"
-                                                title="Editar precio"
-                                            >
-                                                <Edit className="w-4 h-4" />
-                                            </button>
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="font-black text-base text-gray-900 truncate leading-tight">{item.product.name}</h4>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <p className="text-xs font-bold text-gray-400">{item.product.category}</p>
-                                                    {isSimple && (
-                                                        <span className="text-[8px] font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">UND</span>
-                                                    )}
-                                                    {isPackage && (
-                                                        <span className="text-[8px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">PACK</span>
-                                                    )}
-                                                    {isWeight && (
-                                                        <span className="text-[8px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">PESO</span>
-                                                    )}
-                                                    {(item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0) > 1 && (
-                                                        <span className="text-[8px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">×{item.product.units_per_bulk ?? (item.product as any).unitsPerBulk}</span>
-                                                    )}
-                                                </div>
+                                    <div key={item.product.id} className="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-sm">
+                                        {/* Header: Nombre + Editar + Eliminar */}
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex-1 min-w-0 mr-2">
+                                                <h4 className="font-black text-sm text-gray-900 truncate">
+                                                    {item.product.name}
+                                                    {hasBulk && <span className="text-indigo-600 ml-1">×{unitsPerBulk}</span>}
+                                                </h4>
+                                                <p className="text-xs text-gray-400">{item.product.category}</p>
                                             </div>
-                                        </div>
-
-                                        {/* 2. COSTO BS + COSTO USD */}
-                                        <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-100">
-                                            <div className="text-center">
-                                                <span className="text-[8px] font-bold text-gray-400 uppercase block">
-                                                    {hasBulk ? 'Costo Bs/Bulto' : 'Costo Bs'}
-                                                </span>
-                                                <span className="text-sm font-black text-red-600">{itemCostBsList.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
-                                            </div>
-                                            <div className="w-px h-8 bg-gray-200"></div>
-                                            <div className="text-center">
-                                                <span className="text-[8px] font-bold text-gray-400 uppercase block">
-                                                    {hasBulk ? 'Costo $/Bulto' : 'Costo $'}
-                                                </span>
-                                                <span className="text-sm font-black text-indigo-600">${item.costPrice.toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                        {hasBulk && (
-                                            <div className="flex items-center justify-between bg-red-50 rounded-lg py-1 px-2">
-                                                <span className="text-[8px] font-bold text-red-500">
-                                                    ×{unitsPerBulk} und/bulto
-                                                </span>
-                                                <span className="text-[8px] font-bold text-red-500">
-                                                    Unit: ${(item.costPrice / unitsPerBulk).toFixed(3)}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        {/* 3. CANTIDAD CON BOTONES ARRIBA Y ABAJO */}
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Cantidad</span>
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => updateQuantity(item.product.id, -1)}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                                                    onClick={() => openEditPriceModal(item)}
+                                                    className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                                                    title="Editar costo"
                                                 >
-                                                    <Minus className="w-4 h-4" />
+                                                    <Edit className="w-4 h-4" />
                                                 </button>
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    value={item.quantity}
-                                                    onChange={(e) => {
-                                                        const rawValue = e.target.value.replace(',', '.');
-                                                        if (rawValue === '' || rawValue === '-') return;
-                                                        const val = parseFloat(rawValue);
-                                                        if (isNaN(val)) return;
-                                                        if (sellingMode === 'weight') {
-                                                            updateQuantityDirect(item.product.id, val);
-                                                        } else {
-                                                            const intVal = Math.max(1, Math.floor(val));
-                                                            updateQuantityDirect(item.product.id, intVal);
-                                                        }
-                                                    }}
-                                                    className="w-16 text-center font-black text-sm bg-white border-2 border-indigo-200 rounded-lg py-1 text-indigo-700"
-                                                />
                                                 <button
-                                                    onClick={() => updateQuantity(item.product.id, 1)}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                                    onClick={() => removeFromCart(item.product.id)}
+                                                    className="p-2 bg-red-50 text-red-400 hover:bg-red-100 rounded-lg transition-colors"
                                                 >
-                                                    <Plus className="w-4 h-4" />
+                                                    <Trash2 className="w-4 h-4" />
                                                 </button>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-xs font-bold text-gray-400 uppercase block">Total</span>
-                                                <span className="text-sm font-black text-gray-900">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
                                             </div>
                                         </div>
+
+                                        {/* Fila: Costo Unitario | Cantidad | Subtotal */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {/* Costo Unitario Bs */}
+                                            <div className="bg-gray-50 p-2 rounded-lg">
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase">Costo c/u</p>
+                                                <p className="text-sm font-black text-red-600">Bs {itemCostBsList.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500">${item.costPrice.toFixed(2)}</p>
+                                            </div>
+
+                                            {/* Cantidad */}
+                                            <div className="bg-gray-50 p-2 rounded-lg">
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase text-center">Cantidad</p>
+                                                <div className="flex items-center justify-center gap-1 mt-1">
+                                                    <button
+                                                        onClick={() => updateQuantity(item.product.id, -1)}
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
+                                                    >
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const rawValue = e.target.value.replace(',', '.');
+                                                            if (rawValue === '' || rawValue === '-') return;
+                                                            const val = parseFloat(rawValue);
+                                                            if (isNaN(val)) return;
+                                                            if (isWeight) {
+                                                                updateQuantityDirect(item.product.id, val);
+                                                            } else {
+                                                                updateQuantityDirect(item.product.id, Math.max(1, Math.floor(val)));
+                                                            }
+                                                        }}
+                                                        className="w-12 text-center font-black text-sm bg-white border border-gray-200 rounded py-0.5 text-gray-700"
+                                                    />
+                                                    <button
+                                                        onClick={() => updateQuantity(item.product.id, 1)}
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Subtotal */}
+                                            <div className="bg-indigo-50 p-2 rounded-lg">
+                                                <p className="text-[9px] font-bold text-indigo-400 uppercase">Subtotal</p>
+                                                <p className="text-base font-black text-indigo-700">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500 text-right">$ {(item.costPrice * item.quantity).toFixed(2)}</p>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 );
                             })

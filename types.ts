@@ -36,6 +36,7 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
+  costAtSale?: number; // Costo del producto EN EL MOMENTO DE LA VENTA (USD)
 }
 
 export interface Customer {
@@ -90,6 +91,14 @@ export interface TreasuryTransaction {
   exchangeRate: number;
   description: string;
   method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Zelle/Intl' | 'Card' | 'PointOfSale' | 'Credit';
+  // Para compras de inventario - guarda los productos comprados
+  purchaseItems?: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    costPrice: number;
+    costPriceBs: number;
+  }[];
 }
 
 export interface BusinessDebt {

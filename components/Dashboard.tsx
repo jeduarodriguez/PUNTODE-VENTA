@@ -28,13 +28,15 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, customers, excha
         const totalSalesUSD = sales.reduce((acc, sale) => acc + sale.total, 0);
         const totalSalesBS = sales.reduce((acc, sale) => acc + (sale.total * sale.exchangeRate), 0);
 
-        // Utilidad estimada (Venta - Costo)
+        // Utilidad calculada con costo EN EL MOMENTO DE LA VENTA
         let totalProfitUSD = 0;
         sales.forEach(sale => {
             sale.items.forEach(item => {
-                const prod = products.find(p => p.id === item.id);
-                if (prod && prod.costPrice) {
-                    totalProfitUSD += (item.price - prod.costPrice) * item.quantity;
+                // Usa el costo guardado al momento de la venta (costAtSale)
+                // Si no existe, usa el costo actual del producto (compatibilidad con datos antiguos)
+                const costAtSale = item.costAtSale ?? products.find(p => p.id === item.id)?.costPrice ?? 0;
+                if (costAtSale > 0) {
+                    totalProfitUSD += (item.price - costAtSale) * item.quantity;
                 }
             });
         });

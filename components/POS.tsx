@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product, CartItem, Sale, Customer, Worker, ExchangeRateRecord } from '../types';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase } from '../constants';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Users, Wallet, DollarSign, CreditCard, LayoutGrid, List, X, RefreshCw, TrendingUp, Smartphone, Banknote, UserPlus, Check, ArrowLeft, ShoppingBag, Calculator, Scale, Briefcase, Edit, Calendar } from '../constants';
 
 interface POSProps {
     products: Product[];
@@ -41,6 +41,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     // New Customer Form State
     const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
     const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '' });
+
+    // Edit Price Modal State
+    const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
+    const [editPriceValue, setEditPriceValue] = useState('');
 
     // Load initial cart if provided (Edit Mode)
     useEffect(() => {
@@ -146,7 +150,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             if (existing) {
                 return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            return [...prev, { ...product, quantity: 1 }];
+            return [...prev, { ...product, quantity: 1, costAtSale: product.costPrice ?? 0 }];
         });
     };
 
@@ -163,7 +167,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             if (existing) {
                 return prev.map(item => item.id === weightProduct.id ? { ...item, quantity: item.quantity + qty } : item);
             }
-            return [...prev, { ...weightProduct, quantity: qty }];
+            return [...prev, { ...weightProduct, quantity: qty, costAtSale: weightProduct.costPrice ?? 0 }];
         });
 
         setIsWeightModalOpen(false);
@@ -182,6 +186,19 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             }
             return item;
         }));
+    };
+
+    const updateQuantityDirect = (productId: string, newQty: number) => {
+        if (newQty <= 0) {
+            setCart(prev => prev.filter(item => item.id !== productId));
+        } else {
+            setCart(prev => prev.map(item => {
+                if (item.id === productId) {
+                    return { ...item, quantity: Math.min(newQty, item.stock) };
+                }
+                return item;
+            }));
+        }
     };
 
     const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -257,10 +274,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 <div className="bg-white p-4 rounded-[2rem] border border-gray-100 shadow-sm shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="relative flex-1">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 z-10" />
                             <input
                                 autoFocus
                                 type="text"
+                                inputMode="search"
                                 placeholder="Buscar producto..."
                                 className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-base font-bold text-gray-900 outline-none focus:border-indigo-500 transition-all placeholder:text-gray-300"
                                 value={searchTerm}
@@ -317,7 +335,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
                                 if (unitsAfterCart <= 0) {
                                     isOutOfStock = true;
-                                    displayStock = 'Agotado';
+                                    displayStock = 'X';
                                 } else {
                                     const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
                                     const remainingUnd = unitsAfterCart % unitsPerPkg;
@@ -336,7 +354,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
                                 if (unitsAfterCart <= 0) {
                                     isOutOfStock = true;
-                                    displayStock = 'Agotado';
+                                    displayStock = 'X';
                                 } else {
                                     const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
                                     const remainingUnd = unitsAfterCart % unitsPerPkg;
@@ -347,40 +365,72 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 currentStock = Math.max(0, product.stock - qtyInCart);
                                 if (currentStock === 0) {
                                     isOutOfStock = true;
-                                    displayStock = 'Agotado';
+                                    displayStock = 'X';
                                 } else {
                                     const unitLabel = sellingMode === 'weight' ? (product.measurement_unit ?? (product as any).measurementUnit ?? 'kg') : 'Unds.';
                                     displayStock = sellingMode === 'weight' ? `${currentStock}${unitLabel}` : `${currentStock} ${unitLabel}`;
                                 }
                             }
 
+                            const isVirtualUnit = displayVariant === 'Und';
+                            const isWeight = sellingMode === 'weight';
+                            
+                            // Calcular stock restante
+                            let remainingStock = displayStock;
+                            if (qtyInCart > 0 && currentStock > 0) {
+                                const stockNum = parseFloat(displayStock.split(' ')[0]);
+                                const remaining = Math.max(0, currentStock - qtyInCart);
+                                if (displayStock.includes('Paq')) {
+                                    const parts = displayStock.match(/(\d+)\s*Paq\s*\/\s*(\d+)\s*Und/);
+                                    if (parts) {
+                                        const unitsPerPkg = product.units_per_package ?? (product as any).unitsPerPackage ?? 1;
+                                        const totalUnits = parseInt(parts[1]) * unitsPerPkg + parseInt(parts[2]);
+                                        const newTotal = Math.max(0, totalUnits - qtyInCart);
+                                        const newPkgs = Math.floor(newTotal / unitsPerPkg);
+                                        const newUnd = newTotal % unitsPerPkg;
+                                        remainingStock = `${newPkgs} Paq / ${newUnd} Und`;
+                                    }
+                                } else {
+                                    remainingStock = displayStock.replace(/^(\d+)/, String(remaining));
+                                }
+                            }
+                            
                             return (
-                                <button
-                                    key={product.id}
-                                    onClick={() => addToCart(product)}
-                                    disabled={isOutOfStock}
-                                    className={`flex items-center gap-2 p-3 rounded-2xl border-2 transition-all active:scale-[0.98] ${isOutOfStock ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white border-gray-50 hover:border-indigo-100 shadow-sm'
-                                        }`}
+                                <div
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        addToCart(product);
+                                    }}
+                                    className={`flex items-center gap-2 p-3 rounded-2xl border-2 transition-all active:scale-[0.98] ${isOutOfStock ? 'bg-gray-50 border-gray-100 opacity-60' : isVirtualUnit ? 'bg-blue-50/50 border-blue-200 hover:border-blue-300 shadow-sm cursor-pointer' : 'bg-white border-gray-50 hover:border-indigo-100 shadow-sm cursor-pointer'
+                                    }`}
                                 >
-                                    <div className="flex-1 text-left min-w-0">
-                                        <h3 className="font-bold text-gray-900 leading-tight truncate">
-                                            {product.name}
-                                            {sellingMode === 'package' && unitsPerPackage > 0 && <span className="text-indigo-600 ml-1">x{unitsPerPackage}</span>}
-                                        </h3>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase">
-                                            {product.category}
-                                            {(product as any).displayVariant && <span className="text-indigo-500 ml-1">({(product as any).displayVariant})</span>}
-                                        </p>
-                                    </div>
-
-                                    {/* Stock Middle */}
-                                    <div className="text-center w-14 shrink-0">
-                                        <span className={`text-[9px] font-black ${isOutOfStock ? 'text-red-400' : 'text-gray-400'}`}>
-                                            {displayStock}
+                                    {/* Stock a la izquierda */}
+                                    <div className="flex flex-col items-center justify-center w-12 shrink-0 bg-gray-50 border-2 border-gray-200 rounded-lg p-1">
+                                        <span className={`text-sm font-black ${isOutOfStock ? 'text-red-400' : isVirtualUnit ? 'text-blue-600' : 'text-indigo-600'}`}>
+                                            {remainingStock.split(' ')[0]}
                                         </span>
+                                        {remainingStock.includes(' ') && (
+                                            <span className={`text-[8px] font-bold ${isOutOfStock ? 'text-red-300' : 'text-gray-400'}`}>
+                                                {remainingStock.split(' ').slice(1).join(' ')}
+                                            </span>
+                                        )}
                                     </div>
 
-                                    {/* Controles de cantidad */}
+                                    {/* Nombre y precios en el medio */}
+                                    <div className="flex-1 text-left min-w-0" onClick={(e) => {
+                                        e.stopPropagation();
+                                        addToCart(product);
+                                    }}>
+                                        <h3 className={`font-bold leading-tight truncate text-sm ${isVirtualUnit ? 'text-blue-800' : 'text-gray-900'}`}>
+                                            {product.name}
+                                        </h3>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-base font-black text-emerald-600">{(product.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                                            <p className="text-sm font-bold text-gray-400">${product.price.toFixed(2)}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Controles de cantidad a la derecha */}
                                     <div className="flex items-center gap-1 shrink-0">
                                         {qtyInCart > 0 && (
                                             <button
@@ -388,32 +438,51 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                                     e.stopPropagation();
                                                     updateQuantity(product.id, -1);
                                                 }}
-                                                className="w-7 h-7 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200 active:scale-95 transition-all"
+                                                className="w-8 h-8 bg-red-100 text-red-500 rounded-lg flex items-center justify-center hover:bg-red-200 active:scale-95 transition-all"
                                             >
-                                                <Minus className="w-3 h-3" />
+                                                <Minus className="w-4 h-4" />
                                             </button>
                                         )}
-                                        {qtyInCart > 0 && (
-                                            <span className="w-6 text-center text-xs font-black text-indigo-600">{qtyInCart}</span>
-                                        )}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                addToCart(product);
+                                        <input
+                                            type="text"
+                                            inputMode={isWeight ? "decimal" : "numeric"}
+                                            className={`w-14 h-8 text-center text-sm font-bold bg-white border-2 border-indigo-200 rounded-lg ${qtyInCart > 0 ? 'text-indigo-600' : 'text-gray-400'}`}
+                                            value={qtyInCart > 0 ? qtyInCart : ''}
+                                            placeholder="0"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                const val = isWeight 
+                                                    ? parseFloat(e.target.value.replace(',', '.'))
+                                                    : parseInt(e.target.value);
+                                                if (isWeight) {
+                                                    if (!isNaN(val) && val > 0) {
+                                                        setCart(prev => {
+                                                            const existing = prev.find(i => i.id === product.id);
+                                                            if (existing) {
+                                                                return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
+                                                            }
+                                                            return [...prev, { ...product, quantity: val, quantityType: 'weight' }];
+                                                        });
+                                                    } else if (e.target.value === '') {
+                                                        setCart(prev => prev.filter(i => i.id !== product.id));
+                                                    }
+                                                } else {
+                                                    if (!isNaN(val) && val > 0) {
+                                                        setCart(prev => {
+                                                            const existing = prev.find(i => i.id === product.id);
+                                                            if (existing) {
+                                                                return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
+                                                            }
+                                                            return [...prev, { ...product, quantity: val }];
+                                                        });
+                                                    } else if (e.target.value === '') {
+                                                        setCart(prev => prev.filter(i => i.id !== product.id));
+                                                    }
+                                                }
                                             }}
-                                            disabled={isOutOfStock}
-                                            className="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-200 active:scale-95 transition-all disabled:opacity-50"
-                                        >
-                                            <Plus className="w-3 h-3" />
-                                        </button>
+                                        />
                                     </div>
-
-                                    {/* Price Layout */}
-                                    <div className="text-right flex flex-col items-end w-16 shrink-0">
-                                        <p className="font-black text-gray-900 text-sm leading-none">{(product.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</p>
-                                        <p className="text-[7px] font-bold text-indigo-400 mt-0.5">${product.price.toFixed(2)}</p>
-                                    </div>
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -428,46 +497,45 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
                 </div>
 
-                <div className="p-6 flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-indigo-100 p-2.5 rounded-xl text-indigo-600">
-                                <ShoppingCart className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-lg font-black text-gray-900">Carrito</h3>
-                                    {/* Editable Rate Badge */}
-                                    <div className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
-                                        <TrendingUp className="w-3 h-3 text-gray-500" />
-                                        <input
-                                            className="w-12 bg-transparent text-xs font-black text-gray-900 outline-none text-right p-0 border-none"
-                                            type="number"
-                                            value={tempRate}
-                                            onChange={(e) => setTempRate(e.target.value)}
-                                            onBlur={() => {
-                                                const r = parseFloat(tempRate);
-                                                if (r > 0) onUpdateRate(r);
-                                                else setTempRate(exchangeRate.toString());
-                                            }}
-                                        />
-                                        <span className="text-[10px] font-bold text-gray-400">Bs</span>
-                                    </div>
-                                </div>
-                                <p className="text-xs font-medium text-gray-400">{cart.length} productos</p>
-                            </div>
+                <div className="p-3 flex-1 flex flex-col min-h-0">
+                    {/* Header con fecha y tasa */}
+                    <div className="flex items-center gap-2 mb-2">
+                        <button
+                            onClick={onBackToDashboard}
+                            className="p-2 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors shrink-0"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <div className="flex items-center gap-1 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 flex-1">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                            <span className="text-xs font-bold text-indigo-600">
+                                {new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </span>
                         </div>
-                        {cart.length > 0 && (
-                            <button onClick={() => setCart([])} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition-colors">
-                                <Trash2 className="w-5 h-5" />
-                            </button>
-                        )}
+                        <div className="flex items-center justify-between bg-gray-100 px-2 py-1.5 rounded-lg border border-gray-200 flex-1 min-w-0">
+                            <span className="text-[9px] font-bold text-gray-400 shrink-0">BCV</span>
+                            <input
+                                className="w-14 bg-transparent text-xs font-black text-gray-900 outline-none text-center p-0 border-none no-spinners"
+                                type="number"
+                                value={tempRate}
+                                onChange={(e) => setTempRate(e.target.value)}
+                                onBlur={() => {
+                                    const r = parseFloat(tempRate);
+                                    if (r > 0) onUpdateRate(r);
+                                    else setTempRate(exchangeRate.toString());
+                                }}
+                            />
+                            <span className="text-[9px] font-bold text-gray-400 shrink-0">Bs</span>
+                        </div>
                     </div>
 
                     {/* Header de Columnas */}
                     {cart.length > 0 && (
-                        <div className="flex justify-between px-3 mb-2">
-                            <span className="text-[10px] font-black uppercase text-gray-300 tracking-widest">Producto</span>
+                        <div className="flex justify-between items-center px-3 mb-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase text-gray-300 tracking-widest">Producto</span>
+                                <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">{cart.length}</span>
+                            </div>
                             <div className="flex gap-4">
                                 <span className="text-[10px] font-black uppercase text-gray-300 tracking-widest text-center w-20">Cant</span>
                                 <span className="text-[10px] font-black uppercase text-gray-300 tracking-widest text-right w-16">Subtotal</span>
@@ -482,34 +550,95 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 <p className="font-bold text-gray-400 text-sm">El carrito está vacío</p>
                             </div>
                         ) : (
-                            cart.map(item => (
-                                <div key={item.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl group border border-transparent hover:border-gray-100 transition-colors">
-                                    {/* Producto */}
-                                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <div className="min-w-0">
-                                            <h4 className="font-bold text-gray-900 text-xs truncate max-w-[100px]">{item.name}</h4>
-                                            <p className="text-[9px] font-bold text-gray-400">${item.price.toFixed(2)}</p>
+                            cart.map(item => {
+                                const itemTotalBs = item.price * item.quantity * todayRate;
+                                const itemTotalUsd = item.price * item.quantity;
+                                const costMode = (item as any).cost_mode || 'calculated';
+                                const costAtSale = item.costAtSale || item.costPrice || 0;
+                                const profit = costAtSale > 0 ? itemTotalUsd - (costAtSale * item.quantity) : 0;
+                                const profitBs = profit * todayRate;
+                                
+                                return (
+                                    <div key={item.id} className="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-sm">
+                                        {/* Header: Nombre + Eliminar */}
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex-1 min-w-0 mr-2">
+                                                <h4 className="font-black text-sm text-gray-900 truncate">{item.name}</h4>
+                                                <p className="text-xs text-gray-400">${item.price.toFixed(2)} c/u</p>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingPriceItem(item);
+                                                        setEditPriceValue(item.price.toFixed(2));
+                                                    }}
+                                                    className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => updateQuantity(item.id, -item.quantity)}
+                                                    className="p-2 bg-red-50 text-red-400 hover:bg-red-100 rounded-lg transition-colors"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Controles + Subtotal */}
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex items-center gap-1 bg-white rounded-lg p-0.5 shadow-sm border border-gray-200">
-                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-100 text-gray-500">
-                                                {item.quantity === 1 ? <Trash2 className="w-3 h-3 text-red-400" /> : <Minus className="w-3 h-3" />}
-                                            </button>
-                                            <span className="font-black text-xs w-5 text-center">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-900 text-white shadow-sm">
-                                                <Plus className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                        <div className="text-right w-16">
-                                            <p className="text-xs font-black text-gray-900">{(item.price * item.quantity * todayRate).toFixed(2)}</p>
-                                            <p className="text-[9px] font-bold text-gray-400">${(item.price * item.quantity).toFixed(2)}</p>
+                                        {/* Fila: Costo | Cantidad | Subtotal */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {/* Costo */}
+                                            <div className="bg-gray-50 p-2 rounded-lg">
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase">Costo</p>
+                                                <p className="text-sm font-bold text-red-500">${costAtSale.toFixed(2)}</p>
+                                                {profit !== 0 && (
+                                                    <p className={`text-[9px] font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {/* Cantidad */}
+                                            <div className="bg-gray-50 p-2 rounded-lg flex items-center justify-center">
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, -1)}
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
+                                                    >
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        className="w-12 text-center font-black text-sm bg-white border border-gray-200 rounded py-0.5 text-gray-700"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const rawValue = e.target.value.replace(',', '.');
+                                                            if (rawValue === '' || rawValue === '-') return;
+                                                            const val = parseFloat(rawValue);
+                                                            if (isNaN(val)) return;
+                                                            updateQuantityDirect(item.id, Math.max(1, Math.floor(val)));
+                                                        }}
+                                                    />
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, 1)}
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Subtotal */}
+                                            <div className="bg-indigo-50 p-2 rounded-lg">
+                                                <p className="text-[9px] font-bold text-indigo-400 uppercase">Subtotal</p>
+                                                <p className="text-base font-black text-indigo-700">Bs {itemTotalBs.toFixed(0)}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500 text-right">${itemTotalUsd.toFixed(2)}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
 
@@ -528,49 +657,49 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             {/* Botón Efectivo con opción de Calculadora */}
                             <div className="relative">
                                 <button
                                     disabled={cart.length === 0}
                                     onClick={() => initiateSale('Cash')}
-                                    className="w-full h-full p-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-100 active:scale-95"
+                                    className="w-full h-full p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-100 active:scale-95"
                                 >
-                                    <Banknote className="w-6 h-6" />
+                                    <Banknote className="w-5 h-5" />
                                     <span className="text-[10px] font-black uppercase">Efectivo</span>
                                 </button>
                                 <button
                                     disabled={cart.length === 0}
                                     onClick={openCashCalculator}
-                                    className="absolute top-1 right-1 p-3 bg-emerald-200/50 hover:bg-emerald-200 text-emerald-800 rounded-xl transition-colors disabled:opacity-0 active:scale-95"
+                                    className="absolute top-1 right-1 p-2 bg-emerald-200/50 hover:bg-emerald-200 text-emerald-800 rounded-lg transition-colors disabled:opacity-0 active:scale-95"
                                     title="Calcular Vuelto"
                                 >
-                                    <Calculator className="w-5 h-5" />
+                                    <Calculator className="w-4 h-4" />
                                 </button>
                             </div>
 
                             <button
                                 disabled={cart.length === 0}
                                 onClick={() => initiateSale('PagoMovil')}
-                                className="p-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-blue-100 active:scale-95"
+                                className="p-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-blue-100 active:scale-95"
                             >
-                                <Smartphone className="w-6 h-6" />
+                                <Smartphone className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase">Pago Móvil</span>
                             </button>
                             <button
                                 disabled={cart.length === 0}
                                 onClick={() => initiateSale('Card')}
-                                className="p-4 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200 active:scale-95"
+                                className="p-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200 active:scale-95"
                             >
-                                <CreditCard className="w-6 h-6" />
+                                <CreditCard className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase">Tarjeta</span>
                             </button>
                             <button
                                 disabled={cart.length === 0}
                                 onClick={() => initiateSale('Credit')}
-                                className="p-4 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-orange-100 active:scale-95"
+                                className="p-3 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-orange-100 active:scale-95"
                             >
-                                <Wallet className="w-6 h-6" />
+                                <Wallet className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase">Crédito</span>
                             </button>
                         </div>
@@ -872,6 +1001,62 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 </div>
             )}
 
+            {editingPriceItem && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm animate-fade-in" onClick={() => setEditingPriceItem(null)}>
+                    <div className="bg-white w-full sm:max-w-lg h-[50vh] sm:h-auto sm:max-h-[60vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-scale-up" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                            <div>
+                                <h3 className="text-base sm:text-lg font-black text-gray-900">Editar Precio</h3>
+                                <p className="text-xs font-bold text-gray-400">{editingPriceItem.name}</p>
+                            </div>
+                            <button onClick={() => setEditingPriceItem(null)} className="text-gray-400 hover:text-black p-1">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="p-6 flex-1 flex flex-col justify-center">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Precio por unidad ($)</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">$</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        className="w-full p-4 pl-10 bg-white border-2 border-gray-200 rounded-2xl text-2xl font-black text-gray-900 outline-none focus:border-indigo-500"
+                                        value={editPriceValue}
+                                        onChange={e => setEditPriceValue(e.target.value.replace(',', '.'))}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex justify-between items-center">
+                                    <span className="text-xs font-bold text-emerald-600 uppercase">Precio en Bs</span>
+                                    <span className="text-lg font-black text-emerald-700">
+                                        {((parseFloat(editPriceValue) || 0) * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 shrink-0">
+                            <button
+                                onClick={() => {
+                                    const newPrice = parseFloat(editPriceValue);
+                                    if (!isNaN(newPrice) && newPrice > 0) {
+                                        setCart(prev => prev.map(item => 
+                                            item.id === editingPriceItem.id 
+                                                ? { ...item, price: newPrice }
+                                                : item
+                                        ));
+                                    }
+                                    setEditingPriceItem(null);
+                                }}
+                                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform"
+                            >
+                                Guardar Precio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
         @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scale-up { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -879,6 +1064,8 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         .animate-fade-in { animation: fade-in 0.2s ease-out; }
         .animate-scale-up { animation: scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
         .animate-bounce-in { animation: bounce-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .no-spinners::-webkit-outer-spin-button, .no-spinners::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .no-spinners { -moz-appearance: textfield; }
       `}</style>
         </div>
     );
