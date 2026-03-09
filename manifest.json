@@ -1,6 +1,6 @@
 {
-  "name": "Pointy POS Cloud",
-  "short_name": "Pointy",
+  "name": "pointy Beta",
+  "short_name": "pointy Beta",
   "start_url": ".",
   "display": "standalone",
   "orientation": "any",

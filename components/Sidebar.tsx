@@ -23,7 +23,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
       <div className="p-6">
         <h1 className="text-2xl font-bold text-indigo-600 flex items-center gap-2">
           <ShoppingCart className="w-8 h-8" />
-          Pointy
+          pointy Beta
         </h1>
       </div>
       <nav className="flex-1 mt-6">
@@ -45,7 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
         <NetworkStatus />
       </div>
       <div className="p-6 border-t border-gray-100">
-        <p className="text-[10px] text-gray-300 text-center">v1.5.0 &copy; 2024 Pointy POS</p>
+        <p className="text-[10px] text-gray-300 text-center">v1.5.0 &copy; 2024 pointy Beta</p>
       </div>
     </aside>
   );

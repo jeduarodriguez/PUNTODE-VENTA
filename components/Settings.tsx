@@ -76,20 +76,27 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, products, customer
 
     const handleLocalExport = () => {
         try {
-            const backup = {
-                products: localStorage.getItem('pointy_data_products'),
-                customers: localStorage.getItem('pointy_data_customers'),
-                sales: localStorage.getItem('pointy_data_sales'),
-                settings: localStorage.getItem('pointy_data_settings'),
-                treasury: localStorage.getItem('pointy_data_treasury'),
-                timestamp: Date.now()
+            const backup: any = {
+                timestamp: Date.now(),
+                data: {},
+                cache: {}
             };
+
+            // Recoger datos de la app
+            ['products', 'customers', 'sales', 'settings', 'treasury', 'workers', 'businessdebts'].forEach(key => {
+                backup.data[key] = localStorage.getItem(`pointy_data_${key}`);
+            });
+
+            // Recoger caches de Supabase (especialmente rate_history)
+            ['products', 'customers', 'sales', 'settings/exchangeRate', 'rate_history', 'treasury', 'workers', 'businessdebts'].forEach(key => {
+                backup.cache[key] = localStorage.getItem(`pointy_cache_${key}`);
+            });
 
             const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `pointy_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `pointy_beta_backup_${new Date().toISOString().split('T')[0]}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -106,11 +113,16 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, products, customer
         reader.onload = (event) => {
             try {
                 const backup = JSON.parse(event.target?.result as string);
-                if (backup.products) localStorage.setItem('pointy_data_products', backup.products);
-                if (backup.customers) localStorage.setItem('pointy_data_customers', backup.customers);
-                if (backup.sales) localStorage.setItem('pointy_data_sales', backup.sales);
-                if (backup.settings) localStorage.setItem('pointy_data_settings', backup.settings);
-                if (backup.treasury) localStorage.setItem('pointy_data_treasury', backup.treasury);
+                if (backup.data) {
+                    Object.entries(backup.data).forEach(([key, value]) => {
+                        if (value) localStorage.setItem(`pointy_data_${key}`, value as string);
+                    });
+                }
+                if (backup.cache) {
+                    Object.entries(backup.cache).forEach(([key, value]) => {
+                        if (value) localStorage.setItem(`pointy_cache_${key}`, value as string);
+                    });
+                }
 
                 alert('Respaldo restaurado con éxito. La aplicación se reiniciará.');
                 window.location.reload();

@@ -1,5 +1,5 @@
 // ============================================================
-//  Pointy POS — Service Worker con soporte Offline-First
+//  pointy Beta — Service Worker con soporte Offline-First
 //  Versión: 4.0
 // ============================================================
 

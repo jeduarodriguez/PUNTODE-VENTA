@@ -1,4 +1,4 @@
-# Pointy - Sistema de Punto de Venta
+# pointy Beta - Sistema de Punto de Venta
 
 Este proyecto es un sistema de punto de venta (POS) moderno migrado de Firebase a **Supabase**.
 
@@ -34,4 +34,4 @@ La aplicación estará disponible en [http://localhost:3000](http://localhost:30
 
 ---
 
-© 2026 Pointy POS
+© 2026 pointy Beta
