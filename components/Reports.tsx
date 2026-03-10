@@ -214,7 +214,12 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const currentTransactions = treasuryTransactions.filter(t => t.timestamp >= filterStart && t.timestamp <= filterEnd).sort((a, b) => b.timestamp - a.timestamp);
     
     // Filtrar ventas que ya tienen transacción de tesorería (evitar duplicación)
-    const salesWithTreasury = new Set(currentTransactions.filter(t => t.id.startsWith('sale_')).map(t => t.id.replace('sale_', '')));
+    // Incluye ventas normales (sale_), pagos de deuda de clientes (debt_payment_) y trabajadores (worker_debt_payment_)
+    const salesWithTreasury = new Set([
+        ...currentTransactions.filter(t => t.id.startsWith('sale_')).map(t => t.id.replace('sale_', '')),
+        ...currentTransactions.filter(t => t.id.startsWith('debt_payment_')).map(t => t.id.replace('debt_payment_', '')),
+        ...currentTransactions.filter(t => t.id.startsWith('worker_debt_payment_')).map(t => t.id.replace('worker_debt_payment_', ''))
+    ]);
     const salesOnly = currentSales.filter(s => !salesWithTreasury.has(s.id));
     
     const allMovements = [

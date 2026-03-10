@@ -491,7 +491,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
           <Users className="w-4 h-4" />
           <span>Clientes</span>
           <span className={`text-xs font-bold ${activeTab === 'customers' ? 'text-white/80' : 'text-gray-400'}`}>
-            Bs {(totalCustomersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+            ${totalCustomersDebt.toFixed(2)} <span className="opacity-60">| Bs {totalCustomersDebtBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
           </span>
         </button>
         <button
@@ -501,7 +501,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
           <Briefcase className="w-4 h-4" />
           <span>Trabajadores</span>
           <span className={`text-xs font-bold ${activeTab === 'workers' ? 'text-white/80' : 'text-gray-400'}`}>
-            Bs {(totalWorkersDebtBs).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+            ${totalWorkersDebt.toFixed(2)} <span className="opacity-60">| Bs {totalWorkersDebtBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
           </span>
         </button>
         <button
@@ -509,44 +509,33 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
           className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
           <Clock className="w-4 h-4" />
-          <span>Deudas</span>
+          <span>Deudas Negocio</span>
           <span className={`text-xs font-bold ${activeTab === 'debts' ? 'text-white/80' : 'text-gray-400'}`}>
-            Bs {(totalUnpaidDebts).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+            ${totalUnpaidDebtsUsd.toFixed(2)} <span className="opacity-60">| Bs {totalUnpaidDebts.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
           </span>
         </button>
       </div>
 
-      {/* Header y Buscador */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm sticky top-0 z-10">
-        <div>
-          <h2 className="text-2xl font-black text-gray-800">
-            {activeTab === 'customers' ? 'Clientes' : activeTab === 'workers' ? 'Trabajadores' : 'Deudas del Negocio'}
-          </h2>
-          <p className="text-xs text-gray-400 font-medium">
-            {activeTab === 'customers' ? 'Gestiona clientes' : activeTab === 'workers' ? 'Gestiona trabajadores' : `Total pendiente: Bs ${totalUnpaidDebts.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`}
-          </p>
+      {/* Buscador */}
+      <div className="flex w-full md:w-auto gap-2">
+        <div className="relative flex-1 md:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <input
+            type="text"
+            placeholder={activeTab === 'customers' ? "Buscar cliente..." : activeTab === 'workers' ? "Buscar trabajador..." : "Buscar deuda..."}
+            className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-100 rounded-2xl text-black font-bold text-sm focus:border-indigo-500 outline-none transition-colors"
+            value={activeTab === 'customers' ? searchTerm : activeTab === 'workers' ? workerSearchTerm : debtSearchTerm}
+            onChange={(e) => activeTab === 'customers' ? setSearchTerm(e.target.value) : activeTab === 'workers' ? setWorkerSearchTerm(e.target.value) : setDebtSearchTerm(e.target.value)}
+          />
         </div>
-
-        <div className="flex w-full md:w-auto gap-2">
-          <div className="relative flex-1 md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder={activeTab === 'customers' ? "Buscar por nombre..." : activeTab === 'workers' ? "Buscar trabajador..." : "Buscar deuda..."}
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl text-black font-bold text-sm focus:border-indigo-500 outline-none transition-colors"
-              value={activeTab === 'customers' ? searchTerm : activeTab === 'workers' ? workerSearchTerm : debtSearchTerm}
-              onChange={(e) => activeTab === 'customers' ? setSearchTerm(e.target.value) : activeTab === 'workers' ? setWorkerSearchTerm(e.target.value) : setDebtSearchTerm(e.target.value)}
-            />
-          </div>
-          {activeTab !== 'debts' && (
-            <button
-              onClick={() => activeTab === 'customers' ? openModal() : openPayrollModal()}
-              className="bg-gray-900 text-white px-4 py-2 rounded-2xl text-sm font-black shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
-            >
-              <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : 'Pagar Nómina'}</span>
-            </button>
-          )}
-        </div>
+        {activeTab !== 'debts' && (
+          <button
+            onClick={() => activeTab === 'customers' ? openModal() : openPayrollModal()}
+            className="bg-gray-900 text-white px-4 py-2 rounded-2xl text-sm font-black shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : 'Pagar Nómina'}</span>
+          </button>
+        )}
       </div>
 
       {activeTab === 'debts' ? (
