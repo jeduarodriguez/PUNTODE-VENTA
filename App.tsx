@@ -203,35 +203,39 @@ const App: React.FC = () => {
 
         if (sellingMode === 'package' && isUnitSale) {
           // Venta por unidad de producto paquete
-          let qtyNeeded = item.quantity;
-          let newRemainingUnits = remainingUnits;
-          let newStock = product.stock;
-
-          // Primero usar las unidades sueltas
-          if (newRemainingUnits >= qtyNeeded) {
-            newRemainingUnits -= qtyNeeded;
-            qtyNeeded = 0;
+          const totalUnitsAvailable = (product.stock * unitsPerPackage) + remainingUnits;
+          const unitsSold = item.quantity;
+          const unitsAfterSale = totalUnitsAvailable - unitsSold;
+          
+          if (unitsAfterSale <= 0) {
+            // Sin stock disponible
+            updatedProducts[pIndex] = {
+              ...product,
+              stock: 0,
+              remaining_units: 0
+            };
           } else {
-            qtyNeeded -= newRemainingUnits;
-            newRemainingUnits = 0;
+            // Calcular nuevo stock de paquetes y unidades restantes
+            const newStock = Math.floor(unitsAfterSale / unitsPerPackage);
+            const newRemainingUnits = unitsAfterSale % unitsPerPackage;
+            
+            updatedProducts[pIndex] = {
+              ...product,
+              stock: newStock,
+              remaining_units: newRemainingUnits
+            };
           }
-
-          // Si necesita más, abrir paquetes
-          if (qtyNeeded > 0 && newStock > 0) {
-            const packagesToOpen = Math.min(Math.ceil(qtyNeeded / (unitsPerPackage || 1)), newStock);
-            newStock -= packagesToOpen;
-            const unitsFromPackages = packagesToOpen * (unitsPerPackage || 0);
-            newRemainingUnits += unitsFromPackages;
-            qtyNeeded -= unitsFromPackages;
-          }
-
-          const p = {
+          updates[`products/${productId}`] = updatedProducts[pIndex];
+        } else if (sellingMode === 'package' && !isUnitSale) {
+          // Venta por paquete completo
+          const packagesSold = item.quantity;
+          const newStock = Math.max(0, product.stock - packagesSold);
+          
+          updatedProducts[pIndex] = {
             ...product,
-            stock: Math.max(0, newStock),
-            remaining_units: Math.max(0, newRemainingUnits)
+            stock: newStock
           };
-          updatedProducts[pIndex] = p;
-          updates[`products/${productId}`] = p;
+          updates[`products/${productId}`] = updatedProducts[pIndex];
         } else {
           // Venta normal (simple o peso)
           const p = {

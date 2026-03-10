@@ -102,7 +102,9 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                     ...product,
                     id: `${product.id}-unit`,
                     price: pricePerUnit,
-                    selling_mode: 'simple',
+                    selling_mode: 'package', // Mantener como package para que funcione la lógica
+                    units_per_package: unitsPerPackage,
+                    remaining_units: remainingUnits,
                     stock: totalUnits,
                     displayVariant: 'Und'
                 });
@@ -140,8 +142,41 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             return;
         }
 
-        const currentInCart = cart.find(item => item.id === product.id)?.quantity || 0;
-        if (currentInCart >= product.stock) return;
+        // Detectar si es venta por unidades (el ID termina en -unit)
+        const isUnitSale = product.id && product.id.endsWith('-unit');
+
+        // Para productos paquete, calcular el stock total disponible considerando ambas variantes
+        if (sellingMode === 'package' || isUnitSale) {
+            const baseId = isUnitSale ? product.id.replace('-unit', '') : product.id;
+            const originalProduct = products.find(p => p.id === baseId);
+            
+            if (originalProduct) {
+                const unitsPerPkg = originalProduct.units_per_package ?? (originalProduct as any).unitsPerPackage ?? 0;
+                const remainingUnd = originalProduct.remaining_units ?? (originalProduct as any).remainingUnits ?? 0;
+                const pkgStock = originalProduct.stock ?? 0;
+                
+                // Total de unidades disponibles
+                const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnd;
+                
+                // Obtener cantidades en carrito de ambas variantes
+                const qtyThisVariant = cart.find(item => item.id === product.id)?.quantity || 0;
+                const qtyOtherVariant = cart.find(item => 
+                    isUnitSale ? item.id === baseId : item.id === `${product.id}-unit`
+                )?.quantity || 0;
+                
+                // Calcular unidades totales en carrito
+                const totalUnitsInCart = isUnitSale 
+                    ? qtyThisVariant + (qtyOtherVariant * unitsPerPkg)
+                    : (qtyThisVariant * unitsPerPkg) + qtyOtherVariant;
+                
+                // Verificar si hay stock disponible
+                if (totalUnitsInCart >= totalUnitsAvailable) return;
+            }
+        } else {
+            // Stock normal para productos simples
+            const currentInCart = cart.find(item => item.id === product.id)?.quantity || 0;
+            if (currentInCart >= product.stock) return;
+        }
 
         if (navigator.vibrate) navigator.vibrate(50);
 
@@ -158,7 +193,13 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         if (!weightProduct) return;
 
         const qty = parseFloat(weightQuantity) || 0;
-        if (qty <= 0 || qty > weightProduct.stock) return;
+        
+        // Calcular stock disponible considerando lo que ya está en el carrito
+        const existingInCart = cart.find(item => item.id === weightProduct.id);
+        const currentQtyInCart = existingInCart?.quantity || 0;
+        const availableStock = weightProduct.stock - currentQtyInCart;
+        
+        if (qty <= 0 || qty > availableStock) return;
 
         if (navigator.vibrate) navigator.vibrate(50);
 
@@ -178,26 +219,76 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         setCart(prev => prev.filter(item => item.id !== productId));
     };
 
+    // Función helper para obtener el stock máximo disponible para un producto en el carrito
+    const getMaxStockForCartItem = (item: CartItem, cartItems: CartItem[]): number => {
+        const sellingMode = item.selling_mode ?? (item as any).sellingMode ?? 'simple';
+        
+        if (sellingMode !== 'package') {
+            return item.stock;
+        }
+        
+        const isUnitSale = item.id.endsWith('-unit');
+        const baseId = isUnitSale ? item.id.replace('-unit', '') : item.id;
+        const originalProduct = products.find(p => p.id === baseId);
+        
+        if (!originalProduct) return item.stock;
+        
+        const unitsPerPkg = originalProduct.units_per_package ?? (originalProduct as any).unitsPerPackage ?? 0;
+        const remainingUnd = originalProduct.remaining_units ?? (originalProduct as any).remainingUnits ?? 0;
+        const pkgStock = originalProduct.stock ?? 0;
+        
+        // Total de unidades disponibles
+        const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnd;
+        
+        // Obtener cantidad de la otra variante en el carrito
+        const otherVariantInCart = cartItems.find(i => 
+            isUnitSale ? i.id === baseId : i.id === `${item.id}-unit`
+        );
+        const qtyOtherVariant = otherVariantInCart?.quantity || 0;
+        
+        // Calcular máximo para esta variante
+        if (isUnitSale) {
+            // Para venta por unidad: máximo = total - (paquetes * unidades_por_paquete)
+            return totalUnitsAvailable - (qtyOtherVariant * unitsPerPkg);
+        } else {
+            // Para venta por paquete: máximo = paquetes posibles con las unidades restantes
+            const remainingUnits = totalUnitsAvailable - qtyOtherVariant;
+            return Math.floor(remainingUnits / unitsPerPkg);
+        }
+    };
+
     const updateQuantity = (productId: string, delta: number) => {
-        setCart(prev => prev.map(item => {
-            if (item.id === productId) {
-                const newQuantity = Math.max(1, Math.min(item.quantity + delta, item.stock));
-                return { ...item, quantity: newQuantity };
+        setCart(prev => {
+            const item = prev.find(i => i.id === productId);
+            if (!item) return prev;
+            
+            const newQuantity = item.quantity + delta;
+            
+            // Si llega a 0 o menos, quitar del carrito
+            if (newQuantity <= 0) {
+                return prev.filter(i => i.id !== productId);
             }
-            return item;
-        }));
+            
+            const maxStock = getMaxStockForCartItem(item, prev);
+            const clampedQty = Math.min(newQuantity, maxStock);
+            
+            return prev.map(i => i.id === productId ? { ...i, quantity: clampedQty } : i);
+        });
     };
 
     const updateQuantityDirect = (productId: string, newQty: number) => {
         if (newQty <= 0) {
             setCart(prev => prev.filter(item => item.id !== productId));
         } else {
-            setCart(prev => prev.map(item => {
-                if (item.id === productId) {
-                    return { ...item, quantity: Math.min(newQty, item.stock) };
-                }
-                return item;
-            }));
+            setCart(prev => {
+                const item = prev.find(i => i.id === productId);
+                if (!item) return prev;
+                
+                const maxStock = getMaxStockForCartItem(item, prev);
+                const clampedQty = Math.min(newQty, maxStock);
+                
+                return prev.map(i => i.id === productId ? { ...i, quantity: clampedQty } : i);
+            });
         }
     };
 
@@ -309,56 +400,81 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-20 lg:pb-0">
                     <div className="flex flex-col gap-2">
                         {filteredProducts.map(product => {
-                            const qtyInCart = cart.find(i => i.id === product.id)?.quantity || 0;
+                            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
+                            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
+                            const isUnitSale = product.id && product.id.endsWith('-unit');
+                            const displayVariant = (product as any).displayVariant;
+                            
+                            // Obtener referencias al producto original y las versiones en el carrito
+                            let originalProduct = product;
+                            let cartItemForThisProduct = cart.find(i => i.id === product.id);
+                            let cartItemForOtherVariant = null;
+                            
+                            if (sellingMode === 'package' && unitsPerPackage > 0) {
+                                const baseId = isUnitSale ? product.id.replace('-unit', '') : product.id;
+                                originalProduct = products.find(p => p.id === baseId) || product;
+                                // Si estamos en la vista de paquete, buscar unidades en carrito
+                                // Si estamos en la vista de unidades, buscar paquetes en carrito
+                                cartItemForOtherVariant = cart.find(i => 
+                                    isUnitSale 
+                                        ? i.id === baseId  // Buscar paquete
+                                        : i.id === `${product.id}-unit`  // Buscar unidades
+                                );
+                            }
+                            
+                            const qtyInCart = cartItemForThisProduct?.quantity || 0;
+                            const qtyOtherVariantInCart = cartItemForOtherVariant?.quantity || 0;
 
                             // Calcular stock disponible considerando el carrito
                             let currentStock = product.stock;
                             let displayStock = '';
                             let isOutOfStock = false;
 
-                            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
-                            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
-                            const isUnitSale = product.id && product.id.endsWith('-unit');
-                            const displayVariant = (product as any).displayVariant;
-
-                            // Para productos paquete vendidos por unidad
-                            if (sellingMode === 'package' && isUnitSale) {
-                                const productId = product.id.replace('-unit', '');
-                                const originalProduct = products.find(p => p.id === productId);
-                                const unitsPerPkg = (originalProduct?.units_per_package ?? (originalProduct as any)?.unitsPerPackage ?? 0);
-                                const remainingUnits = originalProduct?.remaining_units ?? (originalProduct as any)?.remainingUnits ?? 0;
-                                const pkgStock = originalProduct?.stock ?? 0;
-
-                                // Calcular unidades totales disponibles
-                                const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnits;
-                                const unitsAfterCart = totalUnitsAvailable - qtyInCart;
-
-                                if (unitsAfterCart <= 0) {
-                                    isOutOfStock = true;
-                                    displayStock = 'X';
-                                } else {
-                                    const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
-                                    const remainingUnd = unitsAfterCart % unitsPerPkg;
-                                    displayStock = `${remainingPkgs} Paq / ${remainingUnd} Und`;
-                                }
-                            } else if (displayVariant === 'Paq') {
-                                // Producto paquete vendido por paquete - considerar también unidades en carrito
-                                const unitsInCart = cart.find(i => i.id === `${product.id}-unit`)?.quantity || 0;
-                                const unitsPerPkg = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
-                                const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
-
-                                // Calcular unidades totales disponibles considerando both package and unit sales
-                                const totalUnitsAvailable = (product.stock * unitsPerPkg) + remainingUnits;
-                                const totalUnitsInCart = (qtyInCart * unitsPerPkg) + unitsInCart;
+                            // Función helper para calcular stock disponible en unidades
+                            const calculateAvailableStock = (prod: Product, qtyPkg: number, qtyUnd: number) => {
+                                const unitsPerPkg = prod.units_per_package ?? (prod as any).unitsPerPackage ?? 0;
+                                const remainingUnd = prod.remaining_units ?? (prod as any).remainingUnits ?? 0;
+                                const pkgStock = prod.stock ?? 0;
+                                
+                                // Total de unidades disponibles
+                                const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnd;
+                                // Unidades en carrito (paquetes convertidos + unidades sueltas)
+                                const totalUnitsInCart = (qtyPkg * unitsPerPkg) + qtyUnd;
+                                // Unidades disponibles después del carrito
                                 const unitsAfterCart = totalUnitsAvailable - totalUnitsInCart;
+                                
+                                return { unitsAfterCart, unitsPerPkg, remainingPkgs: Math.floor(unitsAfterCart / unitsPerPkg), remainingUnd: unitsAfterCart % unitsPerPkg };
+                            };
+ 
+                            // Para productos paquete vendidos por unidad (vista de "Und")
+                            if (sellingMode === 'package' && isUnitSale && originalProduct) {
+                                const { unitsAfterCart, unitsPerPkg, remainingPkgs, remainingUnd } = calculateAvailableStock(
+                                    originalProduct, 
+                                    qtyOtherVariantInCart, // paquetes en carrito
+                                    qtyInCart // unidades en carrito
+                                );
 
                                 if (unitsAfterCart <= 0) {
                                     isOutOfStock = true;
                                     displayStock = 'X';
                                 } else {
-                                    const remainingPkgs = Math.floor(unitsAfterCart / unitsPerPkg);
-                                    const remainingUnd = unitsAfterCart % unitsPerPkg;
-                                    displayStock = `${remainingPkgs} Paq / ${remainingUnd} Und`;
+                                    // Solo mostrar el número total de unidades
+                                    displayStock = `${unitsAfterCart}`;
+                                }
+                            } else if (displayVariant === 'Paq' && sellingMode === 'package') {
+                                // Producto paquete vendido por paquete - solo mostrar número de paquetes
+                                const { unitsAfterCart, unitsPerPkg, remainingPkgs, remainingUnd } = calculateAvailableStock(
+                                    product,
+                                    qtyInCart, // paquetes en carrito
+                                    qtyOtherVariantInCart // unidades en carrito
+                                );
+
+                                if (unitsAfterCart <= 0) {
+                                    isOutOfStock = true;
+                                    displayStock = 'X';
+                                } else {
+                                    // Solo mostrar el número de paquetes
+                                    displayStock = `${remainingPkgs}`;
                                 }
                             } else {
                                 // Stock normal o para venta por peso
@@ -375,22 +491,32 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                             const isVirtualUnit = displayVariant === 'Und';
                             const isWeight = sellingMode === 'weight';
                             
-                            // Calcular stock restante
+                            // Calcular stock restante (para mostrar después de agregar al carrito)
                             let remainingStock = displayStock;
-                            if (qtyInCart > 0 && currentStock > 0) {
-                                const stockNum = parseFloat(displayStock.split(' ')[0]);
-                                const remaining = Math.max(0, currentStock - qtyInCart);
-                                if (displayStock.includes('Paq')) {
-                                    const parts = displayStock.match(/(\d+)\s*Paq\s*\/\s*(\d+)\s*Und/);
-                                    if (parts) {
-                                        const unitsPerPkg = product.units_per_package ?? (product as any).unitsPerPackage ?? 1;
-                                        const totalUnits = parseInt(parts[1]) * unitsPerPkg + parseInt(parts[2]);
-                                        const newTotal = Math.max(0, totalUnits - qtyInCart);
-                                        const newPkgs = Math.floor(newTotal / unitsPerPkg);
-                                        const newUnd = newTotal % unitsPerPkg;
-                                        remainingStock = `${newPkgs} Paq / ${newUnd} Und`;
+                            if (qtyInCart > 0 || qtyOtherVariantInCart > 0) {
+                                if (sellingMode === 'package' && originalProduct) {
+                                    // Para productos paquete, calcular correctamente
+                                    const { unitsAfterCart, unitsPerPkg, remainingPkgs, remainingUnd } = calculateAvailableStock(
+                                        originalProduct,
+                                        isUnitSale ? qtyOtherVariantInCart : qtyInCart,
+                                        isUnitSale ? qtyInCart : qtyOtherVariantInCart
+                                    );
+                                    
+                                    if (unitsAfterCart <= 0) {
+                                        remainingStock = 'X';
+                                    } else if (isUnitSale) {
+                                        // Solo mostrar número de unidades para venta por unidades
+                                        remainingStock = `${unitsAfterCart}`;
+                                    } else {
+                                        // Para venta por paquete, solo mostrar número de paquetes
+                                        remainingStock = `${remainingPkgs}`;
                                     }
+                                } else if (displayStock.includes('Paq')) {
+                                    // Caso fallback para displayStock con paquete
+                                    const remaining = Math.max(0, currentStock - qtyInCart);
+                                    remainingStock = displayStock.replace(/^(\d+)/, String(remaining));
                                 } else {
+                                    const remaining = Math.max(0, currentStock - qtyInCart);
                                     remainingStock = displayStock.replace(/^(\d+)/, String(remaining));
                                 }
                             }
@@ -789,20 +915,27 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             )}
 
             {/* Weight Product Modal */}
-            {isWeightModalOpen && weightProduct && (
+            {isWeightModalOpen && weightProduct && (() => {
+                // Calcular stock disponible considerando el carrito
+                const existingInCart = cart.find(item => item.id === weightProduct.id);
+                const currentQtyInCart = existingInCart?.quantity || 0;
+                const availableStock = Math.max(0, weightProduct.stock - currentQtyInCart);
+                const measurementUnit = weightProduct.measurement_unit ?? (weightProduct as any).measurementUnit ?? 'kg';
+                
+                return (
                 <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
                         <div className="p-4 text-center border-b border-gray-100">
                             <h3 className="font-black text-gray-900 text-xl">{weightProduct.name}</h3>
                             <div className="flex items-center justify-center gap-4 mt-2">
                                 <div className="text-left">
-                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Stock</span>
-                                    <p className="text-lg font-black text-gray-700">{weightProduct.stock}{weightProduct.measurementUnit || 'kg'}</p>
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Stock Disp.</span>
+                                    <p className="text-lg font-black text-gray-700">{availableStock.toFixed(3)} {measurementUnit}</p>
                                 </div>
                                 <div className="w-px h-8 bg-gray-200"></div>
                                 <div className="text-right">
                                     <span className="text-[9px] font-bold text-gray-400 uppercase">Precio</span>
-                                    <p className="text-lg font-black text-purple-600">${weightProduct.price.toFixed(2)}/{weightProduct.measurementUnit || 'kg'}</p>
+                                    <p className="text-lg font-black text-purple-600">${weightProduct.price.toFixed(2)}/{measurementUnit}</p>
                                 </div>
                             </div>
                         </div>
@@ -813,7 +946,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     <div className="text-center">
                                         <div className="flex items-center justify-center gap-2 mb-2">
                                             <span className="text-[10px] font-bold text-purple-500 uppercase">Cantidad</span>
-                                            <span className="text-[10px] font-bold text-purple-300">({weightProduct.measurementUnit || 'kg'})</span>
+                                            <span className="text-[10px] font-bold text-purple-300">({measurementUnit})</span>
                                         </div>
                                         <input
                                             autoFocus
@@ -858,7 +991,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 </button>
                                 <button
                                     onClick={addWeightToCart}
-                                    disabled={!weightQuantity || parseFloat(weightQuantity) <= 0}
+                                    disabled={!weightQuantity || parseFloat(weightQuantity) <= 0 || parseFloat(weightQuantity) > availableStock}
                                     className="flex-1 py-4 bg-purple-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     <Check className="w-4 h-4" /> Agregar
@@ -867,7 +1000,8 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* Credit Sale Modal */}
             {isCustomerModalOpen && (
@@ -926,7 +1060,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                         <>
                                             <div className="flex items-center justify-between mb-2 px-1 mt-3">
                                                 <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Trabajadores</p>
-                                                <p className="text-[10px] font-bold text-orange-600">Por pagar: ${workers.reduce((sum, w) => sum + Math.max(0, w.salary - w.balance), 0).toFixed(2)}</p>
+                                                <p className="text-[10px] font-bold text-orange-600">Por cobrar: ${workers.reduce((sum, w) => sum + w.balance, 0).toFixed(2)}</p>
                                             </div>
                                             <div className="max-h-40 overflow-y-auto space-y-2 mb-4">
                                                 {filteredWorkers.map(w => (
