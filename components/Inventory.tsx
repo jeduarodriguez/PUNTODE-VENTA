@@ -20,10 +20,13 @@ interface InventoryProps {
   onDelete: (id: string) => void;
   onAddCategory: (category: string) => void;
   onDeleteCategory: (category: string) => void;
+  initialProductToEdit?: Product | null;
+  onProductEdited?: () => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, rateHistory, onAdd, onUpdate, onDelete, onAddCategory, onDeleteCategory }) => {
+const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categories, rateHistory, onAdd, onUpdate, onDelete, onAddCategory, onDeleteCategory, initialProductToEdit, onProductEdited }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [hasOpenedModal, setHasOpenedModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Estado para la ventana de configuración de variantes
@@ -55,6 +58,67 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     }
     return () => { document.body.style.overflow = 'auto'; };
   }, [isModalOpen, isCategoryModalOpen, isVariantConfigOpen]);
+
+  useEffect(() => {
+    if (initialProductToEdit && !isModalOpen && !hasOpenedModal) {
+      setHasOpenedModal(true);
+      setIsModalOpen(true);
+      setEditingProduct(initialProductToEdit);
+      const existingCost = getCostPrice(initialProductToEdit);
+      const productPrice = initialProductToEdit.price || 0;
+      const productPricePerUnit = getPricePerUnit(initialProductToEdit) || 0;
+
+      setFormData({
+        ...initialProductToEdit,
+        cost_price: existingCost,
+        selling_mode: getSellingMode(initialProductToEdit),
+        measurement_unit: getMeasurementUnit(initialProductToEdit),
+        units_per_package: getUnitsPerPackage(initialProductToEdit),
+        units_per_bulk: getUnitsPerBulk(initialProductToEdit),
+        price_per_unit: getPricePerUnit(initialProductToEdit),
+        remaining_units: getRemainingUnits(initialProductToEdit)
+      });
+
+      setPriceDisplay(productPrice > 0 ? productPrice.toString() : '');
+      setPricePerUnitDisplay(productPricePerUnit > 0 ? productPricePerUnit.toString() : '');
+      setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
+
+      const savedCostMode = getCostMode(initialProductToEdit);
+      const savedCostBs = getCostBs(initialProductToEdit);
+      const savedCostDate = getCostDate(initialProductToEdit);
+      const bulkQty = getUnitsPerBulk(initialProductToEdit) || 1;
+
+      setCostMode(savedCostMode || 'calculated');
+      setCostBs(savedCostBs > 0 ? savedCostBs : 0);
+
+      if (savedCostMode === 'calculated') {
+        setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
+        setManualCostDisplay('');
+      } else {
+        setCostBsDisplay('');
+        setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
+      }
+
+      if (savedCostDate) {
+        setCostDate(savedCostDate);
+      } else {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        setCostDate(`${year}-${month}-${day}`);
+      }
+      setIsVariantConfigOpen(false);
+      setIsCategoryModalOpen(false);
+      console.log('=== MODAL SHOULD BE OPEN NOW ===');
+    }
+  }, [initialProductToEdit]);
+
+  useEffect(() => {
+    if (!isModalOpen && hasOpenedModal && initialProductToEdit && onProductEdited) {
+      onProductEdited();
+    }
+  }, [isModalOpen, initialProductToEdit, onProductEdited, hasOpenedModal]);
 
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
@@ -335,6 +399,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   };
 
   const openModal = (product?: Product) => {
+    console.log('=== OPEN MODAL CALLED ===', product?.name);
     if (product) {
       setEditingProduct(product);
       const existingCost = getCostPrice(product);
@@ -420,7 +485,10 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     setIsModalOpen(true);
   };
 
-  const closeModal = () => setIsModalOpen(false);
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setHasOpenedModal(false);
+  };
 
   // Manejador para crear nueva categoría
   const handleCreateCategory = () => {

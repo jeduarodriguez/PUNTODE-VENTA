@@ -58,6 +58,10 @@ const App: React.FC = () => {
   const [showIosInstallModal, setShowIosInstallModal] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
+  const [productToEditInInventory, setProductToEditInInventory] = useState<Product | null>(null);
+  const [returnToPurchasePOS, setReturnToPurchasePOS] = useState(false);
+  const [showPurchasePOSFromParent, setShowPurchasePOSFromParent] = useState(false);
+  const [purchaseCart, setPurchaseCart] = useState<any[]>([]);
 
   const handleCartLoaded = useCallback(() => {
     setPendingCart([]);
@@ -788,6 +792,12 @@ const App: React.FC = () => {
   const handleProductUpdate = async (p: Product) => {
     const oldProducts = [...products];
     setProducts(prev => prev.map(prod => prod.id === p.id ? p : prod));
+    
+    // También actualizar en el carrito de compras si existe
+    setPurchaseCart(prev => prev.map(item => 
+      item.product.id === p.id ? { ...item, product: p } : item
+    ));
+
     const success = await saveData(`products/${p.id}`, p);
     if (success) showNotification('Producto actualizado');
     else {
@@ -1106,8 +1116,8 @@ const App: React.FC = () => {
         <div className={`flex-1 overflow-y-auto p-4 md:p-8 ${view === 'pos' ? 'pb-0' : 'pb-24 md:pb-8'}`}>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} businessDebts={businessDebts} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onClearAllTreasury={handleClearAllTreasuryTransactions} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onUpdateProduct={handleProductUpdate} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} />}
-          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
+          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} businessDebts={businessDebts} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onClearAllTreasury={handleClearAllTreasuryTransactions} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onUpdateProduct={handleProductUpdate} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} onGoToInventoryWithProduct={(product) => { console.log('=== NAVIGATING TO INVENTORY WITH PRODUCT ===', product?.name); setProductToEditInInventory(product); setReturnToPurchasePOS(true); setView('inventory'); }} onReturnFromInventory={() => { if (returnToPurchasePOS) { setShowPurchasePOSFromParent(true); } }} shouldShowPurchasePOS={showPurchasePOSFromParent} onClosePurchasePOS={() => { setShowPurchasePOSFromParent(false); setReturnToPurchasePOS(false); setPurchaseCart([]); }} purchaseCart={purchaseCart} onPurchaseCartChange={setPurchaseCart} />}
+          {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} initialProductToEdit={productToEditInInventory} onProductEdited={() => { setProductToEditInInventory(null); if (returnToPurchasePOS) { setReturnToPurchasePOS(false); } setView('reports'); }} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onProcessPayroll={handleProcessPayroll} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}
         </div>

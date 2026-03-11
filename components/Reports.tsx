@@ -31,17 +31,40 @@ interface ReportsProps {
     onClearAllTreasury?: () => void;
     onOpenWorkers?: () => void;
     onGoToInventory?: () => void;
+    onGoToInventoryWithProduct?: (product: Product) => void;
+    onReturnFromInventory?: () => void;
+    shouldShowPurchasePOS?: boolean;
+    onClosePurchasePOS?: () => void;
+    purchaseCart?: any[];
+    onPurchaseCartChange?: (cart: any[]) => void;
 }
 
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory, onGoToInventoryWithProduct, onReturnFromInventory, shouldShowPurchasePOS, onClosePurchasePOS, purchaseCart, onPurchaseCartChange }) => {
     const [editingTransaction, setEditingTransaction] = useState<TreasuryTransaction | null>(null);
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseTypeModal, setShowExpenseTypeModal] = useState(false);
     const [showPurchasePOS, setShowPurchasePOS] = useState(false);
+
+    useEffect(() => {
+        if (onReturnFromInventory) {
+            onReturnFromInventory();
+        }
+    }, [onReturnFromInventory]);
+
+    useEffect(() => {
+        if (shouldShowPurchasePOS) {
+            setShowPurchasePOS(true);
+        }
+    }, [shouldShowPurchasePOS]);
+
+    const handleClosePurchasePOS = () => {
+        setShowPurchasePOS(false);
+        onClosePurchasePOS?.();
+    };
     const [showVentasMenu, setShowVentasMenu] = useState(false);
     const [ventasOption, setVentasOption] = useState<'pos' | 'income' | 'recharge' | null>(null);
     const [incomeAmount, setIncomeAmount] = useState('');
@@ -932,7 +955,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                     onAddCategory={onAddCategory}
                     onDeleteCategory={onDeleteCategory}
                     onClose={() => {
-                        setShowPurchasePOS(false);
+                        handleClosePurchasePOS();
                         setEditingTransaction(null);
                     }}
                     onPurchase={(items, method, businessDebt) => {
@@ -942,11 +965,14 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                             setEditingTransaction(null);
                         }
                         onPurchaseProducts(items, method, businessDebt);
-                        setShowPurchasePOS(false);
+                        handleClosePurchasePOS();
                     }}
                     onAddProduct={onAddProduct}
                     onUpdateProduct={onUpdateProduct}
-                    onOpenInventory={() => { setShowPurchasePOS(false); onGoToInventory?.(); }}
+                    onOpenInventory={() => { onGoToInventory?.(); }}
+                    onOpenInventoryWithProduct={(product) => { onGoToInventoryWithProduct?.(product); }}
+                    initialCart={purchaseCart}
+                    onCartChange={onPurchaseCartChange}
                 />
             )}
 

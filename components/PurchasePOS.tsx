@@ -12,9 +12,11 @@ interface PurchasePOSProps {
     onClose: () => void;
     onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
-    onUpdateProduct?: (product: Product) => void; // Actualiza producto en inventario directamente
+    onUpdateProduct?: (product: Product) => void; 
     onOpenInventory?: () => void;
+    onOpenInventoryWithProduct?: (product: Product) => void;
     initialCart?: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[];
+    onCartChange?: (cart: any[]) => void;
 }
 
 interface CartItem {
@@ -26,23 +28,21 @@ interface CartItem {
     rateAtPurchase?: number;
 }
 
-const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onClose, onPurchase, onAddProduct, onOpenInventory, initialCart }) => {
+const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onClose, onPurchase, onAddProduct, onUpdateProduct, onOpenInventory, onOpenInventoryWithProduct, initialCart, onCartChange }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
 
     // Cargar initialCart si existe (para edición de compra)
     useEffect(() => {
-        if (initialCart && initialCart.length > 0) {
-            setCart(initialCart.map(item => ({
-                product: item.product,
-                quantity: item.quantity,
-                costPrice: item.costPrice,
-                costPriceBs: item.costPriceBs,
-                rateAtPurchase: item.rateAtPurchase
-            })));
+        if (initialCart && initialCart.length > 0 && cart.length === 0) {
+            setCart(initialCart);
         }
-    }, [initialCart]);
+    }, [initialCart, cart.length]);
+
+    useEffect(() => {
+        onCartChange?.(cart);
+    }, [cart, onCartChange]);
     const [tempRate, setTempRate] = useState(exchangeRate.toString());
     const [tenderedAmount, setTenderedAmount] = useState('');
     const [showAddProductModal, setShowAddProductModal] = useState(false);
@@ -859,9 +859,18 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => openEditPriceModal(item)}
+                                                    onClick={() => {
+                                                        console.log('=== CLICK EDIT BUTTON ===', item.product.name);
+                                                        if (onOpenInventoryWithProduct) {
+                                                            console.log('=== CALLING onOpenInventoryWithProduct ===');
+                                                            onOpenInventoryWithProduct(item.product);
+                                                        } else if (onOpenInventory) {
+                                                            openEditPriceModal(item);
+                                                            onOpenInventory();
+                                                        }
+                                                    }}
                                                     className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
-                                                    title="Editar costo"
+                                                    title="Editar en Inventario"
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </button>
@@ -1740,10 +1749,17 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             )}
 
                             <div className="pt-2 flex gap-3 mt-auto">
-                                {onOpenInventory && (
+                                {(onOpenInventoryWithProduct || onOpenInventory) && (
                                     <button
                                         type="button"
-                                        onClick={() => { closeEditPriceModal(); onOpenInventory(); }}
+                                        onClick={() => {
+                                            closeEditPriceModal();
+                                            if (onOpenInventoryWithProduct && editingPriceItem) {
+                                                onOpenInventoryWithProduct(editingPriceItem.product);
+                                            } else if (onOpenInventory) {
+                                                onOpenInventory();
+                                            }
+                                        }}
                                         className="flex-1 py-3 border-2 border-blue-200 bg-blue-50 text-blue-600 rounded-2xl font-bold text-xs hover:bg-blue-100 transition-all active:scale-95 flex items-center justify-center gap-2"
                                     >
                                         <Package className="w-4 h-4" />
