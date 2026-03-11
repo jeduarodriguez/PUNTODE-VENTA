@@ -51,6 +51,8 @@ const App: React.FC = () => {
   const [exchangeRate, setExchangeRate] = useState<number>(1);
   const [rateHistory, setRateHistory] = useState<ExchangeRateRecord[]>([]);
   const [categories, setCategories] = useState<string[]>(['Todas', 'Bebidas', 'Panadería', 'Comida', 'Snacks']);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>(['Ventas', 'Cobros', 'Servicios', 'Intereses', 'Recuperación', 'Otros']);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>(['Inventario', 'Servicios', 'Nómina', 'Alquiler', 'Servicios Públicos', 'Mantenimiento', 'Gastos Varios', 'Otros']);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
 
@@ -164,9 +166,18 @@ const App: React.FC = () => {
       if (data && Array.isArray(data)) setCategories(data);
     });
 
+    const unsubIncomeCategories = syncPath('settings/incomeCategories', (data) => {
+      if (data && Array.isArray(data)) setIncomeCategories(data);
+    });
+
+    const unsubExpenseCategories = syncPath('settings/expenseCategories', (data) => {
+      if (data && Array.isArray(data)) setExpenseCategories(data);
+    });
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
       unsubProducts(); unsubCustomers(); unsubWorkers(); unsubBusinessDebts(); unsubSales(); unsubTreasury(); unsubRate(); unsubHistory(); unsubCategories();
+      unsubIncomeCategories(); unsubExpenseCategories();
     };
   }, []);
 
@@ -981,18 +992,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCategory = async (cat: string) => {
-    if (!categories.includes(cat)) {
-      const newCats = [...categories, cat];
-      setCategories(newCats);
-      await saveData('settings/categories', newCats);
-    }
+  const handleAddCategory = (cat: string) => {
+    const newCats = [...categories, cat];
+    setCategories(newCats);
+    saveData('settings/categories', newCats);
   };
 
-  const handleDeleteCategory = async (cat: string) => {
+  const handleDeleteCategory = (cat: string) => {
     const newCats = categories.filter(c => c !== cat);
     setCategories(newCats);
-    await saveData('settings/categories', newCats);
+    saveData('settings/categories', newCats);
+  };
+
+  const handleAddIncomeCategory = (cat: string) => {
+    const newCats = [...incomeCategories, cat];
+    setIncomeCategories(newCats);
+    saveData('settings/incomeCategories', newCats);
+  };
+
+  const handleDeleteIncomeCategory = (cat: string) => {
+    const newCats = incomeCategories.filter(c => c !== cat);
+    setIncomeCategories(newCats);
+    saveData('settings/incomeCategories', newCats);
+  };
+
+  const handleAddExpenseCategory = (cat: string) => {
+    const newCats = [...expenseCategories, cat];
+    setExpenseCategories(newCats);
+    saveData('settings/expenseCategories', newCats);
+  };
+
+  const handleDeleteExpenseCategory = (cat: string) => {
+    const newCats = expenseCategories.filter(c => c !== cat);
+    setExpenseCategories(newCats);
+    saveData('settings/expenseCategories', newCats);
   };
 
   const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
@@ -1116,7 +1149,48 @@ const App: React.FC = () => {
         <div className={`flex-1 overflow-y-auto p-4 md:p-8 ${view === 'pos' ? 'pb-0' : 'pb-24 md:pb-8'}`}>
 
           {view === 'dashboard' && <Dashboard sales={sales} products={products} customers={customers} exchangeRate={exchangeRate} />}
-          {view === 'reports' && <VentasCaja sales={sales} products={products} customers={customers} workers={workers} businessDebts={businessDebts} exchangeRate={exchangeRate} rateHistory={rateHistory} treasuryTransactions={treasuryTransactions} categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} onOpenPOS={() => setView('pos')} onVoidSale={handleVoidSale} onEditSale={handleEditSale} onAddTreasuryTransaction={handleAddTreasuryTransaction} onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} onClearAllTreasury={handleClearAllTreasuryTransactions} onOpenRateModal={() => setIsRateModalOpen(true)} onPurchaseProducts={handlePurchaseProducts} onAddProduct={handleProductAdd} onUpdateProduct={handleProductUpdate} onDebtPayment={handleDebtPayment} onWorkerDebtPayment={handleWorkerDebtPayment} onOpenWorkers={() => setView('customers')} onGoToInventory={() => setView('inventory')} onGoToInventoryWithProduct={(product) => { console.log('=== NAVIGATING TO INVENTORY WITH PRODUCT ===', product?.name); setProductToEditInInventory(product); setReturnToPurchasePOS(true); setView('inventory'); }} onReturnFromInventory={() => { if (returnToPurchasePOS) { setShowPurchasePOSFromParent(true); } }} shouldShowPurchasePOS={showPurchasePOSFromParent} onClosePurchasePOS={() => { setShowPurchasePOSFromParent(false); setReturnToPurchasePOS(false); setPurchaseCart([]); }} purchaseCart={purchaseCart} onPurchaseCartChange={setPurchaseCart} />}
+          {view === 'reports' && (
+            <VentasCaja 
+              sales={sales} 
+              products={products} 
+              customers={customers} 
+              workers={workers} 
+              businessDebts={businessDebts} 
+              exchangeRate={exchangeRate} 
+              rateHistory={rateHistory} 
+              treasuryTransactions={treasuryTransactions} 
+              categories={categories} 
+              incomeCategories={incomeCategories}
+              expenseCategories={expenseCategories}
+              onAddCategory={handleAddCategory} 
+              onDeleteCategory={handleDeleteCategory} 
+              onAddIncomeCategory={handleAddIncomeCategory}
+              onDeleteIncomeCategory={handleDeleteIncomeCategory}
+              onAddExpenseCategory={handleAddExpenseCategory}
+              onDeleteExpenseCategory={handleDeleteExpenseCategory}
+              onOpenPOS={() => setView('pos')} 
+              onVoidSale={handleVoidSale} 
+              onEditSale={handleEditSale} 
+              onAddTreasuryTransaction={handleAddTreasuryTransaction} 
+              onUpdateTreasuryTransaction={handleUpdateTreasuryTransaction} 
+              onDeleteTreasuryTransaction={handleDeleteTreasuryTransaction} 
+              onClearAllTreasury={handleClearAllTreasuryTransactions} 
+              onOpenRateModal={() => setIsRateModalOpen(true)} 
+              onPurchaseProducts={handlePurchaseProducts} 
+              onAddProduct={handleProductAdd} 
+              onUpdateProduct={handleProductUpdate} 
+              onDebtPayment={handleDebtPayment} 
+              onWorkerDebtPayment={handleWorkerDebtPayment} 
+              onOpenWorkers={() => setView('customers')} 
+              onGoToInventory={() => setView('inventory')} 
+              onGoToInventoryWithProduct={(product) => { console.log('=== NAVIGATING TO INVENTORY WITH PRODUCT ===', product?.name); setProductToEditInInventory(product); setReturnToPurchasePOS(true); setView('inventory'); }} 
+              onReturnFromInventory={() => { if (returnToPurchasePOS) { setShowPurchasePOSFromParent(true); } }} 
+              shouldShowPurchasePOS={showPurchasePOSFromParent} 
+              onClosePurchasePOS={() => { setShowPurchasePOSFromParent(false); setReturnToPurchasePOS(false); setPurchaseCart([]); }} 
+              purchaseCart={purchaseCart} 
+              onPurchaseCartChange={setPurchaseCart} 
+            />
+          )}
           {view === 'inventory' && <Inventory products={products} exchangeRate={exchangeRate} categories={categories} rateHistory={rateHistory} onAdd={handleProductAdd} onUpdate={handleProductUpdate} onDelete={handleProductDelete} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} initialProductToEdit={productToEditInInventory} onProductEdited={() => { setProductToEditInInventory(null); if (returnToPurchasePOS) { setReturnToPurchasePOS(false); } setView('reports'); }} />}
           {view === 'customers' && <Customers customers={customers} workers={workers} sales={sales} exchangeRate={exchangeRate} businessDebts={businessDebts} rateHistory={rateHistory} onAdd={handleCustomerAdd} onUpdate={handleCustomerUpdate} onDelete={handleCustomerDelete} onDebtPayment={handleDebtPayment} onAddWorker={handleWorkerAdd} onUpdateWorker={handleWorkerUpdate} onDeleteWorker={handleWorkerDelete} onWorkerDebtPayment={handleWorkerDebtPayment} onProcessPayroll={handleProcessPayroll} onAddBusinessDebt={handleAddBusinessDebt} onPayBusinessDebt={handlePayBusinessDebt} onUpdateBusinessDebt={handleUpdateBusinessDebt} onDeleteBusinessDebt={handleDeleteBusinessDebt} />}
           {view === 'settings' && <div className="p-4 bg-white rounded-3xl shadow-sm border border-gray-100">Panel de Configuración Integrado</div>}

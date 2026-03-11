@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sale, Customer, TreasuryTransaction, Product, ExchangeRateRecord, BusinessDebt, Worker } from '../types';
-import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List, Clock } from '../constants';
+import { Wallet, Banknote, Smartphone, CreditCard, Search, Calendar, ChevronDown, ShoppingCart, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Trash2, Edit, X, Users, Banknote as BanknoteIcon, LayoutGrid, List, Clock, Plus } from '../constants';
 import PurchasePOS from './PurchasePOS';
 import { syncPath } from '../services/supabaseService';
 
@@ -16,8 +16,14 @@ interface ReportsProps {
     treasuryTransactions?: TreasuryTransaction[];
     rateHistory?: ExchangeRateRecord[];
     categories?: string[];
+    incomeCategories?: string[];
+    expenseCategories?: string[];
     onAddCategory?: (category: string) => void;
     onDeleteCategory?: (category: string) => void;
+    onAddIncomeCategory?: (category: string) => void;
+    onDeleteIncomeCategory?: (category: string) => void;
+    onAddExpenseCategory?: (category: string) => void;
+    onDeleteExpenseCategory?: (category: string) => void;
     onOpenPOS: () => void;
     onVoidSale: (saleId: string) => void;
     onEditSale: (sale: Sale) => void;
@@ -42,7 +48,44 @@ interface ReportsProps {
 type DateFilter = 'today' | 'week' | 'month' | 'custom';
 type PaymentMethod = 'Cash' | 'Card' | 'PagoMovil';
 
-const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = [], workers = [], businessDebts = [], exchangeRate, treasuryTransactions = [], rateHistory = [], categories = [], onAddCategory, onDeleteCategory, onOpenPOS, onVoidSale, onEditSale, onAddTreasuryTransaction, onOpenRateModal, onPurchaseProducts, onAddProduct, onUpdateProduct, onUpdateTreasuryTransaction, onDeleteTreasuryTransaction, onClearAllTreasury, onOpenWorkers, onGoToInventory, onGoToInventoryWithProduct, onReturnFromInventory, shouldShowPurchasePOS, onClosePurchasePOS, purchaseCart, onPurchaseCartChange }) => {
+const VentasCaja: React.FC<ReportsProps> = ({ 
+    sales, 
+    products = [], 
+    customers = [], 
+    workers = [], 
+    businessDebts = [], 
+    exchangeRate, 
+    treasuryTransactions = [], 
+    rateHistory = [], 
+    categories = [], 
+    incomeCategories = [],
+    expenseCategories = [],
+    onAddCategory, 
+    onDeleteCategory, 
+    onAddIncomeCategory,
+    onDeleteIncomeCategory,
+    onAddExpenseCategory,
+    onDeleteExpenseCategory,
+    onOpenPOS, 
+    onVoidSale, 
+    onEditSale, 
+    onAddTreasuryTransaction, 
+    onOpenRateModal, 
+    onPurchaseProducts, 
+    onAddProduct, 
+    onUpdateProduct, 
+    onUpdateTreasuryTransaction, 
+    onDeleteTreasuryTransaction, 
+    onClearAllTreasury, 
+    onOpenWorkers, 
+    onGoToInventory, 
+    onGoToInventoryWithProduct, 
+    onReturnFromInventory, 
+    shouldShowPurchasePOS, 
+    onClosePurchasePOS, 
+    purchaseCart, 
+    onPurchaseCartChange 
+}) => {
     const [editingTransaction, setEditingTransaction] = useState<TreasuryTransaction | null>(null);
     const [activeDetail, setActiveDetail] = useState<PaymentMethod | null>(null);
     const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -98,6 +141,81 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
     const [showSearchInput, setShowSearchInput] = useState(false);
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
     const [selectedTransaction, setSelectedTransaction] = useState<TreasuryTransaction | null>(null);
+
+    // --- ESTADOS PARA TESORERÍA UNIFICADA ---
+    const [isTreasuryModalOpen, setIsTreasuryModalOpen] = useState(false);
+    const [treasuryType, setTreasuryType] = useState<'income' | 'expense'>('income');
+    const [treasuryAmount, setTreasuryAmount] = useState('');
+    const [treasuryDescription, setTreasuryDescription] = useState('');
+    const [treasuryCategory, setTreasuryCategory] = useState<string>('Otros');
+    const [treasuryMethod, setTreasuryMethod] = useState<TreasuryTransaction['method']>('Cash');
+    const [treasuryCurrency, setTreasuryCurrency] = useState<'Bs' | '$'>('$');
+    const [treasuryDate, setTreasuryDate] = useState(new Date().toISOString().split('T')[0]);
+    const [showAddCategoryInput, setShowAddCategoryInput] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+
+    const getRateForDate = (dateStr: string) => {
+        if (!dateStr) return exchangeRate;
+        const targetDate = new Date(dateStr + 'T12:00:00').getTime();
+        const sortedHistory = [...rateHistory].sort((a, b) => b.timestamp - a.timestamp);
+        const match = sortedHistory.find(r => {
+            const rDate = new Date(r.timestamp);
+            return new Date(rDate.getFullYear(), rDate.getMonth(), rDate.getDate()).getTime() <= targetDate;
+        });
+        return match ? match.rate : (sortedHistory[sortedHistory.length - 1]?.rate || exchangeRate);
+    };
+
+    const currentRateForSelectedDate = getRateForDate(treasuryDate);
+
+    const handleOpenTreasury = (type: 'income' | 'expense') => {
+        setTreasuryType(type);
+        setTreasuryAmount('');
+        setTreasuryDescription('');
+        setTreasuryCategory('Otros');
+        setTreasuryMethod('Cash');
+        setTreasuryCurrency('$');
+        setTreasuryDate(new Date().toISOString().split('T')[0]);
+        setIsTreasuryModalOpen(true);
+        setShowVentasMenu(false);
+        setShowExpenseTypeModal(false);
+    };
+
+    const handleSaveTreasuryAction = () => {
+        const amount = parseFloat(treasuryAmount);
+        if (!amount || amount <= 0) return;
+
+        const timestamp = new Date(treasuryDate + 'T12:00:00').getTime();
+        const rate = getRateForDate(treasuryDate);
+        
+        const amountUsd = treasuryCurrency === '$' ? amount : amount / rate;
+        const amountBs = treasuryCurrency === 'Bs' ? amount : amount * rate;
+
+        const transaction: TreasuryTransaction = {
+            id: `${treasuryType}_${Date.now()}`,
+            timestamp,
+            type: treasuryType,
+            category: treasuryCategory,
+            description: treasuryDescription || `${treasuryType === 'income' ? 'Ingreso' : 'Egreso'}: ${treasuryCategory}`,
+            amount: amountUsd,
+            amountBs: amountBs,
+            exchangeRate: rate,
+            method: treasuryMethod
+        };
+
+        onAddTreasuryTransaction(transaction);
+        setIsTreasuryModalOpen(false);
+    };
+
+    const handleAddReportCategory = () => {
+        if (!newCategoryName.trim()) return;
+        if (treasuryType === 'income') {
+            onAddIncomeCategory?.(newCategoryName);
+        } else {
+            onAddExpenseCategory?.(newCategoryName);
+        }
+        setNewCategoryName('');
+        setShowAddCategoryInput(false);
+    };
     const [quickNavOffset, setQuickNavOffset] = useState(0);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editDate, setEditDate] = useState<string>('');
@@ -359,16 +477,17 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
         }
         
         const now = Date.now();
-        const amountInBs = expenseMethodLabel === '$' ? amount * exchangeRate : amount;
+        const currentRate = exchangeRate;
+        const amountInBs = expenseMethodLabel === '$' ? amount * currentRate : amount;
         const transaction: TreasuryTransaction = {
             id: `expense_${now}`,
             timestamp: now,
             type: 'expense',
             category: expenseCategory as any,
             description: expenseDescription || `Gasto: ${expenseCategory}`,
-            amount: expenseMethodLabel === '$' ? amount : amount / exchangeRate,
+            amount: expenseMethodLabel === '$' ? amount : amount / currentRate,
             amountBs: amountInBs,
-            exchangeRate: exchangeRate,
+            exchangeRate: currentRate,
             method: expenseMethod
         };
         onAddTreasuryTransaction(transaction);
@@ -428,15 +547,15 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
         const newRate = parseFloat(editTransactionRate.replace(',', '.'));
         if (isNaN(newAmount) || newAmount <= 0 || isNaN(newRate) || newRate <= 0) return;
         
-        const newTimestamp = new Date(editTransactionDate).getTime();
+        const newTimestamp = new Date(editTransactionDate + 'T12:00:00').getTime();
         
-        // Crear transacción con los valores editados
+        // Crear transacción con los valores editados - preservar tipo original
         const updatedTransaction: TreasuryTransaction = {
             ...originalTransaction,
             timestamp: newTimestamp,
             amount: newAmount,
             exchangeRate: newRate,
-            amountBs: newAmount * newRate,
+            amountBs: newAmount * newRate, // Recalcular amountBs correctamente
             description: editTransactionDescription
         };
         
@@ -1259,7 +1378,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
                         <div className="text-center mb-4">
-                            <h3 className="text-xl font-black text-gray-900">Tipo de Gasto</h3>
+                            <h3 className="text-xl font-black text-gray-900">Egresos</h3>
                         </div>
                         <div className="space-y-3">
                             <button 
@@ -1274,7 +1393,7 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 className="w-full bg-orange-100 hover:bg-orange-200 text-orange-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
                             >
                                 <Wallet className="w-5 h-5" />
-                                Gasto por Categoría
+                                Egresos
                             </button>
                             <button 
                                 onClick={() => { setShowExpenseTypeModal(false); onOpenWorkers?.(); }} 
@@ -1292,6 +1411,117 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                 Cancelar
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Egresos - Pantalla completa en móvil */}
+            {showExpenseModal && (
+                <div className="fixed inset-0 bg-white z-[110] flex flex-col">
+                    {/* Header fijo */}
+                    <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
+                        <h3 className="text-xl font-black text-orange-600">Nuevo Egreso</h3>
+                        <button onClick={() => setShowExpenseModal(false)} className="p-2 bg-gray-100 rounded-full text-gray-400">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {/* Contenido scrolleable */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="space-y-5">
+                            {/* Monto con Toggle de Moneda */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
+                                <div className="relative mt-2">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-2xl text-orange-300">{expenseMethodLabel}</span>
+                                    <input 
+                                        autoFocus 
+                                        type="number" 
+                                        placeholder="0.00" 
+                                        className="w-full pl-14 pr-28 py-5 bg-gray-50 border-2 border-transparent focus:border-orange-500 rounded-2xl text-center font-black text-3xl text-orange-600 outline-none" 
+                                        value={expenseAmount} 
+                                        onChange={(e) => setExpenseAmount(e.target.value)} 
+                                    />
+                                    <button 
+                                        onClick={() => setExpenseMethodLabel(prev => prev === '$' ? 'Bs' : '$')} 
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-orange-500 bg-orange-50 px-4 py-2 rounded-xl shadow-sm"
+                                    >
+                                        {expenseMethodLabel === '$' ? '$→Bs' : 'Bs→$'}
+                                    </button>
+                                </div>
+                                {expenseMethodLabel === '$' && (
+                                    <p className="text-xs font-bold text-gray-400 mt-2 text-right">
+                                        = Bs {(parseFloat(expenseAmount || '0') * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} (Tasa: {exchangeRate})
+                                    </p>
+                                )}
+                                {expenseMethodLabel === 'Bs' && (
+                                    <p className="text-xs font-bold text-gray-400 mt-2 text-right">
+                                        = $ {(parseFloat(expenseAmount || '0') / exchangeRate).toFixed(2)} (Tasa: {exchangeRate})
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Método de Pago */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Pagado con</label>
+                                <select 
+                                    value={expenseMethod} 
+                                    onChange={e => setExpenseMethod(e.target.value as any)} 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-orange-300 mt-2"
+                                >
+                                    <option value="Cash">💵 Efectivo</option>
+                                    <option value="Transfer">🏦 Transferencia</option>
+                                    <option value="PagoMovil">📱 Pago Móvil</option>
+                                    <option value="Card">💳 Punto de Venta</option>
+                                </select>
+                            </div>
+
+                            {/* Fecha */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                <input 
+                                    type="date" 
+                                    value={new Date().toISOString().split('T')[0]} 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                />
+                            </div>
+
+                            {/* Categoría */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                                <select 
+                                    value={expenseCategory} 
+                                    onChange={e => setExpenseCategory(e.target.value)}
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-orange-300 mt-2"
+                                >
+                                    {expenseCategories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Descripción */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Detalles del gasto..." 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                    value={expenseDescription}
+                                    onChange={(e) => setExpenseDescription(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer fijo */}
+                    <div className="p-4 border-t border-gray-100 bg-white">
+                        <button 
+                            onClick={handleAddExpense} 
+                            className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black text-lg"
+                        >
+                            Guardar Egreso
+                        </button>
                     </div>
                 </div>
             )}
@@ -1377,40 +1607,189 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                 </div>
             )}
 
-            {showExpenseModal && (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
-                        <div className="text-center mb-4">
-                            <h3 className="text-xl font-black text-gray-900">Gasto</h3>
-                        </div>
-                        <div className="space-y-3">
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-orange-300">{expenseMethodLabel}</span>
-                                <input autoFocus type="number" placeholder="0.00" className="w-full pl-10 pr-20 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold text-lg" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} />
-                                <button onClick={() => setExpenseMethodLabel(prev => prev === '$' ? 'Bs' : '$')} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded">{expenseMethodLabel === '$' ? '$→Bs' : 'Bs→$'}</button>
+            {isTreasuryModalOpen && (
+                <div className="fixed inset-0 bg-white z-[100] flex flex-col">
+                    {/* Header fijo */}
+                    <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
+                        <h3 className={`text-xl font-black ${treasuryType === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                            {treasuryType === 'income' ? 'Ingreso' : 'Egreso'}
+                        </h3>
+                        <button onClick={() => setIsTreasuryModalOpen(false)} className="p-2 bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {/* Contenido scrolleable */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="space-y-5">
+                            {/* Monto con Toggle de Moneda */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
+                                <div className="relative mt-2">
+                                    <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-black text-2xl ${treasuryType === 'income' ? 'text-blue-300' : 'text-orange-300'}`}>
+                                        {treasuryCurrency}
+                                    </span>
+                                    <input 
+                                        autoFocus 
+                                        type="number" 
+                                        placeholder="0.00" 
+                                        className={`w-full pl-14 pr-28 py-5 bg-gray-50 border-2 border-transparent focus:border-${treasuryType === 'income' ? 'blue' : 'orange'}-500 rounded-2xl text-center font-black text-3xl ${treasuryType === 'income' ? 'text-blue-600' : 'text-orange-600'} outline-none`}
+                                        value={treasuryAmount} 
+                                        onChange={(e) => setTreasuryAmount(e.target.value)} 
+                                    />
+                                    <button 
+                                        onClick={() => setTreasuryCurrency(prev => prev === '$' ? 'Bs' : '$')} 
+                                        className={`absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold ${treasuryType === 'income' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'} px-4 py-2 rounded-xl shadow-sm active:scale-90`}
+                                    >
+                                        {treasuryCurrency === '$' ? '$→Bs' : 'Bs→$'}
+                                    </button>
+                                </div>
+                                <div className="flex justify-between px-2 mt-2">
+                                    <p className="text-[10px] font-bold text-gray-400">
+                                        Ref: {treasuryCurrency === '$' 
+                                            ? `Bs ${(parseFloat(treasuryAmount || '0') * currentRateForSelectedDate).toLocaleString('es-CO', { maximumFractionDigits: 0 })}` 
+                                            : `$ ${(parseFloat(treasuryAmount || '0') / currentRateForSelectedDate).toFixed(2)}`}
+                                    </p>
+                                    <p className="text-[10px] font-black text-indigo-400">Tasa: {currentRateForSelectedDate.toFixed(2)}</p>
+                                </div>
                             </div>
-                            <input type="text" placeholder="Descripcion" className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm" value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} />
-                            <div className="grid grid-cols-3 gap-2">
-                                {(categories.length > 0 ? categories : ['Inventario', 'Servicios', 'Otros']).map(cat => (
-                                    <button key={cat} onClick={() => setExpenseCategory(cat)} className={`py-2 text-xs font-bold rounded-lg ${expenseCategory === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'}`}>{cat}</button>
-                                ))}
+
+                            {/* Fecha y Método en columna para móvil */}
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fecha</label>
+                                    <input 
+                                        type="date" 
+                                        value={treasuryDate} 
+                                        onChange={e => setTreasuryDate(e.target.value)} 
+                                        className="w-full p-3 sm:p-4 bg-gray-50 rounded-xl sm:rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-indigo-300 transition-all mt-1" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                        {treasuryType === 'income' ? 'Recibido por' : 'Pagado con'}
+                                    </label>
+                                    <select 
+                                        value={treasuryMethod} 
+                                        onChange={e => setTreasuryMethod(e.target.value as any)} 
+                                        className="w-full p-3 sm:p-4 bg-gray-50 rounded-xl sm:rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-indigo-300 transition-all mt-1 appearance-none"
+                                    >
+                                        <option value="Cash">💵 Efectivo</option>
+                                        <option value="Transfer">🏦 Transferencia</option>
+                                        <option value="PagoMovil">📱 Pago Móvil</option>
+                                        <option value="Card">💳 Punto de Venta</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Categoría - Select desplegable para móvil */}
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Categoría</label>
+                                    <button 
+                                        onClick={() => setShowAddCategoryInput(!showAddCategoryInput)}
+                                        className="text-[10px] font-black text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        {showAddCategoryInput ? 'Cerrar' : '+ Nueva'}
+                                    </button>
+                                </div>
+                                
+                                {showAddCategoryInput ? (
+                                    <div className="flex gap-2 animate-fade-in mt-1">
+                                        <input 
+                                            autoFocus
+                                            type="text" 
+                                            placeholder="Nueva categoría..." 
+                                            className="flex-1 p-3 bg-gray-50 rounded-xl text-xs font-bold border-2 border-indigo-100"
+                                            value={newCategoryName}
+                                            onChange={e => setNewCategoryName(e.target.value)}
+                                            onKeyPress={e => e.key === 'Enter' && handleAddReportCategory()}
+                                        />
+                                        <button onClick={handleAddReportCategory} className="p-3 bg-indigo-600 text-white rounded-xl shadow-md"><Plus className="w-4 h-4" /></button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Select nativo para móvil */}
+                                        <div className="relative mt-1">
+                                            <select 
+                                                value={treasuryCategory} 
+                                                onChange={e => setTreasuryCategory(e.target.value)}
+                                                className="w-full p-4 bg-gray-50 rounded-2xl text-sm font-bold outline-none border-2 border-transparent focus:border-indigo-300 transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="" disabled>Seleccionar categoría</option>
+                                                {(treasuryType === 'income' ? incomeCategories : expenseCategories).map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                                        </div>
+                                        
+                                        {/* Botones de categorías frecuentes para acceso rápido */}
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            {(treasuryType === 'income' ? incomeCategories : expenseCategories).slice(0, 4).map(cat => (
+                                                <button 
+                                                    key={cat}
+                                                    onClick={() => setTreasuryCategory(cat)} 
+                                                    className={`px-3 py-1.5 text-[9px] font-bold rounded-lg transition-all border ${
+                                                        treasuryCategory === cat 
+                                                            ? (treasuryType === 'income' ? 'bg-blue-600 text-white border-blue-600' : 'bg-orange-600 text-white border-orange-600') 
+                                                            : 'bg-gray-50 text-gray-500 border-gray-100'
+                                                    }`}
+                                                >
+                                                    {cat}
+                                                </button>
+                                            ))}
+                                            {(treasuryType === 'income' ? incomeCategories : expenseCategories).length > 4 && (
+                                                <span className="text-[9px] text-gray-400 self-center">+ más</span>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Descripción */}
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nota / Descripción</label>
+                                <textarea 
+                                    placeholder="Detalles adicionales..." 
+                                    className="w-full p-4 bg-gray-50 rounded-2xl text-xs font-bold outline-none border-2 border-transparent focus:border-indigo-300 transition-all mt-1 h-20 resize-none"
+                                    value={treasuryDescription}
+                                    onChange={e => setTreasuryDescription(e.target.value)}
+                                />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 mt-4">
-                            <button onClick={() => setShowExpenseModal(false)} className="py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm">Cancelar</button>
-                            <button onClick={handleAddExpense} className="py-3 bg-orange-500 text-white rounded-xl font-bold text-sm">Guardar</button>
-                        </div>
+                    </div>
+
+                    {/* Footer fijo con botón guardar */}
+                    <div className="p-4 border-t border-gray-100 bg-white">
+                        <button 
+                            onClick={handleSaveTreasuryAction} 
+                            className={`w-full py-5 rounded-2xl font-black text-lg text-white ${
+                                treasuryType === 'income' ? 'bg-blue-600' : 'bg-orange-600'
+                            }`}
+                        >
+                            Guardar {treasuryType === 'income' ? 'Ingreso' : 'Egreso'}
+                        </button>
                     </div>
                 </div>
             )}
 
-            {/* Botones Flotantes */}
-            <div className="fixed bottom-20 left-4 right-4 md:bottom-6 md:left-auto md:right-6 z-50 flex justify-center gap-4">
-                <button onClick={() => setShowVentasMenu(true)} className="bg-emerald-600 text-white px-8 py-3 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+            {/* Botones Flotantes - Optimizado para móvil */}
+            <div 
+                className="fixed bottom-24 left-2 right-2 md:bottom-6 md:left-auto md:right-6 z-[60] flex justify-center gap-2 md:gap-4"
+                style={{ pointerEvents: 'auto' }}
+            >
+                <button 
+                    onClick={() => setShowVentasMenu(true)} 
+                    className="bg-emerald-600 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
+                >
                     <ShoppingCart className="w-5 h-5" />
                     <span className="text-sm font-black">Ventas</span>
                 </button>
-                <button onClick={() => setShowExpenseTypeModal(true)} className="bg-gray-900 text-white px-8 py-3 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                <button 
+                    onClick={() => setShowExpenseTypeModal(true)} 
+                    className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
+                >
                     <Wallet className="w-5 h-5" />
                     <span className="text-sm font-black">Gastos</span>
                 </button>
@@ -1435,9 +1814,9 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                     <ShoppingCart className="w-6 h-6" />
                                     Ventas del Inventario
                                 </button>
-                                <button onClick={() => setVentasOption('income')} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                <button onClick={() => handleOpenTreasury('income')} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
                                     <TrendingUp className="w-6 h-6" />
-                                    Otros Ingresos
+                                    Ingresos
                                 </button>
                                 <button onClick={() => setVentasOption('recharge')} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
                                     <Smartphone className="w-6 h-6" />
@@ -1451,56 +1830,107 @@ const VentasCaja: React.FC<ReportsProps> = ({ sales, products = [], customers = 
                                     <span className="text-sm font-bold">Volver</span>
                                 </button>
                                 
-                                {/* Formulario Otros Ingresos */}
+                                {/* Formulario Ingresos */}
                                 {ventasOption === 'income' && (
                                     <div className="space-y-4">
-                                        <h4 className="text-lg font-black text-gray-900">Otros Ingresos</h4>
+                                        <h4 className="text-lg font-black text-gray-900">Ingresos</h4>
                                         <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto (Bs)</label>
-                                            <input type="number" value={incomeAmount} onChange={e => setIncomeAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xl font-black text-blue-600 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
+                                            <div className="relative mt-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-blue-300">{expenseMethodLabel}</span>
+                                                <input 
+                                                    autoFocus 
+                                                    type="number" 
+                                                    placeholder="0.00" 
+                                                    className="w-full pl-10 pr-20 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold text-lg text-blue-600 outline-none focus:ring-2 focus:ring-blue-500" 
+                                                    value={incomeAmount} 
+                                                    onChange={(e) => setIncomeAmount(e.target.value)} 
+                                                />
+                                                <button 
+                                                    onClick={() => setExpenseMethodLabel(prev => prev === '$' ? 'Bs' : '$')} 
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded shadow-sm transition-all active:scale-90"
+                                                >
+                                                    {expenseMethodLabel === '$' ? '$→Bs' : 'Bs→$'}
+                                                </button>
+                                            </div>
+                                            {expenseMethodLabel === '$' && (
+                                                <p className="text-[10px] font-bold text-gray-400 mt-1 text-right">
+                                                    = Bs {(parseFloat(incomeAmount || '0') * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} (Tasa: {exchangeRate})
+                                                </p>
+                                            )}
+                                            {expenseMethodLabel === 'Bs' && (
+                                                <p className="text-[10px] font-bold text-gray-400 mt-1 text-right">
+                                                    = $ {(parseFloat(incomeAmount || '0') / exchangeRate).toFixed(2)} (Tasa: {exchangeRate})
+                                                </p>
+                                            )}
                                         </div>
                                         <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Tasa</label>
-                                            <input type="number" value={incomeRate} onChange={e => setIncomeRate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder={exchangeRate.toString()} />
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Método de Cobro</label>
+                                            <div className="flex gap-2 mt-1">
+                                                {[
+                                                    { id: 'Cash', label: 'Efectivo', color: 'emerald' },
+                                                    { id: 'Transfer', label: 'Transf.', color: 'blue' },
+                                                    { id: 'PagoMovil', label: 'P.Móvil', color: 'purple' }
+                                                ].map((m) => (
+                                                    <button
+                                                        key={m.id}
+                                                        onClick={() => setExpenseMethod(m.id as any)}
+                                                        className={`flex-1 py-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all ${
+                                                            expenseMethod === m.id
+                                                                ? `bg-${m.color}-600 text-white shadow-lg`
+                                                                : 'bg-gray-100 text-gray-500'
+                                                        }`}
+                                                    >
+                                                        {m.label}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
-                                            <input type="date" value={incomeDate} onChange={e => setIncomeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" />
+                                            <input type="date" value={incomeDate} onChange={e => setIncomeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none mt-1" />
                                         </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
-                                            <select value={incomeCategory} onChange={e => setIncomeCategory(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none">
-                                                <option value="Otros">Otros</option>
-                                                <option value="Servicios">Servicios</option>
-                                                <option value="Intereses">Intereses</option>
-                                                <option value="Dividendos">Dividendos</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
-                                            <input type="text" value={incomeDescription} onChange={e => setIncomeDescription(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" placeholder="Descripción opcional" />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                                                <select value={incomeCategory} onChange={e => setIncomeCategory(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xs font-bold outline-none mt-1">
+                                                    <option value="Otros">Otros</option>
+                                                    <option value="Ventas">Ventas</option>
+                                                    <option value="Servicios">Servicios</option>
+                                                    <option value="Intereses">Intereses</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                                <input type="text" value={incomeDescription} onChange={e => setIncomeDescription(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xs font-bold outline-none mt-1" placeholder="..." />
+                                            </div>
                                         </div>
                                         <button onClick={() => {
                                             const amount = parseFloat(incomeAmount);
                                             if (amount > 0) {
                                                 const timestamp = new Date(incomeDate + 'T12:00:00').getTime();
+                                                const rateForDate = getRateForDate(incomeDate);
+                                                const amountInUsd = expenseMethodLabel === '$' ? amount : amount / rateForDate;
+                                                const amountInBs = expenseMethodLabel === 'Bs' ? amount : amount * rateForDate;
                                                 onAddTreasuryTransaction({
                                                     id: `inc_${Date.now()}`,
                                                     type: 'income',
                                                     category: incomeCategory,
                                                     description: incomeDescription || incomeCategory,
-                                                    amount: amount / parseFloat(incomeRate || exchangeRate.toString()),
-                                                    amountBs: amount,
-                                                    method: 'Cash',
-                                                    exchangeRate: parseFloat(incomeRate || exchangeRate.toString()),
+                                                    amount: amountInUsd,
+                                                    amountBs: amountInBs,
+                                                    method: expenseMethod,
+                                                    exchangeRate: rateForDate,
                                                     timestamp
                                                 });
                                                 setIncomeAmount('');
                                                 setIncomeDescription('');
-                                                setVentasOption(null);
-                                                setShowVentasMenu(false);
+                                                 setVentasOption(null);
+                                                 setShowVentasMenu(false);
+                                                 setExpenseMethod('Cash');
+                                                 setExpenseMethodLabel('$');
                                             }
-                                        }} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">Guardar</button>
+                                        }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all mt-4">Guardar</button>
                                     </div>
                                 )}
 
