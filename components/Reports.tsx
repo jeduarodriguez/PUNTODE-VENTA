@@ -1117,8 +1117,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
                 const info = getMethodInfo(activeDetail);
                 const total = activeDetail === 'Cash' ? salesCashBs : activeDetail === 'Card' ? salesCardBs : salesPagoMovilBs;
                 return (
-                    <div className="fixed inset-0 bg-black/60 z-[70] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm animate-fade-in">
-                        <div className="bg-white w-full sm:max-w-lg h-[80vh] sm:h-auto sm:max-h-[90vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+                    <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center sm:p-4 p-0 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white w-full sm:max-w-lg h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
                             <div className={`p-4 bg-${info.color}-50 border-b border-${info.color}-100`}>
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
@@ -1150,8 +1150,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
             })()}
 
             {selectedSale && (
-                <div onClick={() => setSelectedSale(null)} className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                    <div onClick={(e) => e.stopPropagation()} className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div onClick={() => setSelectedSale(null)} className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center sm:p-4 p-0 backdrop-blur-sm animate-fade-in">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-none sm:rounded-3xl shadow-2xl overflow-hidden h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
                         <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-start">
                             <div><h3 className="font-black text-gray-900 uppercase">Recibo</h3><p className="text-xs text-gray-500">{selectedSale.id.slice(-6)}</p></div>
                             <button onClick={() => setSelectedSale(null)} className="bg-white p-1 rounded-full text-gray-400">×</button>
@@ -1209,8 +1209,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
                 };
                 
                 return (
-                <div onClick={() => setSelectedTransaction(null)} className="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm animate-fade-in">
-                    <div onClick={(e) => e.stopPropagation()} className="bg-white w-full sm:max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div onClick={() => setSelectedTransaction(null)} className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center sm:p-4 p-0 backdrop-blur-sm animate-fade-in">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white w-full sm:max-w-lg rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
                         <div className={`p-6 text-center ${
                             isCompra ? 'bg-emerald-600' : 
                             isVenta || isCobro || isRecarga ? 'bg-blue-600' :
@@ -1545,8 +1545,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
             )}
 
             {editingTransactionId && editTransactionDate && (
-                <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
+                <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center sm:p-4 p-0 backdrop-blur-sm">
+                    <div className="bg-white rounded-none sm:rounded-[2rem] p-6 w-full sm:max-w-sm h-full sm:h-auto overflow-y-auto">
                         <div className="text-center mb-4">
                             <h3 className="text-xl font-black text-gray-900">Editar Movimiento</h3>
                             <p className="text-xs text-gray-400 mt-1">Cambia fecha, tasa o monto</p>
