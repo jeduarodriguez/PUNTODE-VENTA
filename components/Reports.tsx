@@ -847,21 +847,18 @@ const VentasCaja: React.FC<ReportsProps> = ({
                         
                         {/* FILTRO CENTRAL (BOTÓN INTERACTIVO) */}
                         <div className="flex-1 select-none flex justify-center min-w-0">
-                            <div className="relative w-full max-w-[240px]">
+                            <div className="relative w-full max-w-[200px] sm:max-w-[240px]">
                                 <button 
                                     onClick={() => setShowFilterDropdown(!showFilterDropdown)} 
-                                    className="w-full py-2 px-1 rounded-xl hover:bg-white/10 transition-colors flex flex-col items-center justify-center cursor-pointer active:scale-95"
+                                    className="w-full py-2 px-2 sm:px-3 rounded-xl hover:bg-white/10 transition-colors flex items-center justify-center gap-1 sm:gap-2 cursor-pointer active:scale-95"
                                 >
-                                    <div className="flex items-center justify-center gap-2 flex-wrap">
-                                        {getQuickNavItems().map((item, idx) => (
-                                            <span key={idx} className="text-sm sm:text-base font-bold text-white truncate max-w-full">{item.label}</span>
-                                        ))}
-                                        <ChevronDown className={`w-4 h-4 text-indigo-300 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
-                                    </div>
+                                    <span className="text-xs sm:text-sm font-bold text-white truncate">{getQuickNavItems().map(item => item.label).join(' - ')}</span>
+                                    <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-indigo-300 transition-transform shrink-0 ${showFilterDropdown ? 'rotate-180' : ''}`} />
                                 </button>
+                            </div>
 
-                                {/* DROPDOWN MENU */}
-                                {showFilterDropdown && (
+                            {/* DROPDOWN MENU */}
+                            {showFilterDropdown && (
                                     <>
                                         <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}></div>
                                         <div className="absolute top-[110%] left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl shadow-indigo-500/20 z-[70] w-64 p-2.5 border border-indigo-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
