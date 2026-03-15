@@ -1793,25 +1793,27 @@ const VentasCaja: React.FC<ReportsProps> = ({
             )}
 
             {/* Botones Flotantes - Optimizado para móvil */}
-            <div 
-                className="fixed bottom-24 left-2 right-2 md:bottom-6 md:left-auto md:right-6 z-[60] flex justify-center gap-2 md:gap-4"
-                style={{ pointerEvents: 'auto' }}
-            >
-                <button 
-                    onClick={() => setShowVentasMenu(true)} 
-                    className="bg-emerald-600 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
+            {(!selectedSale && !selectedTransaction && !activeDetail && !showExpenseModal && !showExpenseTypeModal && !isTreasuryModalOpen && !showVentasMenu && !editingTransactionId && !showSearchInput) && (
+                <div 
+                    className="fixed bottom-24 left-2 right-2 md:bottom-6 md:left-auto md:right-6 z-[50] flex justify-center gap-2 md:gap-4 animate-fade-in"
+                    style={{ pointerEvents: 'auto' }}
                 >
-                    <ShoppingCart className="w-5 h-5" />
-                    <span className="text-sm font-black">Ventas</span>
-                </button>
-                <button 
-                    onClick={() => setShowExpenseTypeModal(true)} 
-                    className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
-                >
-                    <Wallet className="w-5 h-5" />
-                    <span className="text-sm font-black">Gastos</span>
-                </button>
-            </div>
+                    <button 
+                        onClick={() => setShowVentasMenu(true)} 
+                        className="bg-emerald-600 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
+                    >
+                        <ShoppingCart className="w-5 h-5" />
+                        <span className="text-sm font-black">Ventas</span>
+                    </button>
+                    <button 
+                        onClick={() => setShowExpenseTypeModal(true)} 
+                        className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 flex-1 sm:flex-none justify-center max-w-[45%]"
+                    >
+                        <Wallet className="w-5 h-5" />
+                        <span className="text-sm font-black">Gastos</span>
+                    </button>
+                </div>
+            )}
 
             {/* --- MENÚ DE VENTAS --- */}
             {showVentasMenu && (
