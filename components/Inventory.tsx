@@ -565,7 +565,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <TrendingDown className="w-3 h-3 text-red-400 shrink-0" />
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Inversión</span>
           </div>
-          <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+          <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalCostValue * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </div>
         <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
@@ -573,7 +573,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" />
             <span className="text-[8px] font-black text-gray-400 uppercase truncate">Valor</span>
           </div>
-          <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+          <p className="text-sm sm:text-lg font-black text-gray-800 leading-tight">${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           <p className="text-[9px] font-bold text-gray-400 mt-1">{(totalRetailValue * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </div>
         <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100 text-white flex flex-col items-center text-center relative overflow-hidden">
@@ -582,7 +582,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
             <span className="text-[8px] font-black text-indigo-200 uppercase truncate">Utilidad</span>
           </div>
           <div className="flex flex-col items-center relative z-10">
-            <p className="text-sm sm:text-lg font-black leading-tight">${totalPotentialProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+            <p className="text-sm sm:text-lg font-black leading-tight">${totalPotentialProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             <div className="bg-white/10 px-1.5 py-0.5 rounded text-[9px] font-black text-indigo-100 mt-1">
               {profitMarginPercent.toFixed(0)}%
             </div>
@@ -689,11 +689,11 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               <div className="w-full h-16 rounded-lg bg-gray-50 flex items-center justify-between px-2">
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Costo</span>
-                  <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(3)}</span>
+                  <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
                 </div>
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Venta</span>
-                  <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(3)}</span>
+                  <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
                 </div>
                 <div className="text-center">
                   <span className="text-[9px] font-bold text-gray-400 uppercase block">Gan.</span>
@@ -742,13 +742,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               {/* 3. COSTO */}
               <div className="text-center min-w-[48px] mr-1">
                 <span className="text-[7px] font-black text-gray-400 uppercase block">Costo</span>
-                <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(3)}</span>
+                <span className="text-sm font-bold text-red-400">${productCostPrice.toFixed(2)}</span>
               </div>
 
               {/* 4. VENTA */}
               <div className="text-center min-w-[48px] mr-1">
                 <span className="text-[7px] font-black text-gray-400 uppercase block">Venta</span>
-                <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(3)}</span>
+                <span className="text-sm font-bold text-emerald-600">${product.price.toFixed(2)}</span>
               </div>
 
               {/* 5. GANANCIA */}

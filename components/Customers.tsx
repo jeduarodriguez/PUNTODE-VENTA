@@ -486,33 +486,30 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
       <div className="flex bg-gray-100 p-1 rounded-2xl">
         <button
           onClick={() => setActiveTab('customers')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'customers' ? 'bg-emerald-500 text-white shadow-lg' : 'text-gray-500'}`}
+          className={`flex-1 py-4 px-2 rounded-xl font-black text-sm transition-all flex flex-col items-center justify-center gap-0.5 ${activeTab === 'customers' ? 'bg-emerald-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
-          <Users className="w-4 h-4" />
-          <span>Clientes</span>
-          <span className={`text-xs font-bold ${activeTab === 'customers' ? 'text-white/80' : 'text-gray-400'}`}>
-            ${totalCustomersDebt.toFixed(2)} <span className="opacity-60">| Bs {totalCustomersDebtBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
-          </span>
+          <Users className="w-4 h-4 mb-1" />
+          <span className="uppercase text-[10px] tracking-widest opacity-80">Clientes</span>
+          <p className="text-lg font-black leading-none">${totalCustomersDebt.toFixed(2)}</p>
+          <p className="text-[9px] font-bold opacity-70 mt-1">{(totalCustomersDebt * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </button>
         <button
           onClick={() => setActiveTab('workers')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'text-gray-500'}`}
+          className={`flex-1 py-4 px-2 rounded-xl font-black text-sm transition-all flex flex-col items-center justify-center gap-0.5 ${activeTab === 'workers' ? 'bg-orange-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
-          <Briefcase className="w-4 h-4" />
-          <span>Trabajadores</span>
-          <span className={`text-xs font-bold ${activeTab === 'workers' ? 'text-white/80' : 'text-gray-400'}`}>
-            ${totalWorkersDebt.toFixed(2)} <span className="opacity-60">| Bs {totalWorkersDebtBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
-          </span>
+          <Briefcase className="w-4 h-4 mb-1" />
+          <span className="uppercase text-[10px] tracking-widest opacity-80">Trabajadores</span>
+          <p className="text-lg font-black leading-none">${totalWorkersDebt.toFixed(2)}</p>
+          <p className="text-[9px] font-bold opacity-70 mt-1">{(totalWorkersDebt * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </button>
         <button
           onClick={() => setActiveTab('debts')}
-          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all flex flex-col items-center gap-1 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500'}`}
+          className={`flex-1 py-4 px-2 rounded-xl font-black text-sm transition-all flex flex-col items-center justify-center gap-0.5 ${activeTab === 'debts' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500'}`}
         >
-          <Clock className="w-4 h-4" />
-          <span>Deudas Negocio</span>
-          <span className={`text-xs font-bold ${activeTab === 'debts' ? 'text-white/80' : 'text-gray-400'}`}>
-            ${totalUnpaidDebtsUsd.toFixed(2)} <span className="opacity-60">| Bs {totalUnpaidDebts.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
-          </span>
+          <Clock className="w-4 h-4 mb-1" />
+          <span className="uppercase text-[10px] tracking-widest opacity-80">Deudas</span>
+          <p className="text-lg font-black leading-none">${totalUnpaidDebtsUsd.toFixed(2)}</p>
+          <p className="text-[9px] font-bold opacity-70 mt-1">{(totalUnpaidDebtsUsd * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
         </button>
       </div>
 
