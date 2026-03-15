@@ -23,7 +23,7 @@ interface CartItem {
     product: Product;
     quantity: number;
     cost_price: number;
-    costPriceBs?: number;
+    cost_price_bs?: number;
     rateAtPurchase?: number;
 }
 
@@ -31,6 +31,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
+    // Estado temporal para edición de cantidades sin resetear al escribir
+    const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
 
     // Cargar initialCart si existe (para edición de compra)
     useEffect(() => {
@@ -80,10 +82,12 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [creditDebtAmountUsd, setCreditDebtAmountUsd] = useState(0);
 
     // Helpers para compatibilidad
-    const getCostPrice = (p: Product | CartItem) => p.cost_price || 0;
-    const getCostMode = (p: Product | CartItem) => (p as any).cost_mode || 'calculated';
-    const getCostBs = (p: Product | CartItem) => (p as any).cost_bs || 0;
-    const getCostDate = (p: Product | CartItem) => (p as any).cost_date || '';
+    // @ts-ignore - Fallback para datos antiguos en camelCase
+    const getCostPrice = (p: Product | CartItem) => p.cost_price ?? (p as any).costPrice ?? 0;
+    const getCostMode = (p: Product | CartItem) => (p as any).cost_mode || (p as any).costMode || 'calculated';
+    // @ts-ignore - Fallback para datos antiguos en camelCase
+    const getCostBs = (p: Product | CartItem) => (p as any).cost_bs ?? (p as any).costBs ?? 0;
+    const getCostDate = (p: Product | CartItem) => (p as any).cost_date || (p as any).costDate || '';
     const getSellingMode = (p: Product) => p.selling_mode || 'simple';
     const getPricePerUnit = (p: Product) => p.price_per_unit || 0;
 
@@ -230,18 +234,18 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                 
                 return {
                     ...cartItem,
-                    costPrice: newCostUsd * bulkQty,
-                    costPriceBs: newCostBs * bulkQty,
+                    cost_price: newCostUsd * bulkQty,
+                    cost_price_bs: newCostBs * bulkQty,
                     rateAtPurchase: activeRate
                 };
             } else {
                 // Productos con costo manual en $: mantener igual, solo actualizar el display en Bs
-                const currentCostUsd = cartItem.costPrice / bulkQty;
+                const currentCostUsd = cartItem.cost_price / bulkQty;
                 const newCostBs = currentCostUsd * activeRate;
                 
                 return {
                     ...cartItem,
-                    costPriceBs: newCostBs * bulkQty,
+                    cost_price_bs: newCostBs * bulkQty,
                     rateAtPurchase: activeRate
                 };
             }
@@ -310,7 +314,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                     : item
                 );
             }
-            return [...prev, { product, quantity: 1, costPrice: costPerBulk, costPriceBs: costBsPerBulk, rateAtPurchase: activeRate }];
+            return [...prev, { product, quantity: 1, cost_price: costPerBulk, cost_price_bs: costBsPerBulk, rateAtPurchase: activeRate }];
         });
     };
 
@@ -355,18 +359,27 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         setEditCostMode(productCostMode);
         setEditUnitsPerBulk(productUnitsPerBulk);
 
-        let costBsValue = 0;
         let savedRate = activeRate;
 
         if (productCostMode === 'calculated') {
-            costBsValue = item.costPriceBs || getCostBs(item.product);
+            // cost_price_bs guardado es el costo del BULTO. Si no hay, reconstruirlo desde product.cost_bs
+            const bulkCostBs = item.cost_price_bs
+                || (getCostBs(item.product) > 0 ? getCostBs(item.product) * bulkQty : 0);
             savedRate = item.rateAtPurchase || activeRate;
-            // Reconstruir el costo total del bulto
-            setEditCostBs(costBsValue * bulkQty);
-            setEditCostBsDisplay(costBsValue > 0 ? (costBsValue * bulkQty).toString() : '');
+
+            setEditCostBs(bulkCostBs);
+            setEditCostBsDisplay(bulkCostBs > 0 ? bulkCostBs.toString() : '');
+            setEditCustomRate(savedRate || null);
         } else {
+            // Modo manual: mostrar costo UNITARIO en USD
+            const unitCostManual = item.cost_price > 0
+                ? (bulkQty > 0 ? item.cost_price / bulkQty : item.cost_price)
+                : getCostPrice(item.product); // fallback al costo guardado en el producto
             setEditCostBs(0);
             setEditCostBsDisplay('');
+            setEditManualCost(unitCostManual);
+            setEditManualCostDisplay(unitCostManual > 0 ? unitCostManual.toFixed(3) : '');
+            setEditCustomRate(null);
         }
 
         const productCostDate = item.product.cost_date || (item.product as any).costDate || '';
@@ -374,17 +387,6 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
         setEditPrice(item.product.price || 0);
         setEditPricePerUnit(getPricePerUnit(item.product));
-
-        if (productCostMode === 'calculated' && savedRate) {
-            setEditCustomRate(savedRate);
-        } else {
-            setEditCustomRate(null);
-        }
-
-        // En modo manual, mostrar costo UNITARIO (item.cost_price es por bulto, dividir entre bulkQty)
-        const unitCostManual = bulkQty > 0 ? item.cost_price / bulkQty : item.cost_price;
-        setEditManualCost(unitCostManual);
-        setEditManualCostDisplay(unitCostManual > 0 ? unitCostManual.toFixed(3) : '');
     };
 
     const closeEditPriceModal = () => {
@@ -403,10 +405,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         const updatedProduct: Product = {
             ...editingPriceItem.product,
             price: editPrice,
-            pricePerUnit: editPricePerUnit,
+            price_per_unit: editPricePerUnit,
             units_per_bulk: editUnitsPerBulk,
             cost_price: unitCostUsd,
-            costPrice: unitCostUsd,
             cost_mode: editCostMode,
             cost_bs: editCostMode === 'calculated' ? (editCostBs / bulkQty) : 0,
             cost_date: editCostMode === 'calculated' ? editCostDate : ''
@@ -422,8 +423,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             if (cartItem.product.id === editingPriceItem.product.id) {
                 return {
                     ...cartItem,
-                    costPrice: bulkCostUsd,
-                    costPriceBs: bulkCostBs,
+                    cost_price: bulkCostUsd,
+                    cost_price_bs: bulkCostBs,
                     rateAtPurchase: editDisplayRate,
                     product: updatedProduct
                 };
@@ -437,8 +438,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const calculateTotal = () => cart.reduce((sum, item) => {
         const costMode = getCostMode(item.product);
         const priceBs = costMode === 'calculated'
-            ? (item.costPriceBs || 0)
-            : item.costPrice * activeRate;
+            ? (item.cost_price_bs || 0)
+            : item.cost_price * activeRate;
         const priceUsd = activeRate > 0 ? priceBs / activeRate : 0;
         return sum + (priceUsd * item.quantity);
     }, 0);
@@ -447,8 +448,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         // Para productos calculados usar costPriceBs guardado, para manuales recalcular siempre
         const costMode = getCostMode(item.product);
         const itemCostBs = costMode === 'calculated'
-            ? (item.costPriceBs || 0)
-            : item.costPrice * activeRate;
+            ? (item.cost_price_bs || 0)
+            : item.cost_price * activeRate;
         return sum + (itemCostBs * item.quantity);
     }, 0);
     const tenderedBs = parseFloat(tenderedAmount) || 0;
@@ -465,8 +466,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         const totalBs = cart.reduce((sum, item) => {
             const costMode = getCostMode(item.product);
             const itemCostBs = costMode === 'calculated'
-                ? (item.costPriceBs || 0)
-                : item.costPrice * activeRate;
+                ? (item.cost_price_bs || 0)
+                : item.cost_price * activeRate;
             return sum + (itemCostBs * item.quantity);
         }, 0);
         const totalUsd = activeRate > 0 ? totalBs / activeRate : 0;
@@ -839,7 +840,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                             cart.map(item => {
                                 const unitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
                                 const hasBulk = unitsPerBulk > 1;
-                                const itemCostBsList = item.costPriceBs || 0;
+                                const itemCostBsList = item.cost_price_bs || 0;
                                 const itemTotalBs = itemCostBsList * item.quantity;
                                 const sellingMode = getSellingMode(item.product);
                                 const isWeight = sellingMode === 'weight';
@@ -857,18 +858,9 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => {
-                                                        console.log('=== CLICK EDIT BUTTON ===', item.product.name);
-                                                        if (onOpenInventoryWithProduct) {
-                                                            console.log('=== CALLING onOpenInventoryWithProduct ===');
-                                                            onOpenInventoryWithProduct(item.product);
-                                                        } else if (onOpenInventory) {
-                                                            openEditPriceModal(item);
-                                                            onOpenInventory();
-                                                        }
-                                                    }}
+                                                    onClick={() => openEditPriceModal(item)}
                                                     className="p-2 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
-                                                    title="Editar en Inventario"
+                                                    title="Editar costo y precio"
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </button>
@@ -887,7 +879,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             <div className="bg-gray-50 p-2 rounded-lg">
                                                 <p className="text-[9px] font-bold text-gray-400 uppercase">Costo c/u</p>
                                                 <p className="text-sm font-black text-red-600">Bs {itemCostBsList.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                                                <p className="text-[9px] font-bold text-indigo-500">${item.costPrice.toFixed(2)}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500">${item.cost_price.toFixed(2)}</p>
                                             </div>
 
                                             {/* Cantidad */}
@@ -903,16 +895,32 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
-                                                        value={item.quantity}
+                                                        value={quantityInputs[item.product.id] ?? String(item.quantity)}
+                                                        onFocus={() => {
+                                                            // Al entrar en foco, inicializar con el valor actual para poder borrarlo
+                                                            setQuantityInputs(prev => ({ ...prev, [item.product.id]: String(item.quantity) }));
+                                                        }}
                                                         onChange={(e) => {
-                                                            const rawValue = e.target.value.replace(',', '.');
-                                                            if (rawValue === '' || rawValue === '-') return;
-                                                            const val = parseFloat(rawValue);
-                                                            if (isNaN(val)) return;
-                                                            if (isWeight) {
-                                                                updateQuantityDirect(item.product.id, val);
-                                                            } else {
-                                                                updateQuantityDirect(item.product.id, Math.max(1, Math.floor(val)));
+                                                            const raw = e.target.value.replace(',', '.');
+                                                            // Permitir campo vacío mientras el usuario escribe
+                                                            setQuantityInputs(prev => ({ ...prev, [item.product.id]: raw }));
+                                                        }}
+                                                        onBlur={(e) => {
+                                                            const raw = e.target.value.replace(',', '.');
+                                                            const val = parseFloat(raw);
+                                                            if (!isNaN(val) && val > 0) {
+                                                                if (isWeight) {
+                                                                    updateQuantityDirect(item.product.id, val);
+                                                                } else {
+                                                                    updateQuantityDirect(item.product.id, Math.max(1, Math.floor(val)));
+                                                                }
+                                                            }
+                                                            // Limpiar el estado local al salir del campo
+                                                            setQuantityInputs(prev => { const n = { ...prev }; delete n[item.product.id]; return n; });
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.currentTarget.blur();
                                                             }
                                                         }}
                                                         className="w-12 text-center font-black text-sm bg-white border border-gray-200 rounded py-0.5 text-gray-700"
@@ -930,7 +938,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             <div className="bg-indigo-50 p-2 rounded-lg">
                                                 <p className="text-[9px] font-bold text-indigo-400 uppercase">Subtotal</p>
                                                 <p className="text-base font-black text-indigo-700">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                                                <p className="text-[9px] font-bold text-indigo-500 text-right">$ {(item.costPrice * item.quantity).toFixed(2)}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500 text-right">$ {(item.cost_price * item.quantity).toFixed(2)}</p>
                                             </div>
                                         </div>
 
@@ -1622,13 +1630,22 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                     {/* FILA 3: FECHA Y TASA (solo modo calculado) */}
                                     {editCostMode === 'calculated' && (
                                         <div className="flex gap-2">
-                                            <div className="flex-1">
+                                            <div className="flex-1 flex gap-1">
                                                 <input
                                                     type="date"
-                                                    className="w-full p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                                                    className="flex-1 p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
                                                     value={editCostDate}
+                                                    max={new Date().toISOString().split('T')[0]}
                                                     onChange={e => setEditCostDate(e.target.value)}
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditCostDate(new Date().toISOString().split('T')[0])}
+                                                    className="px-2 py-1 bg-indigo-100 text-indigo-600 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-200 transition-colors shrink-0"
+                                                    title="Usar fecha de hoy"
+                                                >
+                                                    Hoy
+                                                </button>
                                             </div>
                                             <div className="w-24 bg-orange-50 border border-orange-200 rounded-xl px-2 py-1 flex flex-col items-center justify-center">
                                                 <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>

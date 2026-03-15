@@ -87,6 +87,7 @@ export interface TreasuryTransaction {
     quantity: number;
     cost_price: number;
     cost_price_bs: number;
+    previous_cost_price?: number;
   }[];
 }
 

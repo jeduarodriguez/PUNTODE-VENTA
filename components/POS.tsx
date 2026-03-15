@@ -336,10 +336,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     // Cash Calculation Helpers
-    const totalBs = calculateTotal() * todayRate;
+    const totalBs = Math.round(calculateTotal() * todayRate * 100) / 100;
     const tenderedBs = parseFloat(tenderedAmount) || 0;
-    const changeBs = tenderedBs - totalBs;
-    const isSufficient = tenderedBs >= totalBs - 0.01; // Small epsilon for float logic
+    const changeBs = Math.round((tenderedBs - totalBs) * 100) / 100;
+    const isSufficient = tenderedBs >= totalBs - 0.001; 
 
     const handleCreateCustomer = (e: React.FormEvent) => {
         e.preventDefault();

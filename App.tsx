@@ -625,100 +625,11 @@ const App: React.FC = () => {
 
     const updates: any = {};
 
-    // Si es una venta (id.startsWith('sale_')) - eliminar venta y revertir stock
-    if (id.startsWith('sale_')) {
-      const saleId = id.replace('sale_', '');
-      const sale = sales.find(s => s.id === saleId);
-      
-      if (sale) {
-        // Revertir stock de productos
-        const updatedProducts = [...products];
-        sale.items.forEach(item => {
-          if (item.id === 'debt_payment') return;
-          
-          const isUnitSale = item.id && item.id.endsWith('-unit');
-          const productId = isUnitSale ? item.id.replace('-unit', '') : item.id;
-          const pIndex = updatedProducts.findIndex(p => p.id === productId);
-          
-          if (pIndex !== -1) {
-            const product = updatedProducts[pIndex];
-            const { selling_mode, units_per_package, remaining_units } = getProductProps(product);
-            
-            if (selling_mode === 'package' && isUnitSale) {
-              // Devolver unidades sueltas
-              let qtyToReturn = item.quantity;
-              let newRemainingUnits = (product.remaining_units || 0) + qtyToReturn;
-              let newStock = product.stock;
-              if (product.units_per_package && product.units_per_package > 0 && newRemainingUnits >= product.units_per_package) {
-                newStock += Math.floor(newRemainingUnits / product.units_per_package);
-                newRemainingUnits = newRemainingUnits % product.units_per_package;
-              }
-              updatedProducts[pIndex] = { ...product, stock: newStock, remaining_units: newRemainingUnits };
-            } else if (selling_mode === 'package' && !isUnitSale) {
-              // Devolver paquetes
-              updatedProducts[pIndex] = { ...product, stock: product.stock + item.quantity };
-            } else {
-              // Venta simple o por peso
-              updatedProducts[pIndex] = { ...product, stock: product.stock + item.quantity };
-            }
-          }
-        });
-
-        // Revertir balance de cliente si era crédito
-        if (sale.paymentMethod === 'Credit' && sale.customerId) {
-          const cIndex = customers.findIndex(c => c.id === sale.customerId);
-          if (cIndex !== -1) {
-            const c = { ...customers[cIndex], balance: Math.max(0, (customers[cIndex].balance || 0) - sale.total) };
-            updates[`customers/${c.id}`] = c;
-            setCustomers(prev => prev.map(cust => cust.id === c.id ? c : cust));
-          }
-          
-          // También puede ser trabajador
-          const wIndex = workers.findIndex(w => w.id === sale.customerId);
-          if (wIndex !== -1) {
-            const w = { ...workers[wIndex], balance: Math.max(0, (workers[wIndex].balance || 0) - sale.total) };
-            updates[`workers/${w.id}`] = w;
-            setWorkers(prev => prev.map(work => work.id === w.id ? w : work));
-          }
-        }
-
-        // Eliminar la venta
-        updates[`sales/${saleId}`] = null;
-        setProducts(updatedProducts);
-        setSales(prev => prev.filter(s => s.id !== saleId));
-      }
-    }
-
-    // Si es pago de deuda de cliente (id.startsWith('debt_payment_'))
-    if (id.startsWith('debt_payment_')) {
-      const saleId = id.replace('debt_payment_', '');
-      const sale = sales.find(s => s.id === saleId);
-      
-      if (sale?.customerId) {
-        // Revertir el balance del cliente
-        const cIndex = customers.findIndex(c => c.id === sale.customerId);
-        if (cIndex !== -1) {
-          const c = { ...customers[cIndex], balance: (customers[cIndex].balance || 0) + sale.total };
-          updates[`customers/${c.id}`] = c;
-          setCustomers(prev => prev.map(cust => cust.id === c.id ? c : cust));
-        }
-      }
-    }
-
-    // Si es pago de nómina (id.startsWith('worker_debt_payment_'))
-    if (id.startsWith('worker_debt_payment_')) {
-      const saleId = id.replace('worker_debt_payment_', '');
-      const sale = sales.find(s => s.id === saleId);
-      
-      if (sale?.customerId) {
-        // Revertir el balance del trabajador
-        const wIndex = workers.findIndex(w => w.id === sale.customerId);
-        if (wIndex !== -1) {
-          const w = { ...workers[wIndex], balance: (workers[wIndex].balance || 0) + sale.total };
-          updates[`workers/${w.id}`] = w;
-          setWorkers(prev => prev.map(work => work.id === w.id ? w : work));
-        }
-      }
+    // Si es una venta o abono de deuda vinculado a una venta - delegar a handleVoidSale para consistencia
+    if (id.startsWith('sale_') || id.startsWith('debt_payment_') || id.startsWith('worker_debt_payment_')) {
+      const saleId = id.replace('sale_', '').replace('debt_payment_', '').replace('worker_debt_payment_', '');
+      await handleVoidSale(saleId);
+      return;
     }
 
     // Si es una compra de inventario (purchase_) o deuda (debt_) - revertir stock
@@ -730,10 +641,11 @@ const App: React.FC = () => {
         
         if (pIndex !== -1) {
           const product = updatedProducts[pIndex];
-          // Restar la cantidad comprada del stock
+          // Restar la cantidad comprada del stock Y restaurar costo anterior
           updatedProducts[pIndex] = { 
             ...product, 
-            stock: Math.max(0, product.stock - item.quantity)
+            stock: Math.max(0, product.stock - item.quantity),
+            cost_price: item.previous_cost_price !== undefined ? item.previous_cost_price : product.cost_price
           };
           updates[`products/${item.productId}`] = updatedProducts[pIndex];
         }
@@ -1060,7 +972,8 @@ const App: React.FC = () => {
         productName: item.product.name,
         quantity: item.quantity,
         cost_price: unitCostUsd,
-        cost_price_bs: item.costPriceBs || (unitCostUsd * exchangeRate)
+        cost_price_bs: item.costPriceBs || (unitCostUsd * exchangeRate),
+        previous_cost_price: item.product.cost_price || 0
       };
     });
 

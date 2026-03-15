@@ -91,12 +91,27 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setCostMode(savedCostMode || 'calculated');
       setCostBs(savedCostBs > 0 ? savedCostBs : 0);
 
-      if (savedCostMode === 'calculated') {
-        setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
+      if (savedCostMode === 'calculated' && savedCostBs > 0) {
+        // Modo calculado con datos completos: mostrar costo Bs total del bulto
+        setCostBsDisplay((savedCostBs * bulkQty).toString());
         setManualCostDisplay('');
+        setCostMode('calculated');
+      } else if (existingCost > 0) {
+        // Costo en USD disponible: mostrar en modo manual para no perder el dato
+        // (puede ser que sea manual, o calculado sin cost_bs guardado)
+        const effectiveMode = (savedCostMode === 'manual' || savedCostBs === 0) ? 'manual' : 'calculated';
+        setCostMode(effectiveMode);
+        if (effectiveMode === 'manual') {
+          setCostBsDisplay('');
+          setManualCostDisplay(existingCost.toFixed(4));
+        } else {
+          const reconstructedBs = existingCost * exchangeRate * bulkQty;
+          setCostBsDisplay(reconstructedBs.toFixed(2));
+          setManualCostDisplay('');
+        }
       } else {
         setCostBsDisplay('');
-        setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
+        setManualCostDisplay('');
       }
 
       if (savedCostDate) {
@@ -142,16 +157,25 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const [manualCostDisplay, setManualCostDisplay] = useState('');
   const [costBsDisplay, setCostBsDisplay] = useState('');
 
-  // Helpers para compatibilidad con formato snake_case
-  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price || 0;
-  const getCostMode = (p: Product | Partial<Product>) => p.cost_mode || 'calculated';
-  const getCostBs = (p: Product | Partial<Product>) => p.cost_bs || 0;
-  const getCostDate = (p: Product | Partial<Product>) => p.cost_date || '';
-  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode || 'simple';
-  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit || 'kg';
-  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package || 0;
-  const getUnitsPerBulk = (p: Product | Partial<Product>) => p.units_per_bulk || 0;
-  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit || 0;
+  // Helpers con doble compatibilidad: snake_case (nuevo) y camelCase (datos antiguos en Firebase)
+  const getCostPrice = (p: Product | Partial<Product>) =>
+    p.cost_price || (p as any).costPrice || 0;
+  const getCostMode = (p: Product | Partial<Product>): 'calculated' | 'manual' =>
+    p.cost_mode || (p as any).costMode || 'calculated';
+  const getCostBs = (p: Product | Partial<Product>) =>
+    p.cost_bs ?? (p as any).costBs ?? 0;
+  const getCostDate = (p: Product | Partial<Product>) =>
+    p.cost_date || (p as any).costDate || '';
+  const getSellingMode = (p: Product | Partial<Product>) =>
+    p.selling_mode || (p as any).sellingMode || 'simple';
+  const getMeasurementUnit = (p: Product | Partial<Product>) =>
+    p.measurement_unit || (p as any).measurementUnit || 'kg';
+  const getUnitsPerPackage = (p: Product | Partial<Product>) =>
+    p.units_per_package || (p as any).unitsPerPackage || 0;
+  const getUnitsPerBulk = (p: Product | Partial<Product>) =>
+    p.units_per_bulk || (p as any).unitsPerBulk || 0;
+  const getPricePerUnit = (p: Product | Partial<Product>) =>
+    p.price_per_unit || (p as any).pricePerUnit || 0;
   const getRemainingUnits = (p: Product | Partial<Product> | null | undefined) => {
     if (!p) return 0;
     return p.remaining_units || 0;
@@ -431,14 +455,27 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       setCostMode(savedCostMode || 'calculated');
       setCostBs(savedCostBs > 0 ? savedCostBs : 0);
 
-      // En modo calculado: reconstruir el costo total del bulto (Bs)
-      // En modo manual: mostrar el costo unitario directamente (USD)
-      if (savedCostMode === 'calculated') {
-        setCostBsDisplay(savedCostBs > 0 ? (savedCostBs * bulkQty).toString() : '');
+      if (savedCostMode === 'calculated' && savedCostBs > 0) {
+        // Modo calculado con datos completos: costo Bs total del bulto
+        setCostBsDisplay((savedCostBs * bulkQty).toString());
         setManualCostDisplay('');
+        setCostMode('calculated');
+      } else if (existingCost > 0) {
+        // Costo en USD disponible: mostrar en modo manual si no hay cost_bs
+        const effectiveMode = (savedCostMode === 'manual' || savedCostBs === 0) ? 'manual' : 'calculated';
+        setCostMode(effectiveMode);
+        if (effectiveMode === 'manual') {
+          setCostBsDisplay('');
+          setManualCostDisplay(existingCost.toFixed(4));
+        } else {
+          const rateForFallback = getRateForDate(savedCostDate || costDate) || exchangeRate;
+          const reconstructedBs = existingCost * rateForFallback * bulkQty;
+          setCostBsDisplay(reconstructedBs.toFixed(2));
+          setManualCostDisplay('');
+        }
       } else {
         setCostBsDisplay('');
-        setManualCostDisplay(existingCost > 0 ? existingCost.toString() : '');
+        setManualCostDisplay('');
       }
 
       // Usar fecha guardada o hoy si no existe
@@ -1181,13 +1218,22 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <div className="flex gap-2">
                         {costMode === 'calculated' ? (
                           <>
-                            <div className="flex-1">
+                            <div className="flex-1 flex gap-1">
                               <input
                                 type="date"
-                                className="w-full p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
+                                className="flex-1 p-2 border-2 border-red-100 rounded-xl bg-white outline-none text-[10px] font-bold text-gray-700 focus:border-red-400"
                                 value={costDate}
+                                max={new Date().toISOString().split('T')[0]}
                                 onChange={e => setCostDate(e.target.value)}
                               />
+                              <button
+                                type="button"
+                                onClick={() => setCostDate(new Date().toISOString().split('T')[0])}
+                                className="px-2 py-1 bg-indigo-100 text-indigo-600 rounded-xl text-[9px] font-black uppercase hover:bg-indigo-200 transition-colors shrink-0"
+                                title="Usar fecha de hoy"
+                              >
+                                Hoy
+                              </button>
                             </div>
                             <div className="w-24 bg-orange-50 border border-orange-200 rounded-xl px-2 py-1 flex flex-col items-center justify-center">
                               <span className="text-[7px] font-bold text-orange-500 uppercase">Tasa</span>
