@@ -837,33 +837,6 @@ const VentasCaja: React.FC<ReportsProps> = ({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                    {/* X COBRAR */}
-                    <div className="p-3 rounded-xl bg-orange-500">
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                            <TrendingUp className="w-4 h-4 text-white" />
-                            <span className="text-[9px] font-black uppercase text-white">X Cobrar</span>
-                        </div>
-                        <p className="text-lg font-black text-white text-center">${totalPorCobrar.toFixed(2)}</p>
-                        <p className="text-xs font-bold text-white/80 text-center">{porCobrarBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
-                    </div>
-                    
-                    {/* X PAGAR */}
-                    <div className="p-3 rounded-xl bg-red-600">
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                            <TrendingDown className="w-4 h-4 text-white" />
-                            <span className="text-[9px] font-black uppercase text-white">X Pagar</span>
-                        </div>
-                        <p className="text-lg font-black text-white text-center">${deudaPorPagarTotalUsd.toFixed(2)}</p>
-                        <p className="text-xs font-bold text-white/80 text-center">{deudaPorPagarTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
-                        {deudaBsEnBs > 0 && (
-                            <p className="text-[8px] font-bold text-white/60 text-center mt-0.5">
-                                (Fija: Bs {deudaBsEnBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })})
-                            </p>
-                        )}
-                    </div>
-                </div>
-
                 {/* NAVEGACION DE FECHAS Y FILTROS INTEGRADOS */}
                 <div className="bg-indigo-900 text-white p-3 rounded-xl shadow-xl relative mb-3">
                     <div className="flex items-center justify-between gap-2 relative z-10">
