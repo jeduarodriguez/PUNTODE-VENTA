@@ -1363,8 +1363,13 @@ const VentasCaja: React.FC<ReportsProps> = ({
             {showExpenseTypeModal && (
                 <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowExpenseTypeModal(false)}>
                     <div className="bg-white rounded-t-3xl sm:rounded-[2rem] p-6 w-full sm:max-w-sm" onClick={e => e.stopPropagation()}>
-                        <div className="text-center mb-4">
-                            <h3 className="text-xl font-black text-gray-900">Egresos</h3>
+                        <div className="pb-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-xl font-black text-gray-900">Gastos</h3>
+                                <button onClick={() => setShowExpenseTypeModal(false)} className="p-2 text-gray-400 hover:text-gray-600">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
                         </div>
                         <div className="space-y-3">
                             <button 
@@ -1387,14 +1392,6 @@ const VentasCaja: React.FC<ReportsProps> = ({
                             >
                                 <BanknoteIcon className="w-5 h-5" />
                                 Pagar Nómina
-                            </button>
-                        </div>
-                        <div className="mt-4">
-                            <button 
-                                onClick={() => setShowExpenseTypeModal(false)} 
-                                className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm"
-                            >
-                                Cancelar
                             </button>
                         </div>
                     </div>
