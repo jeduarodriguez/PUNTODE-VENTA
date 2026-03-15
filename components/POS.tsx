@@ -115,10 +115,12 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         return result;
     }, [products]);
 
-    const filteredProducts = displayProducts.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchesSearch;
-    });
+    const filteredProducts = displayProducts
+        .filter(p => {
+            const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+            return matchesSearch;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
     const filteredClients = customers.filter(c =>
         (c.type === 'client' || !c.type) &&

@@ -380,7 +380,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         unitsPerPackage: Number(formData.units_per_package) || 0,
         unitsPerBulk: bulkQty,
         pricePerUnit: Number(formData.price_per_unit) || 0,
-        remainingUnits: getRemainingUnits(editingProduct),
+        remainingUnits: Number(formData.remaining_units) || 0,
         cost_mode: costMode,
         cost_bs: costMode === 'calculated' ? (parseFloat(costBsDisplay.replace(',', '.')) || 0) / bulkQty : 0,
         cost_date: costMode === 'calculated' ? costDate : ''
@@ -1028,9 +1028,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-500" />
                   </button>
                 </div>
-                <div className="w-24 space-y-1">
+                <div className={formData.selling_mode === 'package' ? "w-20 sm:w-24 space-y-1" : "w-24 space-y-1"}>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-                    {formData.selling_mode === 'weight' ? `Stock (${formData.measurement_unit})` : 'Stock'}
+                    {formData.selling_mode === 'package' ? 'Paquetes' : formData.selling_mode === 'weight' ? `Stock (${formData.measurement_unit})` : 'Stock'}
                   </label>
                   <input
                     type="number"
@@ -1041,6 +1041,37 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     onChange={e => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
+                {formData.selling_mode === 'package' && (
+                  <div className="w-20 sm:w-24 space-y-1">
+                    <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest px-1">
+                      Unidades
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder="0"
+                      className="w-full p-3 border-2 border-blue-100 rounded-2xl bg-blue-50 focus:bg-white outline-none text-sm font-black text-blue-900 focus:border-blue-500 transition-all"
+                      value={formData.remaining_units === 0 && !formData.remaining_units ? '' : formData.remaining_units}
+                      onChange={e => {
+                        let newUnits = parseInt(e.target.value) || 0;
+                        const unitsPerPackage = formData.units_per_package || 0;
+                        let extraPacks = 0;
+                        
+                        // Si se introducen más unidades sueltas que un paquete, convertirlas a paquetes
+                        if (unitsPerPackage > 0 && newUnits >= unitsPerPackage) {
+                          extraPacks = Math.floor(newUnits / unitsPerPackage);
+                          newUnits = newUnits % unitsPerPackage;
+                        }
+                        
+                        setFormData({ 
+                          ...formData, 
+                          remaining_units: newUnits,
+                          stock: (formData.stock || 0) + extraPacks 
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* PRECIOS */}

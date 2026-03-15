@@ -343,7 +343,18 @@ const App: React.FC = () => {
           // Anular venta por unidad - reintegrar a remainingUnits
           const qtyToReturn = item.quantity;
           const newRemainingUnits = (product.remainingUnits || 0) + qtyToReturn;
-          const p = { ...product, remainingUnits: newRemainingUnits };
+          const unitsPerPkg = product.unitsPerPackage || product.units_per_package || 0;
+          
+          let updatedStock = product.stock;
+          let finalRemaining = newRemainingUnits;
+          
+          if (unitsPerPkg > 0 && newRemainingUnits >= unitsPerPkg) {
+            const addedPacks = Math.floor(newRemainingUnits / unitsPerPkg);
+            updatedStock += addedPacks;
+            finalRemaining = newRemainingUnits % unitsPerPkg;
+          }
+          
+          const p = { ...product, stock: updatedStock, remainingUnits: finalRemaining };
           updatedProducts[pIndex] = p;
           updates[`products/${productId}`] = p;
         } else {
@@ -637,7 +648,12 @@ const App: React.FC = () => {
               // Devolver unidades sueltas
               let qtyToReturn = item.quantity;
               let newRemainingUnits = remainingUnits + qtyToReturn;
-              updatedProducts[pIndex] = { ...product, remainingUnits: newRemainingUnits };
+              let newStock = product.stock;
+              if (unitsPerPackage > 0 && newRemainingUnits >= unitsPerPackage) {
+                newStock += Math.floor(newRemainingUnits / unitsPerPackage);
+                newRemainingUnits = newRemainingUnits % unitsPerPackage;
+              }
+              updatedProducts[pIndex] = { ...product, stock: newStock, remainingUnits: newRemainingUnits, remaining_units: newRemainingUnits };
             } else if (sellingMode === 'package' && !isUnitSale) {
               // Devolver paquetes
               updatedProducts[pIndex] = { ...product, stock: product.stock + item.quantity };
@@ -652,7 +668,7 @@ const App: React.FC = () => {
         if (sale.paymentMethod === 'Credit' && sale.customerId) {
           const cIndex = customers.findIndex(c => c.id === sale.customerId);
           if (cIndex !== -1) {
-            const c = { ...customers[cIndex], balance: (customers[cIndex].balance || 0) + sale.total };
+            const c = { ...customers[cIndex], balance: Math.max(0, (customers[cIndex].balance || 0) - sale.total) };
             updates[`customers/${c.id}`] = c;
             setCustomers(prev => prev.map(cust => cust.id === c.id ? c : cust));
           }
@@ -660,7 +676,7 @@ const App: React.FC = () => {
           // También puede ser trabajador
           const wIndex = workers.findIndex(w => w.id === sale.customerId);
           if (wIndex !== -1) {
-            const w = { ...workers[wIndex], balance: (workers[wIndex].balance || 0) + sale.total };
+            const w = { ...workers[wIndex], balance: Math.max(0, (workers[wIndex].balance || 0) - sale.total) };
             updates[`workers/${w.id}`] = w;
             setWorkers(prev => prev.map(work => work.id === w.id ? w : work));
           }

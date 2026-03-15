@@ -527,10 +527,10 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
         </div>
         {activeTab !== 'debts' && (
           <button
-            onClick={() => activeTab === 'customers' ? openModal() : openPayrollModal()}
+            onClick={() => activeTab === 'customers' ? openModal() : activeTab === 'workers' ? openWorkerModal() : openPayrollModal()}
             className="bg-gray-900 text-white px-4 py-2 rounded-2xl text-sm font-black shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
           >
-            <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : 'Pagar Nómina'}</span>
+            <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">{activeTab === 'customers' ? 'Nuevo' : activeTab === 'workers' ? 'Nuevo' : 'Pagar Nómina'}</span>
           </button>
         )}
       </div>
@@ -904,7 +904,6 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
       <>
         {/* MODAL DE PAGO DE DEUDA DE TRABAJADOR */}
         {isWorkerPaymentModalOpen && paymentWorker && (() => {
-          const workerDebt = sales.filter(s => s.customerId === paymentWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0);
           return (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[80] backdrop-blur-sm animate-fade-in">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-scale-up">
@@ -1019,7 +1018,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
         })()}
 
         {isPayrollPaymentModalOpen && paymentWorker && (() => {
-          const workerDebt = sales.filter(s => s.customerId === paymentWorker.id && s.paymentMethod === 'Credit').reduce((sum, s) => sum + s.total, 0);
+          const workerDebt = paymentWorker.balance || 0;
           const maxPayment = Math.min(paymentWorker.salary, workerDebt);
           const remainingDebt = workerDebt - maxPayment;
 

@@ -628,6 +628,11 @@ const VentasCaja: React.FC<ReportsProps> = ({
         return worker?.name || 'Cliente';
     };
 
+    const rateRecordForDate = [...(rateHistory || [])].sort((a, b) => b.timestamp - a.timestamp)[0];
+    const rateDateString = rateRecordForDate 
+        ? new Date(rateRecordForDate.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' }) 
+        : new Date().toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+
     return (
         <div className="space-y-3 pb-24 animate-fade-in relative">
             {showSearchInput && (
@@ -799,28 +804,40 @@ const VentasCaja: React.FC<ReportsProps> = ({
                     </div>
                 )}
 
-                {/* BALANCE PRINCIPAL - 4 paneles en grid ARRIBA */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                    {/* EFECTIVO */}
-                    <div className={`p-3 rounded-xl ${efectivoBalanceTotal >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                {/* BALANCE PRINCIPAL - paneles en grid ARRIBA */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                    {/* TASA BCV */}
+                    <div onClick={onOpenRateModal} className="p-3 rounded-xl bg-indigo-900 cursor-pointer active:scale-[0.98] transition-all flex flex-col justify-center shadow-sm">
                         <div className="flex items-center justify-center gap-1 mb-1">
-                            <Banknote className="w-4 h-4 text-white" />
-                            <span className="text-[9px] font-black uppercase text-white">Efectivo</span>
+                            <TrendingUp className="w-3 sm:w-4 h-3 sm:h-4 text-emerald-400" />
+                            <span className="text-[8px] sm:text-[9px] font-black uppercase text-white">Tasa BCV</span>
                         </div>
-                        <p className="text-lg font-black text-white text-center">{efectivoBalanceTotal >= 0 ? '' : '-'}{Math.abs(efectivoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
-                        <p className="text-xs font-bold text-white/80 text-center">${Math.abs(efectivoUsdTotal).toFixed(2)}</p>
+                        <p className="text-base sm:text-lg font-black text-emerald-400 text-center">{getDisplayedExchangeRate().toFixed(2)}</p>
+                        <p className="text-[9px] sm:text-xs font-bold text-white/60 text-center">{rateDateString}</p>
+                    </div>
+
+                    {/* EFECTIVO */}
+                    <div className={`p-3 rounded-xl flex flex-col justify-center ${efectivoBalanceTotal >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <Banknote className="w-3 sm:w-4 h-3 sm:h-4 text-white" />
+                            <span className="text-[8px] sm:text-[9px] font-black uppercase text-white">Efectivo</span>
+                        </div>
+                        <p className="text-base sm:text-lg font-black text-white text-center">{efectivoBalanceTotal >= 0 ? '' : '-'}{Math.abs(efectivoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-[9px] sm:text-xs font-bold text-white/80 text-center">${Math.abs(efectivoUsdTotal).toFixed(2)}</p>
                     </div>
                     
                     {/* BANCO */}
-                    <div className={`p-3 rounded-xl ${bancoBalanceTotal >= 0 ? 'bg-blue-500' : 'bg-red-500'}`}>
+                    <div className={`p-3 rounded-xl flex flex-col justify-center ${bancoBalanceTotal >= 0 ? 'bg-blue-500' : 'bg-red-500'}`}>
                         <div className="flex items-center justify-center gap-1 mb-1">
-                            <CreditCard className="w-4 h-4 text-white" />
-                            <span className="text-[9px] font-black uppercase text-white">Banco</span>
+                            <CreditCard className="w-3 sm:w-4 h-3 sm:h-4 text-white" />
+                            <span className="text-[8px] sm:text-[9px] font-black uppercase text-white">Banco</span>
                         </div>
-                        <p className="text-lg font-black text-white text-center">{bancoBalanceTotal >= 0 ? '' : '-'}{Math.abs(bancoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
-                        <p className="text-xs font-bold text-white/80 text-center">${Math.abs(bancoUsdTotal).toFixed(2)}</p>
+                        <p className="text-base sm:text-lg font-black text-white text-center">{bancoBalanceTotal >= 0 ? '' : '-'}{Math.abs(bancoBalanceTotal).toLocaleString('es-CO', { maximumFractionDigits: 0 })} Bs</p>
+                        <p className="text-[9px] sm:text-xs font-bold text-white/80 text-center">${Math.abs(bancoUsdTotal).toFixed(2)}</p>
                     </div>
-                    
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
                     {/* X COBRAR */}
                     <div className="p-3 rounded-xl bg-orange-500">
                         <div className="flex items-center justify-center gap-1 mb-1">
@@ -847,103 +864,104 @@ const VentasCaja: React.FC<ReportsProps> = ({
                     </div>
                 </div>
 
-                {/* PANEL BCV Y FILTROS */}
-                <div className="bg-indigo-900 text-white p-3 rounded-xl shadow-xl relative overflow-hidden mb-3">
+                {/* NAVEGACION DE FECHAS Y FILTROS INTEGRADOS */}
+                <div className="bg-indigo-900 text-white p-3 rounded-xl shadow-xl relative mb-3">
                     <div className="flex items-center justify-between gap-2 relative z-10">
-                        <button onClick={onOpenRateModal} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg transition-all shrink-0">
-                            <span className="text-xs font-bold">BCV</span>
-                            <span className="text-xs font-bold">{getDisplayedExchangeRate().toFixed(2)}</span>
+                        {/* FLECHA IZQUIERDA */}
+                        <button onClick={() => setQuickNavOffset(prev => prev - 1)} className="p-2 sm:p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors shrink-0 active:scale-95">
+                            <ChevronLeft className="w-5 h-5 text-white" />
                         </button>
-                        {onClearAllTreasury && (treasuryTransactions.length > 0 || sales.length > 0) && (
-                            <button onClick={onClearAllTreasury} className="flex items-center gap-1 px-2 py-1.5 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-all shrink-0" title="Limpiar movimientos">
-                                <Trash2 className="w-3 h-3" />
-                            </button>
-                        )}
-                        <div className="relative">
-                            <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="bg-white/10 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-white/20 transition-colors">
-                                <span className="text-xs font-bold truncate max-w-[60px]">
-                                    {dateFilter === 'today' ? 'Día' : dateFilter === 'week' ? 'Semana' : dateFilter === 'month' ? 'Mes' : 'Personalizado'}
-                                </span>
-                                <ChevronDown className={`w-3 h-3 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
-                            </button>
-                            {showFilterDropdown && (
-                                <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}>
-                                    <div className="absolute top-10 right-0 bg-white rounded-lg shadow-xl z-[70] w-32 p-1" onClick={(e) => e.stopPropagation()}>
-                                        <div className="space-y-1">
-                                            {[
-                                                { value: 'today', label: 'Día' },
-                                                { value: 'week', label: 'Semana' },
-                                                { value: 'month', label: 'Mes' },
-                                                { value: 'custom', label: 'Personalizado' }
-                                            ].map((opt) => (
-                                                <button
-                                                    key={opt.value}
-                                                    onClick={() => {
-                                                        if (opt.value === 'custom') {
-                                                            setShowCustomDatePicker(true);
-                                                            setShowFilterDropdown(false);
-                                                        } else {
-                                                            setDateFilter(opt.value as DateFilter);
-                                                            setQuickNavOffset(0);
-                                                            setShowFilterDropdown(false);
-                                                        }
-                                                    }}
-                                                    className={`w-full px-3 py-2 text-xs font-bold rounded-md text-left transition-colors ${
-                                                        dateFilter === opt.value
-                                                            ? 'bg-indigo-600 text-white'
-                                                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                                                    }`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
+                        
+                        {/* FILTRO CENTRAL (BOTÓN INTERACTIVO) */}
+                        <div className="flex-1 select-none flex justify-center min-w-0">
+                            <div className="relative w-full max-w-[240px]">
+                                <button 
+                                    onClick={() => setShowFilterDropdown(!showFilterDropdown)} 
+                                    className="w-full py-2 px-1 rounded-xl hover:bg-white/10 transition-colors flex flex-col items-center justify-center cursor-pointer active:scale-95"
+                                >
+                                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                                        {getQuickNavItems().map((item, idx) => (
+                                            <span key={idx} className="text-sm sm:text-base font-bold text-white truncate max-w-full">{item.label}</span>
+                                        ))}
+                                        <ChevronDown className={`w-4 h-4 text-indigo-300 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
                                     </div>
-                                </div>
-                            )}
-                            {showCustomDatePicker && (
-                                <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCustomDatePicker(false)}>
-                                    <div className="bg-white rounded-xl p-4 w-full max-w-xs shadow-xl" onClick={(e) => e.stopPropagation()}>
-                                        <h3 className="font-bold text-gray-900 mb-3 text-center text-sm">Rango de Fechas</h3>
-                                        <div className="space-y-2">
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Desde</label>
-                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Hasta</label>
-                                                <input type="date" max={getTodayString()} className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold mt-1" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
+                                </button>
+
+                                {/* DROPDOWN MENU */}
+                                {showFilterDropdown && (
+                                    <>
+                                        <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}></div>
+                                        <div className="absolute top-[110%] left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl shadow-indigo-500/20 z-[70] w-64 p-2.5 border border-indigo-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                            <div className="space-y-1.5">
+                                                {[
+                                                    { value: 'today', label: 'Día' },
+                                                    { value: 'week', label: 'Semana' },
+                                                    { value: 'month', label: 'Mes' },
+                                                    { value: 'custom', label: 'Personalizado' }
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.value}
+                                                        onClick={() => {
+                                                            if (opt.value === 'custom') {
+                                                                setShowCustomDatePicker(true);
+                                                                setShowFilterDropdown(false);
+                                                            } else {
+                                                                setDateFilter(opt.value as DateFilter);
+                                                                setQuickNavOffset(0);
+                                                                setShowFilterDropdown(false);
+                                                            }
+                                                        }}
+                                                        className={`w-full px-4 py-3 text-sm font-bold rounded-xl text-left transition-all ${
+                                                            dateFilter === opt.value
+                                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 translate-x-1'
+                                                                : 'bg-transparent text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 hover:translate-x-1'
+                                                        }`}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 mt-3">
-                                            <button onClick={() => { setShowCustomDatePicker(false); setDateFilter('today'); setCustomStartDate(''); setCustomEndDate(''); }} className="py-2 bg-gray-100 text-gray-600 rounded-lg font-bold text-xs">Cancelar</button>
-                                            <button onClick={() => { if (customStartDate && customEndDate) { setDateFilter('custom'); setQuickNavOffset(0); } setShowCustomDatePicker(false); }} className="py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs">Aplicar</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* FLECHA DERECHA */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button 
+                                onClick={() => setQuickNavOffset(prev => prev + 1)} 
+                                disabled={canNavigateForward()}
+                                className={`p-2 sm:p-3 rounded-xl transition-colors active:scale-95 ${canNavigateForward() ? 'bg-white/5 opacity-30 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20'}`}
+                            >
+                                <ChevronRight className="w-5 h-5 text-white" />
+                            </button>
                         </div>
                     </div>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500 rounded-full blur-[40px] opacity-20 pointer-events-none"></div>
-                </div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-[60px] opacity-40 pointer-events-none"></div>
 
-                {/* NAVEGACION DE FECHAS */}
-                <div className="flex items-center justify-between gap-2 px-2 mb-3">
-                    <button onClick={() => setQuickNavOffset(prev => prev - 1)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
-                        <ChevronLeft className="w-4 h-4 text-gray-500" />
-                    </button>
-                    <div className="flex-1 text-center">
-                        {getQuickNavItems().map((item, idx) => (
-                            <span key={idx} className="text-xs font-bold text-gray-700">{item.label}</span>
-                        ))}
-                    </div>
-                    <button 
-                        onClick={() => setQuickNavOffset(prev => prev + 1)} 
-                        disabled={canNavigateForward()}
-                        className={`p-1 rounded-lg transition-colors ${canNavigateForward() ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-100'}`}
-                    >
-                        <ChevronRight className="w-4 h-4 text-gray-500" />
-                    </button>
+                    {/* MODAL CONFIGURACION CUSTOM RANGE */}
+                    {showCustomDatePicker && (
+                        <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowCustomDatePicker(false)}>
+                            <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                                <h3 className="font-black text-gray-900 mb-5 text-center text-sm uppercase tracking-wider">Rango de Fechas</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Desde</label>
+                                        <input type="date" max={getTodayString()} className="w-full p-3.5 bg-gray-50 border-2 border-gray-100 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 outline-none rounded-xl text-sm font-bold mt-1 transition-all" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Hasta</label>
+                                        <input type="date" max={getTodayString()} className="w-full p-3.5 bg-gray-50 border-2 border-gray-100 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 outline-none rounded-xl text-sm font-bold mt-1 transition-all" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-6">
+                                    <button onClick={() => { setShowCustomDatePicker(false); setDateFilter('today'); setCustomStartDate(''); setCustomEndDate(''); }} className="py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold text-xs uppercase transition-colors active:scale-95">Cancelar</button>
+                                    <button onClick={() => { if (customStartDate && customEndDate) { setDateFilter('custom'); setQuickNavOffset(0); } setShowCustomDatePicker(false); }} className="py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/30 rounded-xl font-bold text-xs uppercase transition-all active:scale-95">Aplicar</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* BALANCE INGRESO/BALANCE/EGRESO */}
