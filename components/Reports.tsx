@@ -1361,8 +1361,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
             })()}
 
             {showExpenseTypeModal && (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm">
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowExpenseTypeModal(false)}>
+                    <div className="bg-white rounded-t-3xl sm:rounded-[2rem] p-6 w-full sm:max-w-sm" onClick={e => e.stopPropagation()}>
                         <div className="text-center mb-4">
                             <h3 className="text-xl font-black text-gray-900">Egresos</h3>
                         </div>
@@ -1785,8 +1785,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
 
             {/* --- MENÚ DE VENTAS --- */}
             {showVentasMenu && (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden">
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setShowVentasMenu(false); setVentasOption(null); }}>
+                    <div className="bg-white rounded-t-3xl sm:rounded-[2rem] w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="p-6 pb-4">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-2xl font-black text-gray-900">Ventas</h3>
