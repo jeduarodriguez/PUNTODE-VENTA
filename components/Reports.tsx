@@ -1374,24 +1374,24 @@ const VentasCaja: React.FC<ReportsProps> = ({
                         <div className="space-y-3">
                             <button 
                                 onClick={() => { setShowExpenseTypeModal(false); setShowPurchasePOS(true); }} 
-                                className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                                className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors"
                             >
-                                <ShoppingCart className="w-5 h-5" />
+                                <ShoppingCart className="w-6 h-6" />
                                 Productos
                             </button>
                             <button 
-                                onClick={() => { setShowExpenseTypeModal(false); setShowExpenseModal(true); }} 
-                                className="w-full bg-orange-100 hover:bg-orange-200 text-orange-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                                onClick={() => { setShowExpenseTypeModal(false); onOpenWorkers?.(); }} 
+                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors"
                             >
-                                <Wallet className="w-5 h-5" />
-                                Egresos
+                                <BanknoteIcon className="w-6 h-6" />
+                                Nómina
                             </button>
                             <button 
-                                onClick={() => { setShowExpenseTypeModal(false); onOpenWorkers?.(); }} 
-                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                                onClick={() => { setShowExpenseTypeModal(false); setShowExpenseModal(true); }} 
+                                className="w-full bg-orange-100 hover:bg-orange-200 text-orange-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors"
                             >
-                                <BanknoteIcon className="w-5 h-5" />
-                                Pagar Nómina
+                                <Wallet className="w-6 h-6" />
+                                Egresos
                             </button>
                         </div>
                     </div>
