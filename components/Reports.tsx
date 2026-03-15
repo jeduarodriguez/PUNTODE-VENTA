@@ -1800,15 +1800,15 @@ const VentasCaja: React.FC<ReportsProps> = ({
                             <div className="px-6 pb-6 space-y-3">
                                 <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
                                     <ShoppingCart className="w-6 h-6" />
-                                    Ventas del Inventario
+                                    Productos
+                                </button>
+                                <button onClick={() => setVentasOption('recharge')} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                    <Smartphone className="w-6 h-6" />
+                                    Recargas
                                 </button>
                                 <button onClick={() => handleOpenTreasury('income')} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
                                     <TrendingUp className="w-6 h-6" />
                                     Ingresos
-                                </button>
-                                <button onClick={() => setVentasOption('recharge')} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
-                                    <Smartphone className="w-6 h-6" />
-                                    Vender Recargas
                                 </button>
                             </div>
                         ) : (
