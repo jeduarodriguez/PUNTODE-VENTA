@@ -855,10 +855,9 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                     <span className="text-xs sm:text-sm font-bold text-white truncate">{getQuickNavItems().map(item => item.label).join(' - ')}</span>
                                     <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-indigo-300 transition-transform shrink-0 ${showFilterDropdown ? 'rotate-180' : ''}`} />
                                 </button>
-                            </div>
 
-                            {/* DROPDOWN MENU */}
-                            {showFilterDropdown && (
+                                {/* DROPDOWN MENU */}
+                                {showFilterDropdown && (
                                     <>
                                         <div className="fixed inset-0 z-[60]" onClick={() => setShowFilterDropdown(false)}></div>
                                         <div className="absolute top-[110%] left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl shadow-indigo-500/20 z-[70] w-64 p-2.5 border border-indigo-50 animate-fade-in" onClick={(e) => e.stopPropagation()}>
