@@ -142,19 +142,19 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const [manualCostDisplay, setManualCostDisplay] = useState('');
   const [costBsDisplay, setCostBsDisplay] = useState('');
 
-  // Helpers para compatibilidad con ambos formatos
-  const getCostPrice = (p: Product | Partial<Product>) => p.costPrice ?? (p as any).cost_price ?? 0;
-  const getCostMode = (p: Product | Partial<Product>) => p.cost_mode ?? (p as any).costMode ?? 'calculated';
-  const getCostBs = (p: Product | Partial<Product>) => p.cost_bs ?? (p as any).costBs ?? 0;
-  const getCostDate = (p: Product | Partial<Product>) => p.cost_date ?? (p as any).costDate ?? '';
-  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode ?? (p as any).sellingMode ?? 'simple';
-  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit ?? (p as any).measurementUnit ?? 'kg';
-  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package ?? (p as any).unitsPerPackage ?? 0;
-  const getUnitsPerBulk = (p: Product | Partial<Product>) => p.units_per_bulk ?? (p as any).unitsPerBulk ?? 0;
-  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit ?? (p as any).pricePerUnit ?? 0;
+  // Helpers para compatibilidad con formato snake_case
+  const getCostPrice = (p: Product | Partial<Product>) => p.cost_price || 0;
+  const getCostMode = (p: Product | Partial<Product>) => p.cost_mode || 'calculated';
+  const getCostBs = (p: Product | Partial<Product>) => p.cost_bs || 0;
+  const getCostDate = (p: Product | Partial<Product>) => p.cost_date || '';
+  const getSellingMode = (p: Product | Partial<Product>) => p.selling_mode || 'simple';
+  const getMeasurementUnit = (p: Product | Partial<Product>) => p.measurement_unit || 'kg';
+  const getUnitsPerPackage = (p: Product | Partial<Product>) => p.units_per_package || 0;
+  const getUnitsPerBulk = (p: Product | Partial<Product>) => p.units_per_bulk || 0;
+  const getPricePerUnit = (p: Product | Partial<Product>) => p.price_per_unit || 0;
   const getRemainingUnits = (p: Product | Partial<Product> | null | undefined) => {
     if (!p) return 0;
-    return p.remaining_units ?? (p as any).remainingUnits ?? 0;
+    return p.remaining_units || 0;
   };
 
   const [costBs, setCostBs] = useState<number>(0);
@@ -279,7 +279,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
   const calculatedCostUsd = getBulkCalculation().unitUsd;
   const manualCostUsd = getBulkCalculation().unitUsd;
 
-  const totalCostValue = products.reduce((sum, p) => sum + ((p.cost_price ?? p.costPrice ?? 0) * p.stock), 0);
+  const totalCostValue = products.reduce((sum, p) => sum + (getCostPrice(p) * p.stock), 0);
   const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const totalPotentialProfit = totalRetailValue - totalCostValue;
   const profitMarginPercent = totalCostValue > 0 ? (totalPotentialProfit / totalCostValue) * 100 : 0;
@@ -327,7 +327,7 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
 
       if (sellingMode === 'package' && unitsPerPkg > 0 && pricePerU > 0) {
         const unitStock = p.stock * unitsPerPkg + (p.remaining_units ?? (p as any).remainingUnits ?? 0);
-        const unitCost = (p.cost_price ?? (p as any).costPrice ?? 0) / unitsPerPkg;
+        const unitCost = getCostPrice(p) / unitsPerPkg;
         const unitProfit = pricePerU - unitCost;
         const unitMargin = unitCost > 0 ? (unitProfit / unitCost) * 100 : 0;
 
@@ -371,16 +371,16 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         name: formData.name || 'Producto sin nombre',
         category: formData.category || 'Bebidas',
         price: Number(formData.price) || 0,
-        costPrice: finalCost,
+        cost_price: finalCost,
         stock: Number(formData.stock) || 0,
         description: formData.description || '',
         image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
-        sellingMode: formData.selling_mode || 'simple',
-        measurementUnit: formData.measurement_unit,
-        unitsPerPackage: Number(formData.units_per_package) || 0,
-        unitsPerBulk: bulkQty,
-        pricePerUnit: Number(formData.price_per_unit) || 0,
-        remainingUnits: Number(formData.remaining_units) || 0,
+        selling_mode: (formData.selling_mode as any) || 'simple',
+        measurement_unit: (formData.measurement_unit as any) || 'kg',
+        units_per_package: Number(formData.units_per_package) || 0,
+        units_per_bulk: bulkQty,
+        price_per_unit: Number(formData.price_per_unit) || 0,
+        remaining_units: Number(formData.remaining_units) || 0,
         cost_mode: costMode,
         cost_bs: costMode === 'calculated' ? (parseFloat(costBsDisplay.replace(',', '.')) || 0) / bulkQty : 0,
         cost_date: costMode === 'calculated' ? costDate : ''

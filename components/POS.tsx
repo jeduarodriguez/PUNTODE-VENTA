@@ -84,11 +84,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const displayProducts = useMemo(() => {
         const result: Array<Product & { displayVariant?: string }> = [];
         products.forEach(product => {
-            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
-            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
-            const remainingUnits = product.remaining_units ?? (product as any).remainingUnits ?? 0;
-            const pricePerUnit = product.price_per_unit ?? (product as any).pricePerUnit ?? 0;
-            const measurementUnit = product.measurement_unit ?? (product as any).measurementUnit ?? 'kg';
+            const sellingMode = product.selling_mode || 'simple';
+            const unitsPerPackage = product.units_per_package || 0;
+            const remainingUnits = product.remaining_units || 0;
+            const pricePerUnit = product.price_per_unit || 0;
+            const measurementUnit = product.measurement_unit || 'kg';
 
             if (sellingMode === 'weight' && measurementUnit) {
                 const unitLabel = measurementUnit === 'kg' ? 'Kg' : measurementUnit;
@@ -187,7 +187,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             if (existing) {
                 return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            return [...prev, { ...product, quantity: 1, costAtSale: product.costPrice ?? 0 }];
+            return [...prev, { ...product, quantity: 1, costAtSale: product.cost_price || 0 }];
         });
     };
 
@@ -210,7 +210,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             if (existing) {
                 return prev.map(item => item.id === weightProduct.id ? { ...item, quantity: item.quantity + qty } : item);
             }
-            return [...prev, { ...weightProduct, quantity: qty, costAtSale: weightProduct.costPrice ?? 0 }];
+            return [...prev, { ...weightProduct, quantity: qty, costAtSale: weightProduct.cost_price || 0 }];
         });
 
         setIsWeightModalOpen(false);
@@ -223,7 +223,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
     // Función helper para obtener el stock máximo disponible para un producto en el carrito
     const getMaxStockForCartItem = (item: CartItem, cartItems: CartItem[]): number => {
-        const sellingMode = item.selling_mode ?? (item as any).sellingMode ?? 'simple';
+        const sellingMode = item.selling_mode || 'simple';
         
         if (sellingMode !== 'package') {
             return item.stock;
@@ -235,9 +235,9 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         
         if (!originalProduct) return item.stock;
         
-        const unitsPerPkg = originalProduct.units_per_package ?? (originalProduct as any).unitsPerPackage ?? 0;
-        const remainingUnd = originalProduct.remaining_units ?? (originalProduct as any).remainingUnits ?? 0;
-        const pkgStock = originalProduct.stock ?? 0;
+        const unitsPerPkg = originalProduct.units_per_package || 0;
+        const remainingUnd = originalProduct.remaining_units || 0;
+        const pkgStock = originalProduct.stock || 0;
         
         // Total de unidades disponibles
         const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnd;
@@ -402,8 +402,8 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-20 lg:pb-0">
                     <div className="flex flex-col gap-2">
                         {filteredProducts.map(product => {
-                            const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
-                            const unitsPerPackage = product.units_per_package ?? (product as any).unitsPerPackage ?? 0;
+                            const sellingMode = product.selling_mode || 'simple';
+                            const unitsPerPackage = product.units_per_package || 0;
                             const isUnitSale = product.id && product.id.endsWith('-unit');
                             const displayVariant = (product as any).displayVariant;
                             
@@ -434,9 +434,9 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
                             // Función helper para calcular stock disponible en unidades
                             const calculateAvailableStock = (prod: Product, qtyPkg: number, qtyUnd: number) => {
-                                const unitsPerPkg = prod.units_per_package ?? (prod as any).unitsPerPackage ?? 0;
-                                const remainingUnd = prod.remaining_units ?? (prod as any).remainingUnits ?? 0;
-                                const pkgStock = prod.stock ?? 0;
+                                const unitsPerPkg = prod.units_per_package || 0;
+                                const remainingUnd = prod.remaining_units || 0;
+                                const pkgStock = prod.stock || 0;
                                 
                                 // Total de unidades disponibles
                                 const totalUnitsAvailable = (pkgStock * unitsPerPkg) + remainingUnd;
@@ -485,7 +485,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     isOutOfStock = true;
                                     displayStock = 'X';
                                 } else {
-                                    const unitLabel = sellingMode === 'weight' ? (product.measurement_unit ?? (product as any).measurementUnit ?? 'kg') : 'Unds.';
+                                    const unitLabel = sellingMode === 'weight' ? (product.measurement_unit || 'kg') : 'Unds.';
                                     displayStock = sellingMode === 'weight' ? `${currentStock}${unitLabel}` : `${currentStock} ${unitLabel}`;
                                 }
                             }
@@ -682,7 +682,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 const itemTotalBs = item.price * item.quantity * todayRate;
                                 const itemTotalUsd = item.price * item.quantity;
                                 const costMode = (item as any).cost_mode || 'calculated';
-                                const costAtSale = item.costAtSale || item.costPrice || 0;
+                                const costAtSale = item.costAtSale || item.cost_price || 0;
                                 const profit = costAtSale > 0 ? itemTotalUsd - (costAtSale * item.quantity) : 0;
                                 const profitBs = profit * todayRate;
                                 

@@ -40,10 +40,10 @@ const App: React.FC = () => {
 
   // Helpers para compatibilidad de propiedades
   const getProductProps = (p: Product) => ({
-    sellingMode: p.selling_mode ?? (p as any).sellingMode ?? 'simple',
-    unitsPerPackage: p.units_per_package ?? (p as any).unitsPerPackage ?? 0,
-    remainingUnits: p.remaining_units ?? (p as any).remainingUnits ?? 0,
-    pricePerUnit: p.price_per_unit ?? (p as any).pricePerUnit ?? 0,
+    selling_mode: p.selling_mode || 'simple',
+    units_per_package: p.units_per_package || 0,
+    remaining_units: p.remaining_units || 0,
+    price_per_unit: p.price_per_unit || 0,
     stock: p.stock
   });
   const [sales, setSales] = useState<Sale[]>([]);
@@ -214,11 +214,11 @@ const App: React.FC = () => {
 
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
-        const { sellingMode, unitsPerPackage, remainingUnits } = getProductProps(product);
+        const { selling_mode, units_per_package, remaining_units } = getProductProps(product);
 
-        if (sellingMode === 'package' && isUnitSale) {
+        if (selling_mode === 'package' && isUnitSale) {
           // Venta por unidad de producto paquete
-          const totalUnitsAvailable = (product.stock * unitsPerPackage) + remainingUnits;
+          const totalUnitsAvailable = (product.stock * units_per_package) + (product.remaining_units || 0);
           const unitsSold = item.quantity;
           const unitsAfterSale = totalUnitsAvailable - unitsSold;
           
@@ -231,8 +231,8 @@ const App: React.FC = () => {
             };
           } else {
             // Calcular nuevo stock de paquetes y unidades restantes
-            const newStock = Math.floor(unitsAfterSale / unitsPerPackage);
-            const newRemainingUnits = unitsAfterSale % unitsPerPackage;
+            const newStock = Math.floor(unitsAfterSale / units_per_package);
+            const newRemainingUnits = unitsAfterSale % units_per_package;
             
             updatedProducts[pIndex] = {
               ...product,
@@ -241,7 +241,7 @@ const App: React.FC = () => {
             };
           }
           updates[`products/${productId}`] = updatedProducts[pIndex];
-        } else if (sellingMode === 'package' && !isUnitSale) {
+        } else if (selling_mode === 'package' && !isUnitSale) {
           // Venta por paquete completo
           const packagesSold = item.quantity;
           const newStock = Math.max(0, product.stock - packagesSold);
@@ -339,11 +339,11 @@ const App: React.FC = () => {
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
 
-        if (product.sellingMode === 'package' && isUnitSale) {
-          // Anular venta por unidad - reintegrar a remainingUnits
+        if (product.selling_mode === 'package' && isUnitSale) {
+          // Anular venta por unidad - reintegrar a remaining_units
           const qtyToReturn = item.quantity;
-          const newRemainingUnits = (product.remainingUnits || 0) + qtyToReturn;
-          const unitsPerPkg = product.unitsPerPackage || product.units_per_package || 0;
+          const newRemainingUnits = (product.remaining_units || 0) + qtyToReturn;
+          const unitsPerPkg = product.units_per_package || 0;
           
           let updatedStock = product.stock;
           let finalRemaining = newRemainingUnits;
@@ -354,7 +354,7 @@ const App: React.FC = () => {
             finalRemaining = newRemainingUnits % unitsPerPkg;
           }
           
-          const p = { ...product, stock: updatedStock, remainingUnits: finalRemaining };
+          const p = { ...product, stock: updatedStock, remaining_units: finalRemaining };
           updatedProducts[pIndex] = p;
           updates[`products/${productId}`] = p;
         } else {
@@ -535,7 +535,7 @@ const App: React.FC = () => {
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
-      items: [{ id: 'debt_payment', name: 'Abono de Deuda', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
+      items: [{ id: 'debt_payment', name: 'Abono de Deuda', category: 'Pagos', price: amount, cost_price: 0, stock: 1, quantity: 1 }],
       total: amount,
       exchangeRate: paymentRate,
       paymentMethod: method,
@@ -642,19 +642,19 @@ const App: React.FC = () => {
           
           if (pIndex !== -1) {
             const product = updatedProducts[pIndex];
-            const { sellingMode, unitsPerPackage, remainingUnits } = getProductProps(product);
+            const { selling_mode, units_per_package, remaining_units } = getProductProps(product);
             
-            if (sellingMode === 'package' && isUnitSale) {
+            if (selling_mode === 'package' && isUnitSale) {
               // Devolver unidades sueltas
               let qtyToReturn = item.quantity;
-              let newRemainingUnits = remainingUnits + qtyToReturn;
+              let newRemainingUnits = (product.remaining_units || 0) + qtyToReturn;
               let newStock = product.stock;
-              if (unitsPerPackage > 0 && newRemainingUnits >= unitsPerPackage) {
-                newStock += Math.floor(newRemainingUnits / unitsPerPackage);
-                newRemainingUnits = newRemainingUnits % unitsPerPackage;
+              if (product.units_per_package && product.units_per_package > 0 && newRemainingUnits >= product.units_per_package) {
+                newStock += Math.floor(newRemainingUnits / product.units_per_package);
+                newRemainingUnits = newRemainingUnits % product.units_per_package;
               }
-              updatedProducts[pIndex] = { ...product, stock: newStock, remainingUnits: newRemainingUnits, remaining_units: newRemainingUnits };
-            } else if (sellingMode === 'package' && !isUnitSale) {
+              updatedProducts[pIndex] = { ...product, stock: newStock, remaining_units: newRemainingUnits };
+            } else if (selling_mode === 'package' && !isUnitSale) {
               // Devolver paquetes
               updatedProducts[pIndex] = { ...product, stock: product.stock + item.quantity };
             } else {
@@ -894,7 +894,7 @@ const App: React.FC = () => {
     const paymentSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
-      items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
+      items: [{ id: 'worker_debt_payment', name: 'Abono Deuda Trabajador', category: 'Pagos', price: amount, cost_price: 0, stock: 1, quantity: 1 }],
       total: amount,
       exchangeRate: paymentRate,
       paymentMethod: method,
@@ -953,7 +953,7 @@ const App: React.FC = () => {
       const paymentSale: Sale = {
         id: Math.random().toString(36).substr(2, 9),
         timestamp: Date.now(),
-        items: [{ id: 'worker_debt_payment', name: 'Abono Deuda por Nómina', category: 'Pagos', price: amountToDeductDebt, cost_price: 0, costPrice: 0, stock: 1, quantity: 1 }],
+        items: [{ id: 'worker_debt_payment', name: 'Abono Deuda por Nómina', category: 'Pagos', price: amountToDeductDebt, cost_price: 0, stock: 1, quantity: 1 }],
         total: amountToDeductDebt,
         exchangeRate: paymentRate,
         paymentMethod: method as any,
@@ -1044,23 +1044,23 @@ const App: React.FC = () => {
     saveData('settings/expenseCategories', newCats);
   };
 
-  const handlePurchaseProducts = async (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
+  const handlePurchaseProducts = async (items: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
     const now = Date.now();
-    const totalUsd = items.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
-    const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.costPrice * exchangeRate) * item.quantity), 0);
+    const totalUsd = items.reduce((sum, item) => sum + (item.cost_price * item.quantity), 0);
+    const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.cost_price * exchangeRate) * item.quantity), 0);
 
     // Preparar items para guardar en la transacción (para poder revertir después)
     const purchaseItems = items.map(item => {
-      const itemUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
+      const itemUnitsPerBulk = item.product.units_per_bulk || 0;
       const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
-      const unitCostUsd = item.costPrice / bulkQty;
+      const unitCostUsd = item.cost_price / bulkQty;
       
       return {
         productId: item.product.id,
         productName: item.product.name,
         quantity: item.quantity,
-        costPrice: unitCostUsd,
-        costPriceBs: item.costPriceBs || (unitCostUsd * exchangeRate)
+        cost_price: unitCostUsd,
+        cost_price_bs: item.costPriceBs || (unitCostUsd * exchangeRate)
       };
     });
 
@@ -1100,47 +1100,40 @@ const App: React.FC = () => {
 
     // Siempre actualizar el inventario
     const updatedProducts = [...products];
+    const productUpdates: any = {};
+    
     for (const item of items) {
       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
       const itemCostMode = (item.product as any).cost_mode || 'calculated';
-      const itemUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
+      const itemUnitsPerBulk = item.product.units_per_bulk || 0;
       const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
 
       // El costPrice en el carrito es SIEMPRE el costo por bulto completo.
-      // Para guardar en el inventario necesitamos el costo UNITARIO.
-      const unitCostUsd = item.costPrice / bulkQty;
+      const unitCostUsd = item.cost_price / bulkQty;
 
       if (productIndex >= 0) {
-        updatedProducts[productIndex] = {
-          ...updatedProducts[productIndex],
-          stock: updatedProducts[productIndex].stock + item.quantity,
-          costPrice: unitCostUsd,
+        const p = updatedProducts[productIndex];
+        const updatedP = {
+          ...p,
+          stock: p.stock + item.quantity,
           cost_price: unitCostUsd,
-          // En modo calculado: cost_bs es el costo unitario en Bs (item.costPriceBs ya es unitario)
-          // En modo manual: no usamos cost_bs
           cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
           cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
           cost_mode: itemCostMode
         };
+        updatedProducts[productIndex] = updatedP;
+        productUpdates[`products/${updatedP.id}`] = updatedP;
       }
     }
+    
     setProducts(updatedProducts);
-
-    for (const item of items) {
-      const itemCostMode = (item.product as any).cost_mode || 'calculated';
-      const itemUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
-      const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
-      const unitCostUsd = item.costPrice / bulkQty;
-
-      await saveData(`products/${item.product.id}`, {
-        ...item.product,
-        stock: item.product.stock + item.quantity,
-        costPrice: unitCostUsd,
-        cost_price: unitCostUsd,
-        cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
-        cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
-        cost_mode: itemCostMode
-      });
+    try {
+      if (Object.keys(productUpdates).length > 0) {
+        await updateBatch(productUpdates);
+      }
+    } catch (e) {
+      console.error('Error updating stock batch:', e);
+      showNotification('Error al actualizar inventario', 'error');
     }
   };
 

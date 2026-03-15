@@ -34,7 +34,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, customers, excha
             sale.items.forEach(item => {
                 // Usa el costo guardado al momento de la venta (costAtSale)
                 // Si no existe, usa el costo actual del producto (compatibilidad con datos antiguos)
-                const costAtSale = item.costAtSale ?? products.find(p => p.id === item.id)?.costPrice ?? 0;
+                const costAtSale = item.costAtSale ?? products.find(p => p.id === item.id)?.cost_price ?? 0;
                 if (costAtSale > 0) {
                     totalProfitUSD += (item.price - costAtSale) * item.quantity;
                 }

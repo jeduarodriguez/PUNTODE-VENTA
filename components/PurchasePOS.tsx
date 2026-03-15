@@ -10,20 +10,19 @@ interface PurchasePOSProps {
     onAddCategory?: (category: string) => void;
     onDeleteCategory?: (category: string) => void;
     onClose: () => void;
-    onPurchase: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
+    onPurchase: (items: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
     onUpdateProduct?: (product: Product) => void; 
     onOpenInventory?: () => void;
     onOpenInventoryWithProduct?: (product: Product) => void;
-    initialCart?: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[];
+    initialCart?: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[];
     onCartChange?: (cart: any[]) => void;
 }
 
 interface CartItem {
     product: Product;
     quantity: number;
-    costPrice?: number;
-    cost_price?: number;
+    cost_price: number;
     costPriceBs?: number;
     rateAtPurchase?: number;
 }
@@ -81,12 +80,12 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [creditDebtAmountUsd, setCreditDebtAmountUsd] = useState(0);
 
     // Helpers para compatibilidad
-    const getCostPrice = (p: Product | CartItem) => p.cost_price ?? p.costPrice ?? 0;
-    const getCostMode = (p: Product | CartItem) => (p as any).cost_mode ?? (p as any).costMode ?? 'calculated';
-    const getCostBs = (p: Product | CartItem) => (p as any).cost_bs ?? (p as any).costBs ?? 0;
-    const getCostDate = (p: Product | CartItem) => (p as any).cost_date ?? (p as any).costDate ?? '';
-    const getSellingMode = (p: Product) => p.selling_mode ?? p.sellingMode ?? 'simple';
-    const getPricePerUnit = (p: Product) => p.price_per_unit ?? p.pricePerUnit ?? 0;
+    const getCostPrice = (p: Product | CartItem) => p.cost_price || 0;
+    const getCostMode = (p: Product | CartItem) => (p as any).cost_mode || 'calculated';
+    const getCostBs = (p: Product | CartItem) => (p as any).cost_bs || 0;
+    const getCostDate = (p: Product | CartItem) => (p as any).cost_date || '';
+    const getSellingMode = (p: Product) => p.selling_mode || 'simple';
+    const getPricePerUnit = (p: Product) => p.price_per_unit || 0;
 
     // Modal de edición de precio
     const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
@@ -350,7 +349,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const openEditPriceModal = (item: CartItem) => {
         setEditingPriceItem(item);
         const productCostMode = getCostMode(item.product);
-        const productUnitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
+        const productUnitsPerBulk = item.product.units_per_bulk || 0;
         const bulkQty = productUnitsPerBulk || 1;
 
         setEditCostMode(productCostMode);
@@ -382,8 +381,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             setEditCustomRate(null);
         }
 
-        // En modo manual, mostrar costo UNITARIO (item.costPrice es por bulto, dividir entre bulkQty)
-        const unitCostManual = bulkQty > 0 ? item.costPrice / bulkQty : item.costPrice;
+        // En modo manual, mostrar costo UNITARIO (item.cost_price es por bulto, dividir entre bulkQty)
+        const unitCostManual = bulkQty > 0 ? item.cost_price / bulkQty : item.cost_price;
         setEditManualCost(unitCostManual);
         setEditManualCostDisplay(unitCostManual > 0 ? unitCostManual.toFixed(3) : '');
     };
@@ -507,14 +506,13 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             name: newProductName,
             category: newProductCategory,
             price: newProductPrice,
-            costPrice: newProductFinalCost,
             cost_price: newProductFinalCost,
             stock: newProductStock,
-            sellingMode: newProductSellingMode,
-            measurementUnit: newProductMeasurementUnit,
-            unitsPerPackage: newProductUnitsPerPackage,
-            pricePerUnit: newProductPricePerUnit,
-            remainingUnits: 0,
+            selling_mode: newProductSellingMode,
+            measurement_unit: newProductMeasurementUnit,
+            units_per_package: newProductUnitsPerPackage,
+            price_per_unit: newProductPricePerUnit,
+            remaining_units: 0,
             cost_mode: newProductCostMode,
             cost_bs: newProductCostMode === 'calculated' ? newProductCostBs : 0,
             cost_date: newProductCostMode === 'calculated' ? newProductCostDate : ''
