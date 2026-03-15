@@ -1372,7 +1372,7 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                 className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-4 py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
                             >
                                 <ShoppingCart className="w-5 h-5" />
-                                Comprar Productos (Inventario)
+                                Productos
                             </button>
                             <button 
                                 onClick={() => { setShowExpenseTypeModal(false); setShowExpenseModal(true); }} 
