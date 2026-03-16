@@ -634,10 +634,18 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
           <input
             type="text"
             placeholder="BUSCAR PRODUCTO..."
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs shadow-sm text-gray-900 font-black uppercase"
+            className="w-full pl-10 pr-10 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs shadow-sm text-gray-900 font-black uppercase"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">

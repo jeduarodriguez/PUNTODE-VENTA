@@ -614,10 +614,10 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                   onClick={() => setHistoryCustomer(customer)}
                   className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer group active:scale-[0.99]"
                 >
-                  <div className="p-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="p-3 sm:p-4 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 overflow-hidden min-w-0">
                       {/* Avatar Compacto */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm shrink-0 transition-colors ${customer.balance > 0 ? 'bg-red-50 text-red-500 group-hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'}`}>
+                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm shrink-0 transition-colors ${customer.balance > 0 ? 'bg-red-50 text-red-500 group-hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'}`}>
                         {customer.name.charAt(0)}
                       </div>
 
@@ -628,22 +628,22 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                     </div>
 
                     {/* Info Derecha */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4 shrink-0">
                       {customer.balance > 0 ? (
                         <>
-                          {/* Centro: Deuda en dólares */}
-                          <div className="text-center shrink-0 min-w-[60px]">
+                          {/* Deuda en dólares */}
+                          <div className="text-center hidden sm:block min-w-[60px]">
                             <span className="block text-[10px] font-bold text-gray-400">USD</span>
                             <span className="block text-base font-black text-gray-700">${customer.balance.toFixed(2)}</span>
                           </div>
-                          {/* Derecha: Deuda en bolívares - más grande */}
-                          <div className="text-right shrink-0 min-w-[90px]">
+                          {/* Deuda en bolívares */}
+                          <div className="text-right min-w-[70px] sm:min-w-[90px]">
                             <span className="block text-[10px] font-bold text-gray-400">Bs</span>
-                            <span className="block text-xl font-black text-red-600">{debtBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}</span>
+                            <span className="block text-base sm:text-xl font-black text-red-600">{debtBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
                           </div>
                         </>
                       ) : (
-                        <div className="text-emerald-500 font-black text-xs bg-emerald-50 px-3 py-2 rounded-xl">
+                        <div className="text-emerald-500 font-black text-xs bg-emerald-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl">
                           SIN DEUDA
                         </div>
                       )}
@@ -678,9 +678,9 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                   onClick={() => setHistoryWorker(worker)}
                   className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-orange-300 hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer group active:scale-[0.99]"
                 >
-                  <div className="p-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm transition-colors ${worker.balance > 0 ? 'bg-orange-50 text-orange-500 group-hover:bg-orange-100' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'}`}>
+                  <div className="p-3 sm:p-4 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 overflow-hidden min-w-0">
+                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm transition-colors ${worker.balance > 0 ? 'bg-orange-50 text-orange-500 group-hover:bg-orange-100' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'}`}>
                         {worker.name.charAt(0)}
                       </div>
 
@@ -690,9 +690,9 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      {/* Centro: Deuda pendiente */}
-                      <div className="text-center shrink-0 min-w-[70px]">
+                    <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                      {/* Deuda pendiente */}
+                      <div className="text-center min-w-[50px] sm:min-w-[70px]">
                         {worker.balance > 0 ? (
                           <>
                             <span className="block text-[10px] font-bold text-gray-400">Deuda</span>
@@ -701,15 +701,15 @@ const Customers: React.FC<CustomersProps> = ({ customers, workers, sales, exchan
                         ) : (
                           <>
                             <span className="block text-[10px] font-bold text-gray-400">Deuda</span>
-                            <span className="block text-sm font-bold text-emerald-500">$0.00</span>
+                            <span className="block text-sm font-bold text-emerald-500">$0</span>
                           </>
                         )}
                       </div>
 
-                      {/* Derecha: Sueldo a cobrar */}
-                      <div className="text-right shrink-0 min-w-[80px]">
+                      {/* Sueldo a cobrar */}
+                      <div className="text-right min-w-[60px] sm:min-w-[80px]">
                         <span className="block text-[10px] font-bold text-gray-400">A Cobrar</span>
-                        <span className={`block text-lg font-black ${worker.salary - worker.balance > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        <span className={`block text-base sm:text-lg font-black ${worker.salary - worker.balance > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
                           ${Math.max(0, worker.salary - worker.balance).toFixed(2)}
                         </span>
                       </div>
