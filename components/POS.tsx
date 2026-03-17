@@ -46,6 +46,9 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
     const [editPriceValue, setEditPriceValue] = useState('');
 
+    // Local string state for quantity inputs (allows typing decimals like "0.5")
+    const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
     // Load initial cart if provided (Edit Mode)
     useEffect(() => {
         if (initialCart && initialCart.length > 0) {
@@ -533,7 +536,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     </div>
 
                                     {/* Controles de cantidad a la derecha */}
-                                    <div className="flex items-center gap-1 shrink-0">
+                                    <div 
+                                        className="flex items-center gap-1 shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
                                         {qtyInCart > 0 && (
                                             <button
                                                 onClick={(e) => {
@@ -547,40 +554,45 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                         )}
                                         <input
                                             type="text"
-                                            inputMode={isWeight ? "decimal" : "numeric"}
-                                            className={`w-14 h-8 text-center text-sm font-bold bg-white border-2 border-indigo-200 rounded-lg ${qtyInCart > 0 ? 'text-indigo-600' : 'text-gray-400'}`}
-                                            value={qtyInCart > 0 ? qtyInCart : ''}
+                                            inputMode="decimal"
+                                            autoComplete="off"
+                                            className={`w-14 h-8 text-center text-sm font-bold bg-white border-2 border-indigo-200 rounded-lg cursor-text select-text ${qtyInCart > 0 ? 'text-indigo-600' : 'text-gray-400'}`}
+                                            value={inputValues[product.id] !== undefined ? inputValues[product.id] : (qtyInCart > 0 ? qtyInCart.toString() : '')}
                                             placeholder="0"
-                                            onClick={(e) => e.stopPropagation()}
+                                            onClick={(e) => { e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onFocus={(e) => {
+                                                e.stopPropagation();
+                                                setInputValues(prev => ({ ...prev, [product.id]: qtyInCart > 0 ? qtyInCart.toString() : '' }));
+                                                e.target.select();
+                                            }}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                            }}
                                             onChange={(e) => {
-                                                const val = isWeight 
-                                                    ? parseFloat(e.target.value.replace(',', '.'))
-                                                    : parseInt(e.target.value);
-                                                if (isWeight) {
-                                                    if (!isNaN(val) && val > 0) {
-                                                        setCart(prev => {
-                                                            const existing = prev.find(i => i.id === product.id);
-                                                            if (existing) {
-                                                                return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
-                                                            }
-                                                            return [...prev, { ...product, quantity: val, quantityType: 'weight' }];
-                                                        });
-                                                    } else if (e.target.value === '') {
-                                                        setCart(prev => prev.filter(i => i.id !== product.id));
-                                                    }
-                                                } else {
-                                                    if (!isNaN(val) && val > 0) {
-                                                        setCart(prev => {
-                                                            const existing = prev.find(i => i.id === product.id);
-                                                            if (existing) {
-                                                                return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
-                                                            }
-                                                            return [...prev, { ...product, quantity: val }];
-                                                        });
-                                                    } else if (e.target.value === '') {
-                                                        setCart(prev => prev.filter(i => i.id !== product.id));
-                                                    }
+                                                const raw = e.target.value.replace(',', '.');
+                                                // Allow empty, digits, single dot/comma for decimal typing
+                                                if (/^\d*\.?\d*$/.test(raw)) {
+                                                    setInputValues(prev => ({ ...prev, [product.id]: raw }));
                                                 }
+                                            }}
+                                            onBlur={(e) => {
+                                                e.stopPropagation();
+                                                const raw = (inputValues[product.id] ?? '').replace(',', '.');
+                                                const val = parseFloat(raw);
+                                                if (!isNaN(val) && val > 0) {
+                                                    setCart(prev => {
+                                                        const existing = prev.find(i => i.id === product.id);
+                                                        if (existing) {
+                                                            return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
+                                                        }
+                                                        return [...prev, { ...product, quantity: val, costAtSale: product.cost_price || 0 }];
+                                                    });
+                                                } else if (raw === '' || val === 0) {
+                                                    setCart(prev => prev.filter(i => i.id !== product.id));
+                                                }
+                                                setInputValues(prev => { const next = { ...prev }; delete next[product.id]; return next; });
                                             }}
                                         />
                                     </div>
@@ -695,7 +707,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                             <div className="bg-gray-50 p-2 rounded-lg flex items-center justify-center">
                                                 <div className="flex items-center gap-1">
                                                     <button
-                                                        onClick={() => updateQuantity(item.id, -1)}
+                                                        onClick={() => updateQuantity(item.id, item.quantity <= 1 ? -0.5 : -1)}
                                                         className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
                                                     >
                                                         <Minus className="w-3 h-3" />
@@ -703,14 +715,31 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                                     <input
                                                         type="text"
                                                         inputMode="decimal"
-                                                        className="w-12 text-center font-black text-sm bg-white border border-gray-200 rounded py-0.5 text-gray-700"
-                                                        value={item.quantity}
+                                                        autoComplete="off"
+                                                        className="w-12 text-center font-black text-sm bg-white border border-gray-200 rounded py-0.5 text-gray-700 cursor-text select-text"
+                                                        value={inputValues[`cart-${item.id}`] !== undefined ? inputValues[`cart-${item.id}`] : item.quantity.toString()}
+                                                        onFocus={(e) => {
+                                                            setInputValues(prev => ({ ...prev, [`cart-${item.id}`]: item.quantity.toString() }));
+                                                            e.target.select();
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                        }}
                                                         onChange={(e) => {
-                                                            const rawValue = e.target.value.replace(',', '.');
-                                                            if (rawValue === '' || rawValue === '-') return;
-                                                            const val = parseFloat(rawValue);
-                                                            if (isNaN(val)) return;
-                                                            updateQuantityDirect(item.id, Math.max(1, Math.floor(val)));
+                                                            const raw = e.target.value.replace(',', '.');
+                                                            if (/^\d*\.?\d*$/.test(raw)) {
+                                                                setInputValues(prev => ({ ...prev, [`cart-${item.id}`]: raw }));
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            const raw = (inputValues[`cart-${item.id}`] ?? '').replace(',', '.');
+                                                            const val = parseFloat(raw);
+                                                            if (!isNaN(val) && val > 0) {
+                                                                updateQuantityDirect(item.id, val);
+                                                            } else if (raw === '' || val === 0) {
+                                                                removeFromCart(item.id);
+                                                            }
+                                                            setInputValues(prev => { const next = { ...prev }; delete next[`cart-${item.id}`]; return next; });
                                                         }}
                                                     />
                                                     <button

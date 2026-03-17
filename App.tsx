@@ -218,7 +218,7 @@ const App: React.FC = () => {
 
         if (selling_mode === 'package') {
           // Venta de producto paquete (sea por unidad o por paquete completo)
-          const totalUnitsAvailable = (product.stock * units_per_package) + (product.remaining_units || 0);
+          const totalUnitsAvailable = (product.stock * units_per_package) + remaining_units;
           const unitsSold = isUnitSale ? item.quantity : item.quantity * units_per_package;
           const unitsAfterSale = Math.max(0, totalUnitsAvailable - unitsSold);
           
@@ -323,8 +323,9 @@ const App: React.FC = () => {
         if (product.selling_mode === 'package' && isUnitSale) {
           // Anular venta por unidad - reintegrar a remaining_units
           const qtyToReturn = item.quantity;
-          const newRemainingUnits = (product.remaining_units || 0) + qtyToReturn;
-          const unitsPerPkg = product.units_per_package || 0;
+          const currentRemaining = product.remaining_units || (product as any).remainingUnits || 0;
+          const newRemainingUnits = currentRemaining + qtyToReturn;
+          const unitsPerPkg = product.units_per_package || (product as any).unitsPerPackage || 0;
           
           let updatedStock = product.stock;
           let finalRemaining = newRemainingUnits;
@@ -575,7 +576,7 @@ const App: React.FC = () => {
         const product = updatedProducts[pIndex];
         const newProduct = { ...product };
         newProduct.stock = product.stock + item.quantity;
-        if (item.cost > 0) newProduct.costPrice = item.cost;
+        if (item.cost > 0) newProduct.cost_price = item.cost;
         if (item.newPrice && item.newPrice > 0) newProduct.price = item.newPrice;
         updatedProducts[pIndex] = newProduct;
         updates[`products/${product.id}`] = newProduct;
