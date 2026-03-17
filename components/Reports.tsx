@@ -110,6 +110,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
     };
     const [showVentasMenu, setShowVentasMenu] = useState(false);
     const [ventasOption, setVentasOption] = useState<'pos' | 'income' | 'recharge' | null>(null);
+    const [showIncomeModal, setShowIncomeModal] = useState(false);
+    const [showRechargeModal, setShowRechargeModal] = useState(false);
     const [incomeAmount, setIncomeAmount] = useState('');
     const [incomeRate, setIncomeRate] = useState('');
     const [incomeCategory, setIncomeCategory] = useState('Otros');
@@ -1520,6 +1522,359 @@ const VentasCaja: React.FC<ReportsProps> = ({
                 </div>
             )}
 
+            {/* Modal de Ingresos - Pantalla completa en móvil */}
+            {showIncomeModal && (
+                <div className="fixed inset-0 bg-white z-[110] flex flex-col">
+                    {/* Header fijo */}
+                    <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
+                        <h3 className="text-xl font-black text-blue-600">Nuevo Ingreso</h3>
+                        <button onClick={() => setShowIncomeModal(false)} className="p-2 bg-gray-100 rounded-full text-gray-400">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {/* Contenido scrolleable */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="space-y-5">
+                            {/* Monto con Toggle de Moneda */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
+                                <div className="relative mt-2">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-2xl text-blue-300">{expenseMethodLabel}</span>
+                                    <input 
+                                        autoFocus 
+                                        type="number" 
+                                        placeholder="0.00" 
+                                        className="w-full pl-14 pr-28 py-5 bg-gray-50 border-2 border-transparent focus:border-blue-500 rounded-2xl text-center font-black text-3xl text-blue-600 outline-none" 
+                                        value={incomeAmount} 
+                                        onChange={(e) => setIncomeAmount(e.target.value)} 
+                                    />
+                                    <button 
+                                        onClick={() => setExpenseMethodLabel(prev => prev === '$' ? 'Bs' : '$')} 
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-blue-500 bg-blue-50 px-4 py-2 rounded-xl shadow-sm"
+                                    >
+                                        {expenseMethodLabel === '$' ? '$→Bs' : 'Bs→$'}
+                                    </button>
+                                </div>
+                                {expenseMethodLabel === '$' && (
+                                    <p className="text-xs font-bold text-gray-400 mt-2 text-right">
+                                        = Bs {(parseFloat(incomeAmount || '0') * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} (Tasa: {exchangeRate})
+                                    </p>
+                                )}
+                                {expenseMethodLabel === 'Bs' && (
+                                    <p className="text-xs font-bold text-gray-400 mt-2 text-right">
+                                        = $ {(parseFloat(incomeAmount || '0') / exchangeRate).toFixed(2)} (Tasa: {exchangeRate})
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Método de Cobro */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Cobrado con</label>
+                                <select 
+                                    value={expenseMethod} 
+                                    onChange={e => setExpenseMethod(e.target.value as any)} 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-blue-300 mt-2"
+                                >
+                                    <option value="Cash">💵 Efectivo</option>
+                                    <option value="Transfer">🏦 Transferencia</option>
+                                    <option value="PagoMovil">📱 Pago Móvil</option>
+                                    <option value="Card">💳 Punto de Venta</option>
+                                </select>
+                            </div>
+
+                            {/* Fecha */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                <input 
+                                    type="date" 
+                                    value={incomeDate} 
+                                    onChange={e => setIncomeDate(e.target.value)}
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                />
+                            </div>
+
+                            {/* Categoría */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                                <select 
+                                    value={incomeCategory} 
+                                    onChange={e => setIncomeCategory(e.target.value)}
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none border-2 border-transparent focus:border-blue-300 mt-2"
+                                >
+                                    {incomeCategories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Descripción */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Detalles del ingreso..." 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                    value={incomeDescription}
+                                    onChange={(e) => setIncomeDescription(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer fijo */}
+                    <div className="p-4 border-t border-gray-100 bg-white">
+                        <button 
+                            onClick={() => {
+                                const amount = parseFloat(incomeAmount);
+                                if (amount > 0) {
+                                    const timestamp = new Date(incomeDate + 'T12:00:00').getTime();
+                                    const rateForDate = getRateForDate(incomeDate);
+                                    const amountInUsd = expenseMethodLabel === '$' ? amount : amount / rateForDate;
+                                    const amountInBs = expenseMethodLabel === 'Bs' ? amount : amount * rateForDate;
+                                    onAddTreasuryTransaction({
+                                        id: `inc_${Date.now()}`,
+                                        type: 'income',
+                                        category: incomeCategory,
+                                        description: incomeDescription || incomeCategory,
+                                        amount: amountInUsd,
+                                        amountBs: amountInBs,
+                                        method: expenseMethod,
+                                        exchangeRate: rateForDate,
+                                        timestamp
+                                    });
+                                    setIncomeAmount('');
+                                    setIncomeDescription('');
+                                    setShowIncomeModal(false);
+                                    setExpenseMethod('Cash');
+                                    setExpenseMethodLabel('$');
+                                }
+                            }} 
+                            className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg"
+                        >
+                            Guardar Ingreso
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Recargas - Pantalla completa en móvil */}
+            {showRechargeModal && (
+                <div className="fixed inset-0 bg-white z-[110] flex flex-col">
+                    {/* Header fijo */}
+                    <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
+                        <h3 className="text-xl font-black text-purple-600">Recargas y Avances</h3>
+                        <button onClick={() => setShowRechargeModal(false)} className="p-2 bg-gray-100 rounded-full text-gray-400">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    {/* Contenido scrolleable */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="space-y-5">
+                            {/* Monto a recargar */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto a Recargar</label>
+                                <input 
+                                    type="number" 
+                                    value={rechargeAmount} 
+                                    onChange={e => setRechargeAmount(e.target.value)} 
+                                    className="w-full p-4 bg-gray-50 rounded-2xl text-2xl font-black text-purple-600 outline-none mt-2" 
+                                    placeholder="0" 
+                                />
+                            </div>
+
+                            {/* Cuenta a debitar */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Cuenta a Debitar</label>
+                                <div className="flex gap-2 mt-2">
+                                    <button 
+                                        onClick={() => setRechargeDebitAccount('Bank')} 
+                                        className={`flex-1 py-4 rounded-xl font-bold text-sm ${rechargeDebitAccount === 'Bank' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        Banco
+                                    </button>
+                                    <button 
+                                        onClick={() => setRechargeDebitAccount('Cash')} 
+                                        className={`flex-1 py-4 rounded-xl font-bold text-sm ${rechargeDebitAccount === 'Cash' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        Efectivo
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Monto a cobrar */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Monto a Cobrar</label>
+                                <input 
+                                    type="number" 
+                                    value={rechargeReceiveAmount} 
+                                    onChange={e => setRechargeReceiveAmount(e.target.value)} 
+                                    className="w-full p-4 bg-gray-50 rounded-2xl text-2xl font-black text-emerald-600 outline-none mt-2" 
+                                    placeholder="0" 
+                                />
+                            </div>
+
+                            {/* Método de cobro */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Método de Cobro</label>
+                                <div className="flex gap-2 mt-2">
+                                    <button 
+                                        onClick={() => setRechargeMethod('Cash')} 
+                                        className={`flex-1 py-4 rounded-xl font-bold text-sm ${rechargeMethod === 'Cash' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        Efectivo
+                                    </button>
+                                    <button 
+                                        onClick={() => setRechargeMethod('PagoMovil')} 
+                                        className={`flex-1 py-4 rounded-xl font-bold text-sm ${rechargeMethod === 'PagoMovil' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        Pago Móvil
+                                    </button>
+                                    <button 
+                                        onClick={() => setRechargeMethod('Card')} 
+                                        className={`flex-1 py-4 rounded-xl font-bold text-sm ${rechargeMethod === 'Card' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        Tarjeta
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Teléfono - opcional */}
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase">Teléfono (Opcional)</label>
+                                <input 
+                                    type="text" 
+                                    value={rechargeReference} 
+                                    onChange={e => setRechargeReference(e.target.value)} 
+                                    className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                    placeholder="Número de teléfono" 
+                                />
+                            </div>
+
+                            {/* Fecha y Tasa */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                                    <input 
+                                        type="date" 
+                                        value={rechargeDate} 
+                                        onChange={e => setRechargeDate(e.target.value)} 
+                                        className="w-full p-4 bg-gray-50 rounded-xl text-base font-bold outline-none mt-2" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Tasa</label>
+                                    <input 
+                                        type="number" 
+                                        value={exchangeRate} 
+                                        className="w-full p-4 bg-gray-100 rounded-xl text-sm font-black text-gray-500 outline-none mt-2" 
+                                        disabled 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Panel de Ganancia */}
+                            <div className="bg-purple-50 p-5 rounded-2xl">
+                                <p className="text-xs font-bold text-purple-600 uppercase mb-2">Resumen</p>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="text-gray-600">Monto recarga:</span>
+                                    <span className="font-black text-purple-600">{rechargeAmount ? parseFloat(rechargeAmount).toLocaleString('es-CO') : '0'} Bs</span>
+                                </div>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="text-gray-600">Monto cobrado:</span>
+                                    <span className="font-black text-emerald-600">{rechargeReceiveAmount ? parseFloat(rechargeReceiveAmount).toLocaleString('es-CO') : '0'} Bs</span>
+                                </div>
+                                <div className="flex justify-between text-sm border-t border-purple-200 pt-2 mt-2">
+                                    <span className="text-gray-600 font-bold">Diferencia (Ganancia):</span>
+                                    <span className="font-black text-emerald-600">
+                                        {rechargeAmount && rechargeReceiveAmount 
+                                            ? (parseFloat(rechargeReceiveAmount) - parseFloat(rechargeAmount)).toLocaleString('es-CO')
+                                            : '0'} Bs
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* USD Reference */}
+                            <div className="bg-gray-50 p-4 rounded-xl">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-500">Referencia USD:</span>
+                                    <span className="font-black text-gray-700">
+                                        ${rechargeAmount ? (parseFloat(rechargeAmount) / exchangeRate).toFixed(2) : '0.00'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer fijo */}
+                    <div className="p-4 border-t border-gray-100 bg-white">
+                        <button 
+                            onClick={() => {
+                                const amountRecargar = parseFloat(rechargeAmount);
+                                const amountCobrar = parseFloat(rechargeReceiveAmount);
+                                const ganancia = amountCobrar - amountRecargar;
+                                
+                                if (amountRecargar > 0 && amountCobrar > 0) {
+                                    const timestamp = new Date(rechargeDate + 'T12:00:00').getTime();
+                                    const isRecarga = rechargeReference.trim() !== '';
+                                    
+                                    // Egreso: monto que se descuenta de la cuenta (banco/efectivo)
+                                    onAddTreasuryTransaction({
+                                        id: `rec_debit_${Date.now()}`,
+                                        type: 'expense',
+                                        category: 'Recargas',
+                                        description: isRecarga ? `Recarga: ${rechargeReference}` : `Avance`,
+                                        amount: amountRecargar / exchangeRate,
+                                        amountBs: amountRecargar,
+                                        method: rechargeDebitAccount === 'Bank' ? 'Transfer' : 'Cash',
+                                        exchangeRate: exchangeRate,
+                                        timestamp
+                                    });
+                                    
+                                    // Ingreso: monto cobrado al cliente
+                                    onAddTreasuryTransaction({
+                                        id: `rec_income_${Date.now()}`,
+                                        type: 'income',
+                                        category: 'Recargas',
+                                        description: isRecarga ? `Cobro recarga: ${rechargeReference}` : `Cobro avance`,
+                                        amount: amountCobrar / exchangeRate,
+                                        amountBs: amountCobrar,
+                                        method: rechargeMethod,
+                                        exchangeRate: exchangeRate,
+                                        timestamp
+                                    });
+                                    
+                                    // Si hay ganancia, registrarla como ingreso adicional
+                                    if (ganancia > 0) {
+                                        onAddTreasuryTransaction({
+                                            id: `rec_gain_${Date.now()}`,
+                                            type: 'income',
+                                            category: 'Recargas',
+                                            description: isRecarga ? `Ganancia recarga: ${rechargeReference}` : `Ganancia avance`,
+                                            amount: ganancia / exchangeRate,
+                                            amountBs: ganancia,
+                                            method: rechargeMethod,
+                                            exchangeRate: exchangeRate,
+                                            timestamp
+                                        });
+                                    }
+                                    
+                                    setRechargeAmount('');
+                                    setRechargeReceiveAmount('');
+                                    setRechargeFee('');
+                                    setRechargeReference('');
+                                    setShowRechargeModal(false);
+                                }
+                            }} 
+                            className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black text-lg"
+                        >
+                            Guardar
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {editingTransactionId && editTransactionDate && (
                 <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center sm:p-4 p-0 backdrop-blur-sm">
                     <div className="bg-white rounded-none sm:rounded-[2rem] p-6 w-full sm:max-w-sm h-full sm:h-auto overflow-y-auto">
@@ -1769,7 +2124,7 @@ const VentasCaja: React.FC<ReportsProps> = ({
             )}
 
             {/* Botones Flotantes - Optimizado para móvil */}
-            {(!selectedSale && !selectedTransaction && !activeDetail && !showExpenseModal && !showExpenseTypeModal && !isTreasuryModalOpen && !showVentasMenu && !editingTransactionId && !showSearchInput) && (
+            {(!selectedSale && !selectedTransaction && !activeDetail && !showExpenseModal && !showExpenseTypeModal && !isTreasuryModalOpen && !showVentasMenu && !showIncomeModal && !showRechargeModal && !editingTransactionId && !showSearchInput) && (
                 <div 
                     className="fixed bottom-24 left-2 right-2 md:bottom-6 md:left-auto md:right-6 z-[50] flex justify-center gap-2 md:gap-4 animate-fade-in"
                     style={{ pointerEvents: 'auto' }}
@@ -1794,8 +2149,8 @@ const VentasCaja: React.FC<ReportsProps> = ({
             {/* --- MENÚ DE VENTAS --- */}
             {showVentasMenu && (
                 <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setShowVentasMenu(false); setVentasOption(null); }}>
-                    <div className="bg-white rounded-t-3xl sm:rounded-[2rem] w-full sm:max-w-sm h-[85vh] sm:h-auto sm:max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 sm:p-6 pb-2 sm:pb-4 shrink-0">
+                    <div className="bg-white rounded-t-3xl sm:rounded-[2rem] w-full sm:max-w-sm pb-6 sm:pb-6" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 sm:p-6 pb-2 shrink-0">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-xl sm:text-2xl font-black text-gray-900">Ventas</h3>
                                 <button onClick={() => { setShowVentasMenu(false); setVentasOption(null); }} className="p-2 text-gray-400 hover:text-gray-600">
@@ -1803,287 +2158,21 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4">
-                        </div>
                         
-                        {!ventasOption ? (
-                            <div className="px-6 pb-6 space-y-3">
-                                <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
-                                    <ShoppingCart className="w-6 h-6" />
-                                    Productos
-                                </button>
-                                <button onClick={() => setVentasOption('recharge')} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
-                                    <Smartphone className="w-6 h-6" />
-                                    Recargas
-                                </button>
-                                <button onClick={() => handleOpenTreasury('income')} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
-                                    <TrendingUp className="w-6 h-6" />
-                                    Ingresos
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <button onClick={() => setVentasOption(null)} className="flex items-center gap-2 text-gray-500 mb-2">
-                                    <ChevronLeft className="w-5 h-5" />
-                                    <span className="text-sm font-bold">Volver</span>
-                                </button>
-                                
-                                {/* Formulario Ingresos */}
-                                {ventasOption === 'income' && (
-                                    <div className="space-y-4">
-                                        <h4 className="text-lg font-black text-gray-900">Ingresos</h4>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
-                                            <div className="relative mt-1">
-                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-blue-300">{expenseMethodLabel}</span>
-                                                <input 
-                                                    autoFocus 
-                                                    type="number" 
-                                                    placeholder="0.00" 
-                                                    className="w-full pl-10 pr-20 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-center font-bold text-lg text-blue-600 outline-none focus:ring-2 focus:ring-blue-500" 
-                                                    value={incomeAmount} 
-                                                    onChange={(e) => setIncomeAmount(e.target.value)} 
-                                                />
-                                                <button 
-                                                    onClick={() => setExpenseMethodLabel(prev => prev === '$' ? 'Bs' : '$')} 
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded shadow-sm transition-all active:scale-90"
-                                                >
-                                                    {expenseMethodLabel === '$' ? '$→Bs' : 'Bs→$'}
-                                                </button>
-                                            </div>
-                                            {expenseMethodLabel === '$' && (
-                                                <p className="text-[10px] font-bold text-gray-400 mt-1 text-right">
-                                                    = Bs {(parseFloat(incomeAmount || '0') * exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 })} (Tasa: {exchangeRate})
-                                                </p>
-                                            )}
-                                            {expenseMethodLabel === 'Bs' && (
-                                                <p className="text-[10px] font-bold text-gray-400 mt-1 text-right">
-                                                    = $ {(parseFloat(incomeAmount || '0') / exchangeRate).toFixed(2)} (Tasa: {exchangeRate})
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Método de Cobro</label>
-                                            <div className="flex gap-2 mt-1">
-                                                {[
-                                                    { id: 'Cash', label: 'Efectivo', color: 'emerald' },
-                                                    { id: 'Transfer', label: 'Transf.', color: 'blue' },
-                                                    { id: 'PagoMovil', label: 'P.Móvil', color: 'purple' }
-                                                ].map((m) => (
-                                                    <button
-                                                        key={m.id}
-                                                        onClick={() => setExpenseMethod(m.id as any)}
-                                                        className={`flex-1 py-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all ${
-                                                            expenseMethod === m.id
-                                                                ? `bg-${m.color}-600 text-white shadow-lg`
-                                                                : 'bg-gray-100 text-gray-500'
-                                                        }`}
-                                                    >
-                                                        {m.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
-                                            <input type="date" value={incomeDate} onChange={e => setIncomeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none mt-1" />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
-                                                <select value={incomeCategory} onChange={e => setIncomeCategory(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xs font-bold outline-none mt-1">
-                                                    <option value="Otros">Otros</option>
-                                                    <option value="Ventas">Ventas</option>
-                                                    <option value="Servicios">Servicios</option>
-                                                    <option value="Intereses">Intereses</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Descripción</label>
-                                                <input type="text" value={incomeDescription} onChange={e => setIncomeDescription(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-xs font-bold outline-none mt-1" placeholder="..." />
-                                            </div>
-                                        </div>
-                                        <button onClick={() => {
-                                            const amount = parseFloat(incomeAmount);
-                                            if (amount > 0) {
-                                                const timestamp = new Date(incomeDate + 'T12:00:00').getTime();
-                                                const rateForDate = getRateForDate(incomeDate);
-                                                const amountInUsd = expenseMethodLabel === '$' ? amount : amount / rateForDate;
-                                                const amountInBs = expenseMethodLabel === 'Bs' ? amount : amount * rateForDate;
-                                                onAddTreasuryTransaction({
-                                                    id: `inc_${Date.now()}`,
-                                                    type: 'income',
-                                                    category: incomeCategory,
-                                                    description: incomeDescription || incomeCategory,
-                                                    amount: amountInUsd,
-                                                    amountBs: amountInBs,
-                                                    method: expenseMethod,
-                                                    exchangeRate: rateForDate,
-                                                    timestamp
-                                                });
-                                                setIncomeAmount('');
-                                                setIncomeDescription('');
-                                                 setVentasOption(null);
-                                                 setShowVentasMenu(false);
-                                                 setExpenseMethod('Cash');
-                                                 setExpenseMethodLabel('$');
-                                            }
-                                        }} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all mt-4">Guardar</button>
-                                    </div>
-                                )}
-
-                                {/* Formulario Recargas */}
-                                {ventasOption === 'recharge' && (
-                                    <div className="space-y-4">
-                                        <button onClick={() => setVentasOption(null)} className="flex items-center gap-2 text-gray-500 mb-2">
-                                            <ChevronLeft className="w-5 h-5" />
-                                            <span className="text-sm font-bold">Volver</span>
-                                        </button>
-                                        
-                                        <h4 className="text-lg font-black text-gray-900">Recargas y Avances</h4>
-                                        
-                                        {/* Monto a recargar */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto a Recargar</label>
-                                            <input type="number" value={rechargeAmount} onChange={e => setRechargeAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-lg font-black text-purple-600 outline-none" placeholder="0" />
-                                        </div>
-
-                                        {/* Cuenta a debitar */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Cuenta a Debitar</label>
-                                            <div className="flex gap-2 mt-2">
-                                                <button onClick={() => setRechargeDebitAccount('Bank')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeDebitAccount === 'Bank' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Banco</button>
-                                                <button onClick={() => setRechargeDebitAccount('Cash')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeDebitAccount === 'Cash' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Efectivo</button>
-                                            </div>
-                                        </div>
-
-                                        {/* Monto a cobrar */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Monto a Cobrar</label>
-                                            <input type="number" value={rechargeReceiveAmount} onChange={e => setRechargeReceiveAmount(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-lg font-black text-emerald-600 outline-none" placeholder="0" />
-                                        </div>
-
-                                        {/* Método de cobro */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Método de Cobro</label>
-                                            <div className="flex gap-2 mt-2">
-                                                <button onClick={() => setRechargeMethod('Cash')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeMethod === 'Cash' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Efectivo</button>
-                                                <button onClick={() => setRechargeMethod('PagoMovil')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeMethod === 'PagoMovil' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Pago Móvil</button>
-                                                <button onClick={() => setRechargeMethod('Card')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${rechargeMethod === 'Card' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Tarjeta</button>
-                                            </div>
-                                        </div>
-
-                                        {/* Teléfono - opcional */}
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500 uppercase">Teléfono (Opcional)</label>
-                                            <input type="text" value={rechargeReference} onChange={e => setRechargeReference(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" placeholder="Número de teléfono" />
-                                        </div>
-
-                                        {/* Fecha y Tasa */}
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
-                                                <input type="date" value={rechargeDate} onChange={e => setRechargeDate(e.target.value)} className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold outline-none" />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Tasa</label>
-                                                <input type="number" value={exchangeRate} className="w-full p-3 bg-gray-100 rounded-xl text-sm font-black text-gray-500 outline-none" disabled />
-                                            </div>
-                                        </div>
-
-                                        {/* Panel de Ganancia */}
-                                        <div className="bg-purple-50 p-4 rounded-2xl">
-                                            <p className="text-xs font-bold text-purple-600 uppercase mb-2">Resumen</p>
-                                            <div className="flex justify-between text-sm mb-1">
-                                                <span className="text-gray-600">Monto recarga:</span>
-                                                <span className="font-black text-purple-600">{rechargeAmount ? parseFloat(rechargeAmount).toLocaleString('es-CO') : '0'} Bs</span>
-                                            </div>
-                                            <div className="flex justify-between text-sm mb-1">
-                                                <span className="text-gray-600">Monto cobrado:</span>
-                                                <span className="font-black text-emerald-600">{rechargeReceiveAmount ? parseFloat(rechargeReceiveAmount).toLocaleString('es-CO') : '0'} Bs</span>
-                                            </div>
-                                            <div className="flex justify-between text-sm border-t border-purple-200 pt-2 mt-2">
-                                                <span className="text-gray-600 font-bold">Diferencia (Ganancia):</span>
-                                                <span className="font-black text-emerald-600">
-                                                    {rechargeAmount && rechargeReceiveAmount 
-                                                        ? (parseFloat(rechargeReceiveAmount) - parseFloat(rechargeAmount)).toLocaleString('es-CO')
-                                                        : '0'} Bs
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* USD Reference */}
-                                        <div className="bg-gray-50 p-3 rounded-xl">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-gray-500">Referencia USD:</span>
-                                                <span className="font-black text-gray-700">
-                                                    ${rechargeAmount ? (parseFloat(rechargeAmount) / exchangeRate).toFixed(2) : '0.00'}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <button onClick={() => {
-                                            const amountRecargar = parseFloat(rechargeAmount);
-                                            const amountCobrar = parseFloat(rechargeReceiveAmount);
-                                            const ganancia = amountCobrar - amountRecargar;
-                                            
-                                            if (amountRecargar > 0 && amountCobrar > 0) {
-                                                const timestamp = new Date(rechargeDate + 'T12:00:00').getTime();
-                                                const isRecarga = rechargeReference.trim() !== '';
-                                                
-                                                // Egreso: monto que se descuenta de la cuenta (banco/efectivo)
-                                                onAddTreasuryTransaction({
-                                                    id: `rec_debit_${Date.now()}`,
-                                                    type: 'expense',
-                                                    category: 'Recargas',
-                                                    description: isRecarga ? `Recarga: ${rechargeReference}` : `Avance`,
-                                                    amount: amountRecargar / exchangeRate,
-                                                    amountBs: amountRecargar,
-                                                    method: rechargeDebitAccount === 'Bank' ? 'Transfer' : 'Cash',
-                                                    exchangeRate: exchangeRate,
-                                                    timestamp
-                                                });
-                                                
-                                                // Ingreso: monto cobrado al cliente
-                                                onAddTreasuryTransaction({
-                                                    id: `rec_income_${Date.now()}`,
-                                                    type: 'income',
-                                                    category: 'Recargas',
-                                                    description: isRecarga ? `Cobro recarga: ${rechargeReference}` : `Cobro avance`,
-                                                    amount: amountCobrar / exchangeRate,
-                                                    amountBs: amountCobrar,
-                                                    method: rechargeMethod,
-                                                    exchangeRate: exchangeRate,
-                                                    timestamp
-                                                });
-                                                
-                                                // Si hay ganancia, registrarla como ingreso adicional
-                                                if (ganancia > 0) {
-                                                    onAddTreasuryTransaction({
-                                                        id: `rec_gain_${Date.now()}`,
-                                                        type: 'income',
-                                                        category: 'Recargas',
-                                                        description: isRecarga ? `Ganancia recarga: ${rechargeReference}` : `Ganancia avance`,
-                                                        amount: ganancia / exchangeRate,
-                                                        amountBs: ganancia,
-                                                        method: rechargeMethod,
-                                                        exchangeRate: exchangeRate,
-                                                        timestamp
-                                                    });
-                                                }
-                                                
-                                                setRechargeAmount('');
-                                                setRechargeReceiveAmount('');
-                                                setRechargeFee('');
-                                                setRechargeReference('');
-                                                setVentasOption(null);
-                                                setShowVentasMenu(false);
-                                            }
-                                        }} className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black text-lg shadow-lg">Guardar</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <div className="px-6 space-y-3">
+                            <button onClick={() => { setShowVentasMenu(false); onOpenPOS(); }} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                <ShoppingCart className="w-6 h-6" />
+                                Productos
+                            </button>
+                            <button onClick={() => { setShowVentasMenu(false); setShowRechargeModal(true); }} className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                <Smartphone className="w-6 h-6" />
+                                Recargas
+                            </button>
+                            <button onClick={() => { setShowVentasMenu(false); setShowIncomeModal(true); }} className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-6 py-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-colors">
+                                <TrendingUp className="w-6 h-6" />
+                                Ingresos
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

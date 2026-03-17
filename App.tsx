@@ -40,10 +40,10 @@ const App: React.FC = () => {
 
   // Helpers para compatibilidad de propiedades
   const getProductProps = (p: Product) => ({
-    selling_mode: p.selling_mode || 'simple',
-    units_per_package: p.units_per_package || 0,
-    remaining_units: p.remaining_units || 0,
-    price_per_unit: p.price_per_unit || 0,
+    selling_mode: p.selling_mode || (p as any).sellingMode || 'simple',
+    units_per_package: p.units_per_package || (p as any).unitsPerPackage || 0,
+    remaining_units: p.remaining_units || (p as any).remainingUnits || 0,
+    price_per_unit: p.price_per_unit || (p as any).pricePerUnit || 0,
     stock: p.stock
   });
   const [sales, setSales] = useState<Sale[]>([]);
@@ -216,39 +216,20 @@ const App: React.FC = () => {
         const product = updatedProducts[pIndex];
         const { selling_mode, units_per_package, remaining_units } = getProductProps(product);
 
-        if (selling_mode === 'package' && isUnitSale) {
-          // Venta por unidad de producto paquete
+        if (selling_mode === 'package') {
+          // Venta de producto paquete (sea por unidad o por paquete completo)
           const totalUnitsAvailable = (product.stock * units_per_package) + (product.remaining_units || 0);
-          const unitsSold = item.quantity;
-          const unitsAfterSale = totalUnitsAvailable - unitsSold;
+          const unitsSold = isUnitSale ? item.quantity : item.quantity * units_per_package;
+          const unitsAfterSale = Math.max(0, totalUnitsAvailable - unitsSold);
           
-          if (unitsAfterSale <= 0) {
-            // Sin stock disponible
-            updatedProducts[pIndex] = {
-              ...product,
-              stock: 0,
-              remaining_units: 0
-            };
-          } else {
-            // Calcular nuevo stock de paquetes y unidades restantes
-            const newStock = Math.floor(unitsAfterSale / units_per_package);
-            const newRemainingUnits = unitsAfterSale % units_per_package;
-            
-            updatedProducts[pIndex] = {
-              ...product,
-              stock: newStock,
-              remaining_units: newRemainingUnits
-            };
-          }
-          updates[`products/${productId}`] = updatedProducts[pIndex];
-        } else if (selling_mode === 'package' && !isUnitSale) {
-          // Venta por paquete completo
-          const packagesSold = item.quantity;
-          const newStock = Math.max(0, product.stock - packagesSold);
+          // Calcular nuevo stock de paquetes y unidades restantes
+          const newStock = units_per_package > 0 ? Math.floor(unitsAfterSale / units_per_package) : 0;
+          const newRemainingUnits = units_per_package > 0 ? unitsAfterSale % units_per_package : 0;
           
           updatedProducts[pIndex] = {
             ...product,
-            stock: newStock
+            stock: newStock,
+            remaining_units: newRemainingUnits
           };
           updates[`products/${productId}`] = updatedProducts[pIndex];
         } else {
