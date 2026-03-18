@@ -19,12 +19,50 @@ interface POSProps {
 const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, rateHistory = [], onSale, onUpdateRate, onAddCustomer, onBackToDashboard, initialCart, onCartLoaded }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
     const [showCartMobile, setShowCartMobile] = useState(false);
+    const [fabBottom, setFabBottom] = useState(24);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+    useEffect(() => {
+        // Guardar la altura máxima vista (sin teclado) como referencia
+        let maxHeight = window.innerHeight;
+
+        const updateFabPosition = () => {
+            const currentWidth = window.innerWidth;
+            setIsMobile(currentWidth < 1024);
+
+            const vv = window.visualViewport;
+            const currentHeight = vv ? vv.height : window.innerHeight;
+
+            // Actualizar la altura máxima si la pantalla creció
+            if (currentHeight > maxHeight) maxHeight = currentHeight;
+
+            // Altura del teclado = diferencia entre max visto y actual
+            const keyboardHeight = Math.max(0, maxHeight - currentHeight);
+
+            // Bottom del botón: 24px arriba del teclado (mínimo 24px)
+            const newBottom = keyboardHeight + 24;
+            setFabBottom(newBottom);
+        };
+
+        updateFabPosition();
+        window.visualViewport?.addEventListener('resize', updateFabPosition);
+        window.visualViewport?.addEventListener('scroll', updateFabPosition);
+        window.addEventListener('resize', updateFabPosition);
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', updateFabPosition);
+            window.visualViewport?.removeEventListener('scroll', updateFabPosition);
+            window.removeEventListener('resize', updateFabPosition);
+        };
+    }, []);
 
     // Weight modal state
     const [isWeightModalOpen, setIsWeightModalOpen] = useState(false);
     const [weightProduct, setWeightProduct] = useState<Product | null>(null);
     const [weightQuantity, setWeightQuantity] = useState('0.5');
+    const [weightUnit, setWeightUnit] = useState<string>('kg');
 
     // Quick Rate Update State
     const [isRateModalOpen, setIsRateModalOpen] = useState(false);
@@ -62,6 +100,28 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         setTempRate(exchangeRate.toString());
     }, [exchangeRate]);
 
+    // Conversiones de unidades
+    const unitConversions: Record<string, Record<string, number>> = {
+        kg: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        g: { kg: 0.001, g: 1, l: 0.001, ml: 1, m: 0.001, cm: 0.1 },
+        l: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        ml: { kg: 0.001, g: 1, l: 0.001, ml: 1, m: 0.001, cm: 0.1 },
+        m: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        cm: { kg: 0.01, g: 10, l: 0.01, ml: 10, m: 0.01, cm: 1 }
+    };
+
+    const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number => {
+        if (fromUnit === toUnit) return qty;
+        const conversion = unitConversions[fromUnit]?.[toUnit];
+        return conversion ? qty * conversion : qty;
+    };
+
+    const convertPrice = (price: number, fromUnit: string, toUnit: string): number => {
+        if (fromUnit === toUnit) return price;
+        const conversion = unitConversions[fromUnit]?.[toUnit];
+        return conversion ? price / conversion : price;
+    };
+
     // Función para obtener la tasa del día
     const getTodayRate = (): number => {
         if (!rateHistory || rateHistory.length === 0) return exchangeRate;
@@ -83,6 +143,18 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
 
     const todayRate = useMemo(() => getTodayRate(), [rateHistory, exchangeRate]);
 
+    const getMeasurementUnit = (item: any) => item.measurement_unit || item.measurementUnit || 'kg';
+
+    // Helper para convertir a unidad base (kg, L, m) para cálculos de precio
+    const toBase = (qty: number, unit?: string): number => {
+        if (!unit) return qty;
+        const u = unit.toLowerCase();
+        if (u === 'g' || u === 'ml') return qty / 1000;
+        if (u === 'cm') return qty / 100;
+        if (u === 'mg') return qty / 1000000;
+        return qty;
+    };
+
     // Generate display products with weight/package labels
     const displayProducts = useMemo(() => {
         const result: Array<Product & { displayVariant?: string }> = [];
@@ -93,7 +165,8 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             const measurementUnit = product.measurement_unit || (product as any).measurementUnit || 'kg';
 
             if (sellingMode === 'weight' && measurementUnit) {
-                const unitLabel = measurementUnit === 'kg' ? 'Kg' : measurementUnit;
+                const unitLabels: Record<string, string> = { kg: 'Kg', g: 'g', l: 'L', ml: 'ml', m: 'm', cm: 'cm' };
+                const unitLabel = unitLabels[measurementUnit] || measurementUnit;
                 result.push({ ...product, name: `${product.name} (${unitLabel})` });
             } else if (sellingMode === 'package' && unitsPerPackage > 0 && pricePerUnit > 0) {
                 // Variante 1: venta por paquete completo
@@ -137,14 +210,20 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     const addToCart = (product: Product) => {
         const sellingMode = product.selling_mode ?? (product as any).sellingMode ?? 'simple';
 
-        // Open weight modal for weight products
+        // Keep keyboard open after adding to cart - focus search input
+        const keepKeyboardOpen = () => {
+            searchInputRef.current?.focus();
+        };
+
+        // For weight products, don't open modal - allow direct decimal input via quantity field
+        // User can type 0.200 for grams or 1.500 for kg directly
         if (sellingMode === 'weight') {
-            setWeightProduct(product);
-            setWeightQuantity('0.5');
-            setIsWeightModalOpen(true);
+            // Para productos por peso, NO agregar al carrito al hacer click
+            // El usuario debe escribir la cantidad directamente en el campo de cantidad
+            keepKeyboardOpen();
             return;
         }
-
+        
         // Detectar si es venta por unidades (el ID termina en -unit)
         const isUnitSale = product.id && product.id.endsWith('-unit');
 
@@ -175,6 +254,12 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 // Verificar si hay stock disponible
                 if (totalUnitsInCart >= totalUnitsAvailable) return;
             }
+        } else if (sellingMode === 'weight') {
+            // Para productos por peso, NO agregar al carrito al hacer click
+            // El usuario debe escribir la cantidad directamente en el campo de cantidad
+            // Solo enfocamos el input para que pueda escribir
+            keepKeyboardOpen();
+            return;
         } else {
             // Stock normal para productos simples
             const currentInCart = cart.find(item => item.id === product.id)?.quantity || 0;
@@ -188,34 +273,51 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             if (existing) {
                 return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            return [...prev, { ...product, quantity: 1, costAtSale: product.cost_price || 0 }];
+
+            // Calcular costo proporcional para la variante de unidad
+            let costAtSale = product.cost_price || 0;
+            if (isUnitSale) {
+                const baseId = product.id.replace('-unit', '');
+                const originalProduct = products.find(p => p.id === baseId);
+                if (originalProduct) {
+                    const unitsPerPkg = originalProduct.units_per_package || (originalProduct as any).unitsPerPackage || 1;
+                    costAtSale = (originalProduct.cost_price || 0) / unitsPerPkg;
+                }
+            }
+            
+            return [...prev, { ...product, quantity: 1, costAtSale }];
         });
+
+        keepKeyboardOpen();
     };
 
     const addWeightToCart = () => {
         if (!weightProduct) return;
 
-        const qty = parseFloat(weightQuantity) || 0;
+        const qtyInput = parseFloat(weightQuantity) || 0;
+        const baseUnit = weightProduct.measurement_unit ?? (weightProduct as any).measurementUnit ?? 'kg';
+        const qtyInBaseUnit = convertQuantity(qtyInput, weightUnit, baseUnit);
         
         // Calcular stock disponible considerando lo que ya está en el carrito
         const existingInCart = cart.find(item => item.id === weightProduct.id);
         const currentQtyInCart = existingInCart?.quantity || 0;
         const availableStock = weightProduct.stock - currentQtyInCart;
         
-        if (qty <= 0 || qty > availableStock) return;
+        if (qtyInBaseUnit <= 0 || qtyInBaseUnit > availableStock) return;
 
         if (navigator.vibrate) navigator.vibrate(50);
 
         setCart(prev => {
             const existing = prev.find(item => item.id === weightProduct.id);
             if (existing) {
-                return prev.map(item => item.id === weightProduct.id ? { ...item, quantity: item.quantity + qty } : item);
+                return prev.map(item => item.id === weightProduct.id ? { ...item, quantity: item.quantity + qtyInBaseUnit } : item);
             }
-            return [...prev, { ...weightProduct, quantity: qty, costAtSale: weightProduct.cost_price || 0 }];
+            return [...prev, { ...weightProduct, quantity: qtyInBaseUnit, costAtSale: weightProduct.cost_price || 0 }];
         });
 
         setIsWeightModalOpen(false);
         setWeightProduct(null);
+        setWeightUnit('kg');
     };
 
     const removeFromCart = (productId: string) => {
@@ -225,7 +327,14 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     // Función helper para obtener el stock máximo disponible para un producto en el carrito
     const getMaxStockForCartItem = (item: CartItem, cartItems: CartItem[]): number => {
         const sellingMode = item.selling_mode || 'simple';
-        
+        if (sellingMode === 'weight') {
+            const unit = getMeasurementUnit(item);
+            if (unit === 'g' || unit === 'ml') return item.stock * 1000;
+            if (unit === 'cm') return item.stock * 100;
+            if (unit === 'mg') return item.stock * 1000000;
+            return item.stock;
+        }
+
         if (sellingMode !== 'package') {
             return item.stock;
         }
@@ -295,7 +404,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
         }
     };
 
-    const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const calculateTotal = () => cart.reduce((sum, item) => {
+        const sellingMode = item.selling_mode || (item as any).sellingMode || 'simple';
+        const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item)) : item.quantity;
+        return sum + (item.price * quantity);
+    }, 0);
 
     const initiateSale = (method: 'Cash' | 'Card' | 'Credit' | 'PagoMovil') => {
         if (cart.length === 0) return;
@@ -334,7 +447,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     };
 
     // Helper for mobile cart visibility
-    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = cart.reduce((sum, item) => {
+        const sellingMode = item.selling_mode || (item as any).sellingMode || 'simple';
+        // Para productos por peso, contamos como 1 ítem en el badge para evitar números gigantes (ej: 350g -> 350)
+        return sum + (sellingMode === 'weight' ? 1 : item.quantity);
+    }, 0);
 
     // Cash Calculation Helpers
     const totalBs = Math.round(calculateTotal() * todayRate * 100) / 100;
@@ -370,6 +487,7 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                         <div className="relative flex-1">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 z-10" />
                             <input
+                                ref={searchInputRef}
                                 autoFocus
                                 type="text"
                                 inputMode="search"
@@ -483,16 +601,25 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                 }
                             } else {
                                 // Producto simple o peso: stock = original - en carrito
-                                currentStock = Math.max(0, product.stock - qtyInCart);
-                                if (currentStock === 0 && product.stock > 0) {
+                                // Para peso, qtyInCart está en la unidad de visualización (ej: gramos), normalizar para restar del stock base (kg)
+                                const qtyToSubtractFromStock = sellingMode === 'weight' ? toBase(qtyInCart, getMeasurementUnit(product)) : qtyInCart;
+                                currentStock = Math.max(0, product.stock - qtyToSubtractFromStock);
+                                
+                                if (currentStock <= 0 && product.stock > 0) {
                                     isOutOfStock = true;
                                     displayStock = 'X';
                                 } else if (product.stock === 0) {
                                     isOutOfStock = true;
                                     displayStock = 'X';
                                 } else {
-                                    const unitLabel = isWeight ? (product.measurement_unit || 'kg') : 'Unds.';
-                                    displayStock = isWeight ? `${currentStock}${unitLabel}` : `${currentStock} ${unitLabel}`;
+                                    if (sellingMode === 'weight') {
+                                        const unit = getMeasurementUnit(product);
+                                        if (unit === 'g' || unit === 'ml') displayStock = (currentStock * 1000).toFixed(0);
+                                        else if (unit === 'cm') displayStock = (currentStock * 100).toFixed(0);
+                                        else displayStock = currentStock.toFixed(2);
+                                    } else {
+                                        displayStock = `${currentStock % 1 === 0 ? currentStock : currentStock.toFixed(2)}`;
+                                    }
                                 }
                             }
 
@@ -512,12 +639,18 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     {/* Stock a la izquierda */}
                                     <div className="flex flex-col items-center justify-center w-12 shrink-0 bg-gray-50 border-2 border-gray-200 rounded-lg p-1">
                                         <span className={`text-sm font-black ${isOutOfStock ? 'text-red-400' : isVirtualUnit ? 'text-blue-600' : 'text-indigo-600'}`}>
-                                            {remainingStock.split(' ')[0]}
+                                            {remainingStock.split(/(\d+)/)[1] || remainingStock.split(' ')[0]}
                                         </span>
-                                        {remainingStock.includes(' ') && (
+                                        {remainingStock.includes('kg') || remainingStock.includes('g') || remainingStock.includes('L') || remainingStock.includes('ml') || remainingStock.includes('m') || remainingStock.includes('cm') ? (
                                             <span className={`text-[8px] font-bold ${isOutOfStock ? 'text-red-300' : 'text-gray-400'}`}>
-                                                {remainingStock.split(' ').slice(1).join(' ')}
+                                                {remainingStock.match(/[a-zA-Z]+/)?.[0] || ''}
                                             </span>
+                                        ) : (
+                                            remainingStock.includes(' ') && (
+                                                <span className={`text-[8px] font-bold ${isOutOfStock ? 'text-red-300' : 'text-gray-400'}`}>
+                                                    {remainingStock.split(' ').slice(1).join(' ')}
+                                                </span>
+                                            )
                                         )}
                                     </div>
 
@@ -581,13 +714,13 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                                 e.stopPropagation();
                                                 const raw = (inputValues[product.id] ?? '').replace(',', '.');
                                                 const val = parseFloat(raw);
+                                                
                                                 if (!isNaN(val) && val > 0) {
+                                                    // Mantener la cantidad en la unidad del producto (ej: 350 para gramos)
+                                                    // para que la resta de stock (stock - quantity) sea directa y correcta.
                                                     setCart(prev => {
-                                                        const existing = prev.find(i => i.id === product.id);
-                                                        if (existing) {
-                                                            return prev.map(i => i.id === product.id ? { ...i, quantity: val } : i);
-                                                        }
-                                                        return [...prev, { ...product, quantity: val, costAtSale: product.cost_price || 0 }];
+                                                        const filtered = prev.filter(i => i.id !== product.id);
+                                                        return [...filtered, { ...product, quantity: val, costAtSale: product.cost_price || 0 }];
                                                     });
                                                 } else if (raw === '' || val === 0) {
                                                     setCart(prev => prev.filter(i => i.id !== product.id));
@@ -665,8 +798,10 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                             </div>
                         ) : (
                             cart.map(item => {
-                                const itemTotalBs = item.price * item.quantity * todayRate;
-                                const itemTotalUsd = item.price * item.quantity;
+                                const sellingMode = item.selling_mode || (item as any).sellingMode || 'simple';
+                                const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item)) : item.quantity;
+                                const itemTotalBs = item.price * quantity * todayRate;
+                                const itemTotalUsd = item.price * quantity;
                                 
                                 return (
                                     <div key={item.id} className="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-sm">
@@ -830,16 +965,30 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
             </div>
 
             {/* Floating Action Button for Mobile Cart */}
-            {!showCartMobile && totalItems > 0 && (
+            {totalItems > 0 && !showCartMobile && isMobile && (
                 <button
                     onClick={() => setShowCartMobile(true)}
-                    className="lg:hidden fixed bottom-6 right-6 bg-gray-900 text-white p-4 rounded-full shadow-2xl shadow-indigo-500/30 flex items-center gap-2 z-40 animate-bounce-in"
+                    style={{
+                        position: 'fixed',
+                        bottom: `${fabBottom}px`,
+                        right: '1.5rem',
+                        backgroundColor: '#111',
+                        color: 'white',
+                        padding: '1rem',
+                        borderRadius: '9999px',
+                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'bottom 0.2s ease-out'
+                    }}
                 >
                     <div className="relative">
                         <ShoppingCart className="w-6 h-6" />
-                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold border-2 border-gray-900">{totalItems}</span>
+                        <span style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: 'white', fontSize: '10px', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontWeight: 'bold', border: '2px solid #111' }}>{totalItems}</span>
                     </div>
-                    <span className="font-black pr-2">{(calculateTotal() * todayRate).toFixed(2)} Bs</span>
+                    <span style={{ fontWeight: 900, paddingRight: '8px' }}>{(calculateTotal() * todayRate).toFixed(2)} Bs</span>
                 </button>
             )}
 
@@ -915,8 +1064,11 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                 // Calcular stock disponible considerando el carrito
                 const existingInCart = cart.find(item => item.id === weightProduct.id);
                 const currentQtyInCart = existingInCart?.quantity || 0;
+                const baseUnit = weightProduct.measurement_unit ?? (weightProduct as any).measurementUnit ?? 'kg';
                 const availableStock = Math.max(0, weightProduct.stock - currentQtyInCart);
-                const measurementUnit = weightProduct.measurement_unit ?? (weightProduct as any).measurementUnit ?? 'kg';
+                const convertedStock = convertQuantity(availableStock, baseUnit, weightUnit);
+                const pricePerBaseUnit = weightProduct.price;
+                const pricePerSelectedUnit = convertPrice(pricePerBaseUnit, baseUnit, weightUnit);
                 
                 return (
                 <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -926,23 +1078,40 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                             <div className="flex items-center justify-center gap-4 mt-2">
                                 <div className="text-left">
                                     <span className="text-[9px] font-bold text-gray-400 uppercase">Stock Disp.</span>
-                                    <p className="text-lg font-black text-gray-700">{availableStock.toFixed(3)} {measurementUnit}</p>
+                                    <p className="text-lg font-black text-gray-700">{convertedStock.toFixed(3)} {weightUnit}</p>
                                 </div>
                                 <div className="w-px h-8 bg-gray-200"></div>
                                 <div className="text-right">
                                     <span className="text-[9px] font-bold text-gray-400 uppercase">Precio</span>
-                                    <p className="text-lg font-black text-purple-600">${weightProduct.price.toFixed(2)}/{measurementUnit}</p>
+                                    <p className="text-lg font-black text-purple-600">${pricePerSelectedUnit.toFixed(2)}/{weightUnit}</p>
                                 </div>
                             </div>
                         </div>
 
                         <div className="p-4 space-y-4">
+                            {/* Selector de unidad */}
+                            <div className="flex justify-center gap-2">
+                                {['kg', 'g', 'L', 'ml', 'm', 'cm'].filter(u => u !== baseUnit).map(unit => (
+                                    <button
+                                        key={unit}
+                                        onClick={() => setWeightUnit(unit)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
+                                            weightUnit === unit 
+                                            ? 'bg-purple-600 text-white' 
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {unit}
+                                    </button>
+                                ))}
+                            </div>
+
                             <div className="bg-purple-50 p-5 rounded-2xl border-2 border-purple-200">
                                 <div className="flex justify-center">
                                     <div className="text-center">
                                         <div className="flex items-center justify-center gap-2 mb-2">
                                             <span className="text-[10px] font-bold text-purple-500 uppercase">Cantidad</span>
-                                            <span className="text-[10px] font-bold text-purple-300">({measurementUnit})</span>
+                                            <span className="text-[10px] font-bold text-purple-300">({weightUnit})</span>
                                         </div>
                                         <input
                                             autoFocus
@@ -966,13 +1135,13 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
                                     <div className="text-left">
                                         <span className="text-[10px] font-bold text-gray-400 uppercase">USD</span>
                                         <p className="text-2xl font-black text-white">
-                                            ${(parseFloat(weightQuantity || '0') * weightProduct.price).toFixed(2)}
+                                            ${(parseFloat(weightQuantity || '0') * pricePerSelectedUnit).toFixed(2)}
                                         </p>
                                     </div>
                                     <div className="text-right">
                                         <span className="text-[10px] font-bold text-gray-400 uppercase">BS</span>
                                         <p className="text-2xl font-black text-white">
-                                            {(parseFloat(weightQuantity || '0') * weightProduct.price * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
+                                            {(parseFloat(weightQuantity || '0') * pricePerSelectedUnit * todayRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')}
                                         </p>
                                     </div>
                                 </div>

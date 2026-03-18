@@ -20,6 +20,17 @@ interface DashboardProps {
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+const getMeasurementUnit = (p: Product) => (p.measurement_unit || (p as any).measurementUnit || 'kg').toLowerCase();
+
+const toBase = (qty: number, unit?: string): number => {
+    if (!unit) return qty;
+    const u = unit.toLowerCase();
+    if (u === 'g' || u === 'ml') return qty / 1000;
+    if (u === 'cm') return qty / 100;
+    if (u === 'mg') return qty / 1000000;
+    return qty;
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ sales, products, customers, exchangeRate }) => {
 
     // --- PROCESAMIENTO DE DATOS ---
@@ -32,11 +43,28 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, products, customers, excha
         let totalProfitUSD = 0;
         sales.forEach(sale => {
             sale.items.forEach(item => {
+                const prod = products.find(p => p.id === item.id) || products.find(p => p.id === item.id.replace('-unit', ''));
+                if (!prod) return;
+
+                const sellingMode = prod.selling_mode || (prod as any).sellingMode || 'simple';
+                const measurementUnit = getMeasurementUnit(prod);
+                
                 // Usa el costo guardado al momento de la venta (costAtSale)
                 // Si no existe, usa el costo actual del producto (compatibilidad con datos antiguos)
-                const costAtSale = item.costAtSale ?? products.find(p => p.id === item.id)?.cost_price ?? 0;
+                let costAtSale = item.costAtSale;
+                
+                if (costAtSale === undefined) {
+                    costAtSale = prod.cost_price || 0;
+                    // Si es una venta por unidad que no tenía costAtSale grabado, estimamos el costo unitario
+                    if (item.id.endsWith('-unit')) {
+                        const unitsPerPkg = prod.units_per_package || (prod as any).unitsPerPackage || 1;
+                        costAtSale = costAtSale / unitsPerPkg;
+                    }
+                }
+
                 if (costAtSale > 0) {
-                    totalProfitUSD += (item.price - costAtSale) * item.quantity;
+                    const normalizedQty = sellingMode === 'weight' ? toBase(item.quantity, measurementUnit) : item.quantity;
+                    totalProfitUSD += (item.price - costAtSale) * normalizedQty;
                 }
             });
         });

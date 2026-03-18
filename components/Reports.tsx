@@ -295,14 +295,14 @@ const VentasCaja: React.FC<ReportsProps> = ({
             const targetDate = new Date(now);
             targetDate.setDate(targetDate.getDate() + quickNavOffset);
             const targetTime = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
-            return targetTime < today;
+            return targetTime > today;
         } else if (dateFilter === 'week') {
             const currentWeekStart = new Date(now);
             const dayOfWeek = currentWeekStart.getDay();
             const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
             currentWeekStart.setDate(currentWeekStart.getDate() + mondayOffset + (quickNavOffset * 7));
             const weekTime = new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), currentWeekStart.getDate()).getTime();
-            return weekTime < today;
+            return weekTime > today;
         }
         return false;
     };

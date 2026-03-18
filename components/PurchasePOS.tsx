@@ -31,6 +31,67 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCartMobile, setShowCartMobile] = useState(false);
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
+    const [fabBottom, setFabBottom] = useState(24);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+    // Conversiones de unidades
+    const unitConversions: Record<string, Record<string, number>> = {
+        kg: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        g: { kg: 0.001, g: 1, l: 0.001, ml: 1, m: 0.001, cm: 0.1 },
+        l: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        ml: { kg: 0.001, g: 1, l: 0.001, ml: 1, m: 0.001, cm: 0.1 },
+        m: { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 },
+        cm: { kg: 0.01, g: 10, l: 0.01, ml: 10, m: 0.01, cm: 1 }
+    };
+
+    const convertQuantity = (qty: number, fromUnit: string, toUnit: string): number => {
+        if (fromUnit === toUnit) return qty;
+        const conversion = unitConversions[fromUnit]?.[toUnit];
+        return conversion ? qty * conversion : qty;
+    };
+
+    const convertPrice = (price: number, fromUnit: string, toUnit: string): number => {
+        if (fromUnit === toUnit) return price;
+        const conversion = unitConversions[fromUnit]?.[toUnit];
+        return conversion ? price / conversion : price;
+    };
+
+    const toBase = (qty: number, unit?: string): number => {
+        if (!unit) return qty;
+        const u = unit.toLowerCase();
+        if (u === 'g' || u === 'ml') return qty / 1000;
+        if (u === 'cm') return qty / 100;
+        if (u === 'mg') return qty / 1000000;
+        return qty;
+    };
+
+    const getMeasurementUnit = (product: any) => product.measurement_unit || product.measurementUnit || 'kg';
+
+    useEffect(() => {
+        let maxHeight = window.innerHeight;
+
+        const updateFabPosition = () => {
+            setIsMobile(window.innerWidth < 1024);
+            const vv = window.visualViewport;
+            const currentHeight = vv ? vv.height : window.innerHeight;
+            if (currentHeight > maxHeight) maxHeight = currentHeight;
+            const keyboardHeight = Math.max(0, maxHeight - currentHeight);
+            setFabBottom(keyboardHeight + 24);
+        };
+
+        updateFabPosition();
+        window.visualViewport?.addEventListener('resize', updateFabPosition);
+        window.visualViewport?.addEventListener('scroll', updateFabPosition);
+        window.addEventListener('resize', updateFabPosition);
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', updateFabPosition);
+            window.visualViewport?.removeEventListener('scroll', updateFabPosition);
+            window.removeEventListener('resize', updateFabPosition);
+        };
+    }, []);
+
     // Estado temporal para edición de cantidades sin resetear al escribir
     const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
 
@@ -316,6 +377,8 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
             }
             return [...prev, { product, quantity: 1, cost_price: costPerBulk, cost_price_bs: costBsPerBulk, rateAtPurchase: activeRate }];
         });
+
+        searchInputRef.current?.focus();
     };
 
     const updateQuantity = (productId: string, delta: number) => {
@@ -437,20 +500,23 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
 
     const calculateTotal = () => cart.reduce((sum, item) => {
         const costMode = getCostMode(item.product);
+        const sellingMode = item.product.selling_mode || (item.product as any).sellingMode || 'simple';
+        const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item.product)) : item.quantity;
         const priceBs = costMode === 'calculated'
             ? (item.cost_price_bs || 0)
             : item.cost_price * activeRate;
         const priceUsd = activeRate > 0 ? priceBs / activeRate : 0;
-        return sum + (priceUsd * item.quantity);
+        return sum + (priceUsd * quantity);
     }, 0);
 
     const totalBs = cart.reduce((sum, item) => {
-        // Para productos calculados usar costPriceBs guardado, para manuales recalcular siempre
         const costMode = getCostMode(item.product);
+        const sellingMode = item.product.selling_mode || (item.product as any).sellingMode || 'simple';
+        const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item.product)) : item.quantity;
         const itemCostBs = costMode === 'calculated'
             ? (item.cost_price_bs || 0)
             : item.cost_price * activeRate;
-        return sum + (itemCostBs * item.quantity);
+        return sum + (itemCostBs * quantity);
     }, 0);
     const tenderedBs = parseFloat(tenderedAmount) || 0;
     const changeBs = tenderedBs - totalBs;
@@ -465,10 +531,12 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
     const openCreditDebtModal = () => {
         const totalBs = cart.reduce((sum, item) => {
             const costMode = getCostMode(item.product);
+            const sellingMode = item.product.selling_mode || (item.product as any).sellingMode || 'simple';
+            const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item.product)) : item.quantity;
             const itemCostBs = costMode === 'calculated'
                 ? (item.cost_price_bs || 0)
                 : item.cost_price * activeRate;
-            return sum + (itemCostBs * item.quantity);
+            return sum + (itemCostBs * quantity);
         }, 0);
         const totalUsd = activeRate > 0 ? totalBs / activeRate : 0;
         setCreditDebtAmount(totalBs);
@@ -499,7 +567,10 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         onClose();
     };
 
-    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = cart.reduce((sum, item) => {
+        const sellingMode = item.product.selling_mode || (item.product as any).sellingMode || 'simple';
+        return sum + (sellingMode === 'weight' ? 1 : item.quantity);
+    }, 0);
 
     const handleAddProduct = () => {
         const product: Product = {
@@ -623,6 +694,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
                             <input
+                                ref={searchInputRef}
                                 type="text"
                                 inputMode="search"
                                 placeholder="Buscar productos..."
@@ -696,88 +768,98 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                         e.preventDefault();
                                         addToCart(product);
                                     }}
-                                    className="flex items-center gap-2 p-2 rounded-lg border transition-all active:scale-[0.98] bg-white border-gray-100 cursor-pointer"
+                                    className="flex items-center gap-2 p-3 rounded-xl border-2 transition-all active:scale-[0.98] bg-white border-gray-100 shadow-sm cursor-pointer"
                                 >
-                                    {/* LEFT: Name and Category/Date */}
+                                    {/* LEFT: Name and Category/Date — ocupa todo el espacio disponible */}
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-bold text-base text-gray-900 truncate">
+                                        <h3 className="font-bold text-sm text-gray-900 leading-tight">
                                             {product.name}
-                                            {unitsPerBulk > 1 && <span className="text-indigo-600 ml-1">x{unitsPerBulk}</span>}
+                                            {unitsPerBulk > 1 && <span className="text-indigo-500 ml-1 text-xs">×{unitsPerBulk}</span>}
                                         </h3>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <p className="text-xs font-bold text-gray-400 uppercase truncate">{product.category}</p>
-                                            <span className="text-gray-200">|</span>
-                                            <p className={`text-xs font-bold ${costMode === 'manual' ? 'text-red-500' : 'text-indigo-400'}`}>
-                                                {costMode === 'manual' ? `HOY ${new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' })}` : (displayDate ? formatDate(displayDate) : '')}
-                                            </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase truncate">{product.category}</p>
+                                            {displayDate ? (
+                                                <>
+                                                    <span className="text-gray-200 text-[10px]">|</span>
+                                                    <p className={`text-[10px] font-bold ${costMode === 'manual' ? 'text-red-400' : 'text-indigo-400'}`}>
+                                                        {costMode === 'manual' ? new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' }) : formatDate(displayDate)}
+                                                    </p>
+                                                </>
+                                            ) : null}
                                         </div>
                                     </div>
 
-                                    {/* CENTER: Quantity Controls */}
-                                    <div className="flex flex-col items-center gap-0.5 shrink-0 mx-1">
-                                        {qtyInCart > 0 ? (
-                                            <>
-                                                <div
-                                                    className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm bg-indigo-600 text-white cursor-text"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const input = e.currentTarget.querySelector('input');
-                                                        input?.focus();
-                                                    }}
-                                                >
-                                                    <input
-                                                        type="text"
-                                                        inputMode="decimal"
-                                                        className="w-full h-full text-center bg-transparent outline-none text-white font-black text-xs"
-                                                        value={qtyInCart}
-                                                        onChange={(e) => {
-                                                            e.stopPropagation();
-                                                            const rawValue = e.target.value.replace(',', '.');
-                                                            if (rawValue === '' || rawValue === '-') return;
-                                                            const val = parseFloat(rawValue);
-                                                            if (isNaN(val) || val <= 0) {
-                                                                return;
-                                                            } else {
-                                                                const sellingMode = getSellingMode(product);
-                                                                if (sellingMode === 'weight') {
-                                                                    updateQuantityDirect(product.id, val);
-                                                                } else {
-                                                                    const intVal = Math.floor(val);
-                                                                    const diff = intVal - Math.floor(qtyInCart);
-                                                                    if (diff > 0) {
-                                                                        for (let i = 0; i < diff; i++) addToCart(product);
-                                                                    } else if (diff < 0) {
-                                                                        for (let i = 0; i < Math.abs(diff); i++) updateQuantity(product.id, -1);
-                                                                    }
-                                                                }
-                                                            }
-                                                        }}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    />
-                                                </div>
+                                    {/* RIGHT: Controles + Costo */}
+                                    <div
+                                        className="flex items-center gap-3 shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                        {/* Controles de cantidad — IZQUIERDA */}
+                                        <div className="flex items-center gap-1">
+                                            {qtyInCart > 0 && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); updateQuantity(product.id, -1); }}
-                                                    className="w-7 h-7 rounded-full flex items-center justify-center font-black text-xs bg-red-100 text-red-500"
+                                                    className="w-7 h-7 bg-red-100 text-red-500 rounded-lg flex items-center justify-center hover:bg-red-200 active:scale-95 transition-all"
                                                 >
-                                                    −
+                                                    <Minus className="w-3 h-3" />
                                                 </button>
-                                            </>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); addToCart(product); }}
-                                                className="w-8 h-8 rounded-full flex items-center justify-center font-black text-lg bg-indigo-100 text-indigo-600"
-                                            >
-                                                +
-                                            </button>
-                                        )}
-                                    </div>
+                                            )}
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                autoComplete="off"
+                                                className={`w-14 h-7 text-center text-sm font-bold bg-white border-2 rounded-lg cursor-text select-text ${
+                                                    qtyInCart > 0 ? 'border-indigo-200 text-indigo-600' : 'border-gray-200 text-gray-400'
+                                                }`}
+                                                value={quantityInputs[product.id] !== undefined
+                                                    ? quantityInputs[product.id]
+                                                    : (qtyInCart > 0 ? String(qtyInCart) : '')}
+                                                placeholder="0"
+                                                onClick={(e) => { e.stopPropagation(); (e.target as HTMLInputElement).select(); }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onFocus={(e) => {
+                                                    e.stopPropagation();
+                                                    setQuantityInputs(prev => ({ ...prev, [product.id]: qtyInCart > 0 ? String(qtyInCart) : '' }));
+                                                    (e.target as HTMLInputElement).select();
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    e.stopPropagation();
+                                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                }}
+                                                onChange={(e) => {
+                                                    const raw = e.target.value.replace(',', '.');
+                                                    if (/^\d*\.?\d*$/.test(raw)) {
+                                                        setQuantityInputs(prev => ({ ...prev, [product.id]: raw }));
+                                                    }
+                                                }}
+                                                onBlur={(e) => {
+                                                    e.stopPropagation();
+                                                    const raw = (quantityInputs[product.id] ?? '').replace(',', '.');
+                                                    const val = parseFloat(raw);
+                                                    if (!isNaN(val) && val > 0) {
+                                                        updateQuantityDirect(product.id, val);
+                                                        if (val > 0 && qtyInCart === 0) {
+                                                            const existing = cart.find(i => i.product.id === product.id);
+                                                            if (!existing) addToCart(product);
+                                                            setTimeout(() => updateQuantityDirect(product.id, val), 0);
+                                                        }
+                                                    } else if (raw === '' || val === 0) {
+                                                        setCart(prev => prev.filter(i => i.product.id !== product.id));
+                                                    }
+                                                    setQuantityInputs(prev => { const next = { ...prev }; delete next[product.id]; return next; });
+                                                    searchInputRef.current?.focus();
+                                                }}
+                                            />
+                                        </div>
 
-                                    {/* RIGHT: Costs */}
-                                    <div className="flex flex-col items-end shrink-0 min-w-[80px]">
-                                        <p className="text-base font-bold text-gray-800">
-                                            Bs {displayCostBsBulk.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                                        </p>
-                                        <p className="text-sm font-bold text-gray-400">${displayCostUsd.toFixed(2)}</p>
+                                        {/* Costo — DERECHA */}
+                                        <div className="text-right min-w-[70px]">
+                                            <p className="text-sm font-black text-gray-800 leading-tight">
+                                                Bs {displayCostBsBulk.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                            </p>
+                                            <p className="text-[10px] font-bold text-gray-400">${displayCostUsd.toFixed(2)}</p>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -785,6 +867,34 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                     </div>
                 </div>
             </div>
+
+            {/* Floating Action Button for Mobile Cart - Purchase */}
+            {totalItems > 0 && !showCartMobile && isMobile && (
+                <button
+                    onClick={() => setShowCartMobile(true)}
+                    style={{
+                        position: 'fixed',
+                        bottom: `${fabBottom}px`,
+                        right: '1.5rem',
+                        backgroundColor: '#1e1b4b',
+                        color: 'white',
+                        padding: '1rem',
+                        borderRadius: '9999px',
+                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'bottom 0.2s ease-out'
+                    }}
+                >
+                    <div style={{ position: 'relative' }}>
+                        <ShoppingCart className="w-6 h-6" />
+                        <span style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#f97316', color: 'white', fontSize: '10px', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontWeight: 'bold', border: '2px solid #1e1b4b' }}>{totalItems}</span>
+                    </div>
+                    <span style={{ fontWeight: 900, paddingRight: '8px' }}>Bs {totalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</span>
+                </button>
+            )}
 
             {/* RIGHT: Shopping Cart */}
             <div className={`fixed inset-0 z-50 lg:static lg:z-auto bg-white/95 backdrop-blur-xl lg:bg-white lg:backdrop-blur-none lg:w-96 lg:rounded-[2.5rem] lg:border-2 lg:border-gray-100 lg:shadow-xl transition-transform duration-300 flex flex-col ${showCartMobile ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'}`}>
@@ -841,9 +951,10 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                 const unitsPerBulk = item.product.units_per_bulk ?? (item.product as any).unitsPerBulk ?? 0;
                                 const hasBulk = unitsPerBulk > 1;
                                 const itemCostBsList = item.cost_price_bs || 0;
-                                const itemTotalBs = itemCostBsList * item.quantity;
                                 const sellingMode = getSellingMode(item.product);
                                 const isWeight = sellingMode === 'weight';
+                                const quantity = isWeight ? toBase(item.quantity, getMeasurementUnit(item.product)) : item.quantity;
+                                const itemTotalBs = itemCostBsList * quantity;
                                 
                                 return (
                                     <div key={item.product.id} className="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-sm">
@@ -938,7 +1049,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                                             <div className="bg-indigo-50 p-2 rounded-lg">
                                                 <p className="text-[9px] font-bold text-indigo-400 uppercase">Subtotal</p>
                                                 <p className="text-base font-black text-indigo-700">Bs {itemTotalBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                                                <p className="text-[9px] font-bold text-indigo-500 text-right">$ {(item.cost_price * item.quantity).toFixed(2)}</p>
+                                                <p className="text-[9px] font-bold text-indigo-500 text-right">$ {(item.cost_price * quantity).toFixed(2)}</p>
                                             </div>
                                         </div>
 
@@ -1001,10 +1112,12 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                 </div>
             </div>
 
-            {!showCartMobile && totalItems > 0 && (
+            {/* Floating Action Button for Mobile Cart */}
+            {totalItems > 0 && !showCartMobile && (
                 <button
                     onClick={() => setShowCartMobile(true)}
-                    className="lg:hidden fixed bottom-6 right-6 bg-gray-900 text-white p-4 rounded-full shadow-2xl shadow-indigo-500/30 flex items-center gap-2 z-40 animate-bounce-in"
+                    className="lg:hidden"
+                    style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', backgroundColor: '#111', color: 'white', padding: '1rem', borderRadius: '9999px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 >
                     <div className="relative">
                         <ShoppingCart className="w-6 h-6" />

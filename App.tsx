@@ -38,7 +38,17 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handleBackButton);
   }, [view]);
 
-  // Helpers para compatibilidad de propiedades
+  const getMeasurementUnit = (p: Product) => (p.measurement_unit || (p as any).measurementUnit || 'kg').toLowerCase();
+
+  const toBase = (qty: number, unit?: string): number => {
+    if (!unit) return qty;
+    const u = unit.toLowerCase();
+    if (u === 'g' || u === 'ml') return qty / 1000;
+    if (u === 'cm') return qty / 100;
+    if (u === 'mg') return qty / 1000000;
+    return qty;
+  };
+
   const getProductProps = (p: Product) => ({
     selling_mode: p.selling_mode || (p as any).sellingMode || 'simple',
     units_per_package: p.units_per_package || (p as any).unitsPerPackage || 0,
@@ -234,9 +244,10 @@ const App: React.FC = () => {
           updates[`products/${productId}`] = updatedProducts[pIndex];
         } else {
           // Venta normal (simple o peso)
+          const qtyToSubtract = selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(product)) : item.quantity;
           const p = {
             ...product,
-            stock: Math.max(0, product.stock - item.quantity)
+            stock: Math.max(0, product.stock - qtyToSubtract)
           };
           updatedProducts[pIndex] = p;
           updates[`products/${productId}`] = p;
@@ -341,7 +352,8 @@ const App: React.FC = () => {
           updates[`products/${productId}`] = p;
         } else {
           // Anulación normal - reintegrar al stock
-          const p = { ...product, stock: product.stock + item.quantity };
+          const qtyToReturn = product.selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(product)) : item.quantity;
+          const p = { ...product, stock: product.stock + qtyToReturn };
           updatedProducts[pIndex] = p;
           updates[`products/${productId}`] = p;
         }
@@ -575,7 +587,8 @@ const App: React.FC = () => {
       if (pIndex !== -1) {
         const product = updatedProducts[pIndex];
         const newProduct = { ...product };
-        newProduct.stock = product.stock + item.quantity;
+        const qtyToAdd = product.selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(product)) : item.quantity;
+        newProduct.stock = product.stock + qtyToAdd;
         if (item.cost > 0) newProduct.cost_price = item.cost;
         if (item.newPrice && item.newPrice > 0) newProduct.price = item.newPrice;
         updatedProducts[pIndex] = newProduct;
@@ -623,10 +636,11 @@ const App: React.FC = () => {
         
         if (pIndex !== -1) {
           const product = updatedProducts[pIndex];
+          const qtyToSubtract = product.selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(product)) : item.quantity;
           // Restar la cantidad comprada del stock Y restaurar costo anterior
           updatedProducts[pIndex] = { 
             ...product, 
-            stock: Math.max(0, product.stock - item.quantity),
+            stock: Math.max(0, product.stock - qtyToSubtract),
             cost_price: item.previous_cost_price !== undefined ? item.previous_cost_price : product.cost_price
           };
           updates[`products/${item.productId}`] = updatedProducts[pIndex];
@@ -1008,9 +1022,10 @@ const App: React.FC = () => {
 
       if (productIndex >= 0) {
         const p = updatedProducts[productIndex];
+        const qtyToAdd = p.selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(p)) : item.quantity;
         const updatedP = {
           ...p,
-          stock: p.stock + item.quantity,
+          stock: p.stock + qtyToAdd,
           cost_price: unitCostUsd,
           cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
           cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',

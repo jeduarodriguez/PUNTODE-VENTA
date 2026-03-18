@@ -299,12 +299,29 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
     }
   };
 
+  // Calcular el costo por unidad considerando la medición
+  const getUnitCost = (p: Product): number => {
+    const cost = getCostPrice(p);
+    const unit = p.measurement_unit || (p as any).measurementUnit || 'kg';
+    const unitConversions: Record<string, number> = { kg: 1, g: 0.001, l: 1, ml: 0.001, m: 1, cm: 0.01 };
+    const conversion = unitConversions[unit] || 1;
+    return cost * conversion;
+  };
+
+  const getUnitPrice = (p: Product): number => {
+    const price = p.price || 0;
+    const unit = p.measurement_unit || (p as any).measurementUnit || 'kg';
+    const unitConversions: Record<string, number> = { kg: 1, g: 0.001, l: 1, ml: 0.001, m: 1, cm: 0.01 };
+    const conversion = unitConversions[unit] || 1;
+    return price * conversion;
+  };
+
   // Para compatibilidad con código existente
   const calculatedCostUsd = getBulkCalculation().unitUsd;
   const manualCostUsd = getBulkCalculation().unitUsd;
 
-  const totalCostValue = products.reduce((sum, p) => sum + (getCostPrice(p) * p.stock), 0);
-  const totalRetailValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
+  const totalCostValue = products.reduce((sum, p) => sum + (getUnitCost(p) * p.stock), 0);
+  const totalRetailValue = products.reduce((sum, p) => sum + (getUnitPrice(p) * p.stock), 0);
   const totalPotentialProfit = totalRetailValue - totalCostValue;
   const profitMarginPercent = totalCostValue > 0 ? (totalPotentialProfit / totalCostValue) * 100 : 0;
 
@@ -390,13 +407,19 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
         finalCost = unitUsd;
       }
 
+      // Normalizar stock a la unidad base (kg, L, m)
+      const unit = formData.measurement_unit || 'kg';
+      const unitConversions: Record<string, number> = { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 };
+      const conversion = unitConversions[unit] || 1;
+      const normalizedStock = (Number(formData.stock) || 0) / conversion;
+
       const sanitizedData: Product = {
         id: editingProduct?.id || `prod_${Math.random().toString(36).substr(2, 9)}`,
         name: formData.name || 'Producto sin nombre',
         category: formData.category || 'Bebidas',
         price: Number(formData.price) || 0,
         cost_price: finalCost,
-        stock: Number(formData.stock) || 0,
+        stock: normalizedStock,
         description: formData.description || '',
         image: formData.image || `https://picsum.photos/seed/${Math.random()}/200`,
         selling_mode: (formData.selling_mode as any) || 'simple',
@@ -764,7 +787,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
               {/* 1. STOCK */}
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border-2 relative ${isOutOfStock ? 'bg-red-50 border-red-100 text-red-500' : isLowStock ? 'bg-orange-50 border-orange-100 text-orange-500' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
                 {isWeight ? (
-                  <span className="font-black text-xs">{product.stock}{product.measurement_unit || product.measurementUnit || ''}</span>
+                  <span className="font-black text-xs">
+                    {product.stock < 1 ? Math.round(product.stock * 1000) : product.stock}
+                  </span>
                 ) : (
                   <span className="font-black text-sm">{product.stock}</span>
                 )}
@@ -944,12 +969,14 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                       <select
                         className="w-full p-3 border-2 border-gray-200 rounded-xl bg-white outline-none text-sm font-bold text-gray-900"
                         value={formData.measurement_unit}
-                        onChange={e => setFormData({ ...formData, measurementUnit: e.target.value as any })}
+                        onChange={e => setFormData({ ...formData, measurement_unit: e.target.value })}
                       >
                         <option value="kg">Kilogramos (Kg)</option>
                         <option value="g">Gramos (g)</option>
-                        <option value="l">Litros (L)</option>
+                        <option value="L">Litros (L)</option>
                         <option value="ml">Mililitros (ml)</option>
+                        <option value="m">Metro (m)</option>
+                        <option value="cm">Centímetro (cm)</option>
                       </select>
                     </div>
                     <p className="text-xs text-gray-500 bg-white p-3 rounded-xl border border-gray-100">

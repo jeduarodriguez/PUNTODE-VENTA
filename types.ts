@@ -11,7 +11,7 @@ export interface Product {
 
   // Campos para Variantes/Modos de Venta
   selling_mode?: 'simple' | 'weight' | 'package';
-  measurement_unit?: 'kg' | 'g' | 'l' | 'ml' | 'm';
+  measurement_unit?: 'kg' | 'g' | 'l' | 'ml' | 'm' | 'cm';
   units_per_package?: number;
   units_per_bulk?: number;
   price_per_unit?: number;
