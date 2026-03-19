@@ -26,6 +26,9 @@ export interface Product {
 export interface CartItem extends Product {
   quantity: number;
   costAtSale?: number; // Costo del producto EN EL MOMENTO DE LA VENTA (USD)
+  priceAtSale?: number; // Precio de venta EN EL MOMENTO DE LA VENTA (USD)
+  utilityAtSale?: number; // Utilidad de este item EN EL MOMENTO DE LA VENTA (USD)
+  rateAtSale?: number; // Tasa del dólar EN EL MOMENTO DE LA VENTA
 }
 
 export interface Customer {

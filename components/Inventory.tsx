@@ -453,8 +453,13 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
       const productPrice = product.price || 0;
       const productPricePerUnit = getPricePerUnit(product) || 0;
 
+      const unit = getMeasurementUnit(product);
+      const unitConversions: Record<string, number> = { kg: 1, g: 1000, l: 1, ml: 1000, m: 1, cm: 100 };
+      const conversion = unitConversions[unit] || 1;
+
       setFormData({
         ...product,
+        stock: (product.stock || 0) * conversion,
         cost_price: existingCost,
         selling_mode: getSellingMode(product),
         measurement_unit: getMeasurementUnit(product),
@@ -1294,7 +1299,9 @@ const Inventory: React.FC<InventoryProps> = ({ products, exchangeRate, categorie
                     <div className="flex gap-3 items-stretch">
                       {/* LADO IZQUIERDO: PRECIO */}
                       <div className="flex-1 flex flex-col">
-                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">Venta x Paquete</label>
+                        <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest px-1 mb-2">
+                          {formData.selling_mode === 'weight' ? `Venta x ${formData.measurement_unit}` : 'Venta x Paquete'}
+                        </label>
                         {/* $ */}
                         <div className="relative flex-1">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">$</span>

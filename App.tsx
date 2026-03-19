@@ -952,23 +952,24 @@ const App: React.FC = () => {
     saveData('settings/expenseCategories', newCats);
   };
 
-  const handlePurchaseProducts = async (items: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
+  const handlePurchaseProducts = async (items: { product: Product; quantity: number; cost_price: number; cost_price_bs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => {
     const now = Date.now();
     const totalUsd = items.reduce((sum, item) => sum + (item.cost_price * item.quantity), 0);
-    const totalBs = items.reduce((sum, item) => sum + ((item.costPriceBs || item.cost_price * exchangeRate) * item.quantity), 0);
+    const totalBs = items.reduce((sum, item) => sum + ((item.cost_price_bs || item.cost_price * exchangeRate) * item.quantity), 0);
 
     // Preparar items para guardar en la transacción (para poder revertir después)
     const purchaseItems = items.map(item => {
       const itemUnitsPerBulk = item.product.units_per_bulk || 0;
       const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
-      const unitCostUsd = item.cost_price / bulkQty;
+      const unitCostUsd = (item.cost_price || 0) / bulkQty;
+      const unitCostBs = (item.cost_price_bs || 0) / bulkQty;
       
       return {
         productId: item.product.id,
         productName: item.product.name,
         quantity: item.quantity,
         cost_price: unitCostUsd,
-        cost_price_bs: item.costPriceBs || (unitCostUsd * exchangeRate),
+        cost_price_bs: unitCostBs || (unitCostUsd * exchangeRate),
         previous_cost_price: item.product.cost_price || 0
       };
     });
@@ -1013,22 +1014,25 @@ const App: React.FC = () => {
     
     for (const item of items) {
       const productIndex = updatedProducts.findIndex(p => p.id === item.product.id);
-      const itemCostMode = (item.product as any).cost_mode || 'calculated';
-      const itemUnitsPerBulk = item.product.units_per_bulk || 0;
+      const itemCostMode = item.product.cost_mode || (item.product as any).costMode || 'calculated';
+      const itemUnitsPerBulk = item.product.units_per_bulk || (item.product as any).unitsPerBulk || 0;
       const bulkQty = itemUnitsPerBulk > 0 ? itemUnitsPerBulk : 1;
 
-      // El costPrice en el carrito es SIEMPRE el costo por bulto completo.
-      const unitCostUsd = item.cost_price / bulkQty;
+      // El cost_price en el carrito es SIEMPRE el costo por bulto completo.
+      const unitCostUsd = (item.cost_price || 0) / bulkQty;
+      const unitCostBs = (item.cost_price_bs || 0) / bulkQty;
 
       if (productIndex >= 0) {
         const p = updatedProducts[productIndex];
+        // Normalizar cantidad (por peso o por unidad)
         const qtyToAdd = p.selling_mode === 'weight' ? toBase(item.quantity, getMeasurementUnit(p)) : item.quantity;
+        
         const updatedP = {
           ...p,
           stock: p.stock + qtyToAdd,
           cost_price: unitCostUsd,
-          cost_bs: itemCostMode === 'calculated' ? (item.costPriceBs || 0) : 0,
-          cost_date: itemCostMode === 'calculated' ? (item.product as any).cost_date || new Date().toISOString().split('T')[0] : '',
+          cost_bs: unitCostBs,
+          cost_date: item.product.cost_date || (item.product as any).costDate || new Date().toISOString().split('T')[0],
           cost_mode: itemCostMode
         };
         updatedProducts[productIndex] = updatedP;

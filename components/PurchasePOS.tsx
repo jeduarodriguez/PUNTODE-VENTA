@@ -10,12 +10,12 @@ interface PurchasePOSProps {
     onAddCategory?: (category: string) => void;
     onDeleteCategory?: (category: string) => void;
     onClose: () => void;
-    onPurchase: (items: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
+    onPurchase: (items: { product: Product; quantity: number; cost_price: number; cost_price_bs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale', businessDebt?: BusinessDebt) => void;
     onAddProduct?: (product: Product) => void;
     onUpdateProduct?: (product: Product) => void; 
     onOpenInventory?: () => void;
     onOpenInventoryWithProduct?: (product: Product) => void;
-    initialCart?: { product: Product; quantity: number; cost_price: number; costPriceBs?: number; rateAtPurchase?: number }[];
+    initialCart?: { product: Product; quantity: number; cost_price: number; cost_price_bs?: number; rateAtPurchase?: number }[];
     onCartChange?: (cart: any[]) => void;
 }
 
@@ -353,17 +353,29 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
         let costPriceBs = 0;
 
         if (costMode === 'calculated') {
-            // Usar cost_bs guardado con la tasa activa (ya es costo unitario)
             const savedCostBs = getCostBs(product);
-            costPriceBs = savedCostBs;
-            finalCostUsd = activeRate > 0 ? savedCostBs / activeRate : 0;
+            if (savedCostBs > 0) {
+                costPriceBs = savedCostBs;
+                finalCostUsd = activeRate > 0 ? savedCostBs / activeRate : 0;
+            } else {
+                // Fallback a costo en $ si no tiene Bs pero está en modo calculado
+                finalCostUsd = getCostPrice(product);
+                costPriceBs = finalCostUsd * activeRate;
+            }
         } else {
-            // Modo manual: usar costo guardado directamente (ya es costo unitario)
             finalCostUsd = getCostPrice(product);
-            costPriceBs = finalCostUsd * activeRate;
+            if (finalCostUsd > 0) {
+                costPriceBs = finalCostUsd * activeRate;
+            } else {
+                // Fallback a costo en Bs si no tiene $ pero está en modo manual
+                const savedCostBs = getCostBs(product);
+                costPriceBs = savedCostBs;
+                finalCostUsd = activeRate > 0 ? savedCostBs / activeRate : 0;
+            }
         }
 
-        // Si tiene bulto, el costo es por bulto completo
+        // Si tiene bulto, el costo es por bulto completo. 
+        // Nota: recordamos que en Inventory guardamos cost_bs como UNITARIO.
         const costPerBulk = unitsPerBulk > 0 ? finalCostUsd * unitsPerBulk : finalCostUsd;
         const costBsPerBulk = unitsPerBulk > 0 ? costPriceBs * unitsPerBulk : costPriceBs;
 
@@ -1112,22 +1124,7 @@ const PurchasePOS: React.FC<PurchasePOSProps> = ({ products, exchangeRate, rateH
                 </div>
             </div>
 
-            {/* Floating Action Button for Mobile Cart */}
-            {totalItems > 0 && !showCartMobile && (
-                <button
-                    onClick={() => setShowCartMobile(true)}
-                    className="lg:hidden"
-                    style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', backgroundColor: '#111', color: 'white', padding: '1rem', borderRadius: '9999px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                    <div className="relative">
-                        <ShoppingCart className="w-6 h-6" />
-                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full font-black">
-                            {totalItems}
-                        </span>
-                    </div>
-                    <span className="font-bold">{totalBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</span>
-                </button>
-            )}
+
 
             {showAddProductModal && (
                 <div className="fixed inset-0 bg-white z-[110] flex flex-col animate-fade-in overflow-hidden">

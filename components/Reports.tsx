@@ -29,7 +29,7 @@ interface ReportsProps {
     onEditSale: (sale: Sale) => void;
     onAddTreasuryTransaction: (t: TreasuryTransaction) => void;
     onOpenRateModal?: () => void;
-    onPurchaseProducts: (items: { product: Product; quantity: number; costPrice: number; costPriceBs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
+    onPurchaseProducts: (items: { product: Product; quantity: number; cost_price: number; cost_price_bs?: number; rateAtPurchase?: number }[], method: 'Cash' | 'Transfer' | 'PagoMovil' | 'Card' | 'PointOfSale') => void;
     onAddProduct: (product: Product) => void;
     onUpdateProduct?: (product: Product) => void;
     onUpdateTreasuryTransaction?: (t: TreasuryTransaction) => void;
@@ -671,7 +671,7 @@ const VentasCaja: React.FC<ReportsProps> = ({
                             )}
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div className="flex-1 overflow-y-auto p-1 space-y-2">
                         {currentSales.map(sale => {
                             const matchesSearch = !searchTerm || 
                                 sale.items.some(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -694,13 +694,13 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                         <div className="text-right shrink-0 ml-2">
                                             {isCredit ? (
                                                 <>
-                                                    <p className="text-lg font-black text-orange-500">${sale.total.toFixed(2)}</p>
-                                                    <p className="text-[9px] text-orange-300">Bs {(sale.total * sale.exchangeRate).toFixed(2)}</p>
+                                                    <p className="text-lg font-black text-orange-600">${sale.total.toFixed(2)}</p>
+                                                    <p className="text-lg font-black text-orange-500">Bs {(sale.total * sale.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 }).replace(/\./g, ',')}</p>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <p className="text-lg font-black text-gray-900">{(sale.total * sale.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                                                    <p className="text-[9px] text-gray-400">${sale.total.toFixed(2)}</p>
+                                                    <p className="text-lg font-black text-gray-900">${sale.total.toFixed(2)}</p>
+                                                    <p className="text-lg font-black text-gray-700">{(sale.total * sale.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 }).replace(/\./g, ',')} Bs</p>
                                                 </>
                                             )}
                                         </div>
@@ -946,7 +946,7 @@ const VentasCaja: React.FC<ReportsProps> = ({
                 </div>
 
                 {/* BALANCE INGRESO/BALANCE/EGRESO */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="grid grid-cols-3 gap-2 mb-3 -mx-1">
                     <div className="bg-emerald-100 rounded-xl p-2 flex flex-col items-center">
                         <span className="text-[8px] font-black text-emerald-600 uppercase">Ingreso</span>
                         <p className="text-sm font-black text-emerald-800">+{totalSalesBsFiltered.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
@@ -969,31 +969,29 @@ const VentasCaja: React.FC<ReportsProps> = ({
                 </div>
 
                 {/* METODOS DE PAGO */}
-                <div className="grid grid-cols-2 gap-2">
-                    <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-100 hover:bg-emerald-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1 text-emerald-600"><Banknote className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-emerald-600">Efectivo</span></div>
-                        <p className="text-sm font-black text-emerald-800">{salesCashBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                <div className="grid grid-cols-3 gap-1.5 -mx-1">
+                    <div onClick={() => setActiveDetail('Cash')} className="bg-emerald-100 hover:bg-emerald-200 p-2.5 rounded-2xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center border border-emerald-200/50">
+                        <div className="flex items-center gap-1 mb-0.5 text-emerald-600"><Banknote className="w-3.5 h-3.5" /><span className="text-[9px] font-black uppercase tracking-tight">Efectivo</span></div>
+                        <p className="text-xs font-black text-emerald-800">{salesCashBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                     </div>
-                    <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-100 hover:bg-purple-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1 text-purple-600"><Smartphone className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-purple-600">Pago Móvil</span></div>
-                        <p className="text-sm font-black text-purple-800">{salesPagoMovilBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
+                    <div onClick={() => setActiveDetail('PagoMovil')} className="bg-purple-100 hover:bg-purple-200 p-2.5 rounded-2xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center border border-purple-200/50">
+                        <div className="flex items-center gap-1 mb-0.5 text-purple-600"><Smartphone className="w-3.5 h-3.5" /><span className="text-[9px] font-black uppercase tracking-tight">Movil</span></div>
+                        <p className="text-xs font-black text-purple-800">{salesPagoMovilBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                     </div>
-                    <div onClick={() => setActiveDetail('Card')} className="bg-blue-100 hover:bg-blue-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1 text-blue-600"><CreditCard className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-blue-600">Punto</span></div>
-                        <p className="text-sm font-black text-blue-800">{salesCardBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
-                    </div>
-                    <div onClick={() => setActiveDetail('Credit')} className="bg-orange-100 hover:bg-orange-200 p-3 rounded-xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center">
-                        <div className="flex items-center gap-1 mb-1 text-orange-600"><Wallet className="w-4 h-4" /><span className="text-[10px] font-black uppercase text-orange-600">Crédito</span></div>
-                        <p className="text-sm font-black text-orange-800">${creditSales.toFixed(2)}</p>
+                    <div onClick={() => setActiveDetail('Card')} className="bg-blue-100 hover:bg-blue-200 p-2.5 rounded-2xl cursor-pointer active:scale-[0.98] transition-all flex flex-col items-center border border-blue-200/50">
+                        <div className="flex items-center gap-1 mb-0.5 text-blue-600"><CreditCard className="w-3.5 h-3.5" /><span className="text-[9px] font-black uppercase tracking-tight">Punto</span></div>
+                        <p className="text-xs font-black text-blue-800">{salesCardBs.toLocaleString('es-CO', { maximumFractionDigits: 0 })}</p>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Movimientos</h3>
-                    <button onClick={() => setShowSearchInput(true)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-                        <Search className="w-4 h-4 text-gray-600" />
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 px-2 py-6 shadow-sm -mx-4">
+                <div className="mb-6 flex items-center justify-center gap-4">
+                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Movimientos</h3>
+                    <div className="h-4 w-px bg-gray-200"></div>
+                    <button onClick={() => setShowSearchInput(true)} className="flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors active:scale-95">
+                        <Search className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-wide">Buscar</span>
                     </button>
                 </div>
                 <div className="space-y-2">
@@ -1020,13 +1018,13 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                             <div className="text-right shrink-0 ml-2">
                                                 {isCredit ? (
                                                     <>
-                                                        <p className="text-base font-black text-orange-500">${s.total.toFixed(2)}</p>
-                                                        <p className="text-[9px] text-orange-300">Bs {(s.total * s.exchangeRate).toFixed(2)}</p>
+                                                        <p className="text-lg font-black text-orange-600">${s.total.toFixed(2)}</p>
+                                                        <p className="text-lg font-black text-orange-500">Bs {(s.total * s.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 }).replace(/\./g, ',')}</p>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <p className="text-base font-black text-gray-900">{(s.total * s.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs</p>
-                                                        <p className="text-[9px] text-gray-400">${s.total.toFixed(2)}</p>
+                                                        <p className="text-lg font-black text-gray-900">${s.total.toFixed(2)}</p>
+                                                        <p className="text-lg font-black text-gray-700">{(s.total * s.exchangeRate).toLocaleString('es-CO', { maximumFractionDigits: 0 }).replace(/\./g, ',')} Bs</p>
                                                     </>
                                                 )}
                                             </div>
@@ -1050,10 +1048,12 @@ const VentasCaja: React.FC<ReportsProps> = ({
                                                 </div>
                                             </div>
                                             <div className="text-right shrink-0 ml-2">
-                                                <p className={`text-base font-black ${isExpense ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                    {isExpense ? '-' : '+'}{t.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 2 }).replace(/\./g, ',')} Bs
+                                                <p className={`text-lg font-black ${isExpense ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                    ${t.amount.toFixed(2)}
                                                 </p>
-                                                <p className="text-[9px] text-gray-400">${t.amount.toFixed(2)}</p>
+                                                <p className={`text-lg font-black ${isExpense ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                    {t.amountBs.toLocaleString('es-CO', { maximumFractionDigits: 0 }).replace(/\./g, ',')} Bs
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

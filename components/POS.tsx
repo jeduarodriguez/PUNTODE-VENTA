@@ -430,11 +430,34 @@ const POS: React.FC<POSProps> = ({ products, customers, workers, exchangeRate, r
     };
 
     const processSale = (method: 'Cash' | 'Card' | 'Credit' | 'PagoMovil', customerId?: string) => {
+        // Preparar items con datos de venta al momento (tasa actual)
+        const saleItems = cart.map(item => {
+            const sellingMode = item.selling_mode || (item as any).sellingMode || 'simple';
+            const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item)) : item.quantity;
+            const priceAtSale = item.price; // Precio al momento de la venta
+            const costAtSale = item.costAtSale || item.cost_price || 0;
+            const utilityAtSale = (priceAtSale - costAtSale) * quantity; // Utilidad de este item
+
+            return {
+                ...item,
+                priceAtSale,
+                costAtSale,
+                utilityAtSale,
+                rateAtSale: todayRate // Guardar la tasa usada
+            };
+        });
+
+        const total = saleItems.reduce((sum, item) => {
+            const sellingMode = item.selling_mode || (item as any).sellingMode || 'simple';
+            const quantity = sellingMode === 'weight' ? toBase(item.quantity, getMeasurementUnit(item)) : item.quantity;
+            return sum + (item.priceAtSale || item.price) * quantity;
+        }, 0);
+
         const sale: Sale = {
             id: Date.now().toString(),
             timestamp: Date.now(),
-            items: cart,
-            total: calculateTotal(),
+            items: saleItems,
+            total,
             exchangeRate: todayRate,
             paymentMethod: method,
             customerId: customerId
